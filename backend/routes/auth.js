@@ -9,19 +9,32 @@ const router = express.Router();
 // POST /api/auth/login - Prijava korisnika
 router.post('/login', async (req, res) => {
   try {
+    console.log('📥 Login request body:', req.body);
     const { email, lozinka } = req.body;
 
+    console.log('📧 Email:', email);
+    console.log('🔑 Lozinka primljena:', lozinka ? 'DA' : 'NE');
+
     if (!email || !lozinka) {
+      console.log('❌ Email ili lozinka nedostaju!');
       return res.status(400).json({ message: 'Email i lozinka su obavezni' });
     }
 
+    console.log('🔍 Tražim korisnika:', email);
     const user = await User.findOne({ email });
+    console.log('👤 Korisnik pronađen:', user ? 'DA' : 'NE');
+    
     if (!user || !user.aktivan) {
+      console.log('❌ Korisnik ne postoji ili nije aktivan');
       return res.status(401).json({ message: 'Nevaljani email ili lozinka' });
     }
 
+    console.log('🔐 Provjeravam lozinku...');
     const validnaLozinka = await user.provjeriLozinku(lozinka);
+    console.log('✅ Lozinka validna:', validnaLozinka ? 'DA' : 'NE');
+    
     if (!validnaLozinka) {
+      console.log('❌ Pogrešna lozinka');
       return res.status(401).json({ message: 'Nevaljani email ili lozinka' });
     }
 

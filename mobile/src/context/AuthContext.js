@@ -76,7 +76,12 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, lozinka) => {
     try {
       setLoading(true);
+      console.log('🔑 Pokušavam login...', email);
+      console.log('🌐 API URL:', 'https://appel-backend.onrender.com/api');
+      
       const response = await authAPI.login(email, lozinka);
+      console.log('✅ Login response:', response.data);
+      
       const { token, korisnik } = response.data;
 
       // Spremi token i user podatke
@@ -92,7 +97,9 @@ export const AuthProvider = ({ children }) => {
 
       return { success: true };
     } catch (error) {
-      console.error('❌ Login greška:', error.response?.data || error.message);
+      console.error('❌ Login greška:', error);
+      console.error('❌ Error response:', error.response?.data);
+      console.error('❌ Error message:', error.message);
       setLoading(false);
       return { 
         success: false, 

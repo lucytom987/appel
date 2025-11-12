@@ -1,0 +1,515 @@
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Alert,
+  Linking,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { serviceDB, repairDB } from '../database/db';
+import { useAuth } from '../context/AuthContext';
+
+export default function ElevatorDetailsScreen({ route, navigation }) {
+  const { elevator } = route.params;
+  const { user, isOnline } = useAuth();
+  const [activeTab, setActiveTab] = useState('info'); // info, services, repairs
+  const [services, setServices] = useState([]);
+  const [repairs, setRepairs] = useState([]);
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = () => {
+    try {
+      const servicesData = serviceDB.getAll(elevator.id) || [];
+      const repairsData = repairDB.getAll(elevator.id) || [];
+      setServices(servicesData);
+      setRepairs(repairsData);
+    } catch (error) {
+      console.error('Greška pri učitavanju podataka:', error);
+    }
+  };
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'active':
+        return '#10b981';
+      case 'out_of_order':
+        return '#ef4444';
+      case 'maintenance':
+        return '#f59e0b';
+      default:
+        return '#6b7280';
+    }
+  };
+
+  const getStatusLabel = (status) => {
+    switch (status) {
+      case 'active':
+        return 'Aktivno';
+      case 'out_of_order':
+        return 'Neispravno';
+      case 'maintenance':
+        return 'Održavanje';
+      default:
+        return status;
+    }
+  };
+
+  const handleCallPhone = () => {
+    if (elevator.simCard?.phoneNumber) {
+      Linking.openURL(`tel:${elevator.simCard.phoneNumber}`);
+    } else {
+      Alert.alert('Nema telefona', 'SIM kartica nije dodjeljena ili nema broj');
+    }
+  };
+
+  const handleOpenMap = () => {
+    if (elevator.location_lat && elevator.location_lng) {
+      const url = `https://www.google.com/maps/search/?api=1&query=${elevator.location_lat},${elevator.location_lng}`;
+      Linking.openURL(url);
+    } else {
+      Alert.alert('Nema lokacije', 'Geografska lokacija nije postavljena');
+    }
+  };
+
+  const handleAddService = () => {
+    if (!isOnline) {
+      Alert.alert('Offline', 'Kreiranje servisa moguće samo online');
+      return;
+    }
+    navigation.navigate('AddService', { elevator });
+  };
+
+  const handleReportFault = () => {
+    if (!isOnline) {
+      Alert.alert('Offline', 'Prijavljivanje kvara moguće samo online');
+      return;
+    }
+    navigation.navigate('AddRepair', { elevator });
+  };
+
+  const renderInfoTab = () => (
+    <View style={styles.tabContent}>
+      <View style={styles.infoSection}>
+        <Text style={styles.sectionTitle}>Osnovne informacije</Text>
+        
+        <InfoRow icon="location" label="Adresa" value={elevator.address} />
+        <InfoRow icon="qr-code" label="Kod zgrade" value={elevator.buildingCode} />
+        <InfoRow icon="business" label="Proizvođač" value={elevator.manufacturer} />
+        <InfoRow icon="settings" label="Model" value={elevator.model} />
+        <InfoRow icon="barcode" label="Serijski broj" value={elevator.serialNumber} />
+      </View>
+
+      <View style={styles.infoSection}>
+        <Text style={styles.sectionTitle}>Datumi</Text>
+        
+        {elevator.installationDate && (
+          <InfoRow
+            icon="calendar"
+            label="Instalacija"
+            value={new Date(elevator.installationDate).toLocaleDateString('hr-HR')}
+          />
+        )}
+        {elevator.lastServiceDate && (
+          <InfoRow
+            icon="checkmark-circle"
+            label="Zadnji servis"
+            value={new Date(elevator.lastServiceDate).toLocaleDateString('hr-HR')}
+          />
+        )}
+      </View>
+
+      {elevator.notes && (
+        <View style={styles.infoSection}>
+          <Text style={styles.sectionTitle}>Napomene</Text>
+          <Text style={styles.notesText}>{elevator.notes}</Text>
+        </View>
+      )}
+
+      <View style={styles.actionButtons}>
+        <TouchableOpacity style={styles.actionButton} onPress={handleCallPhone}>
+          <Ionicons name="call" size={20} color="#fff" />
+          <Text style={styles.actionButtonText}>Pozovi</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.actionButton} onPress={handleOpenMap}>
+          <Ionicons name="map" size={20} color="#fff" />
+          <Text style={styles.actionButtonText}>Mapa</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  const renderServicesTab = () => (
+    <View style={styles.tabContent}>
+      {services.length === 0 ? (
+        <View style={styles.emptyState}>
+          <Ionicons name="checkmark-circle-outline" size={48} color="#d1d5db" />
+          <Text style={styles.emptyText}>Nema servisa</Text>
+        </View>
+      ) : (
+        services.map((service, index) => (
+          <View key={service.id || index} style={styles.historyCard}>
+            <View style={styles.historyHeader}>
+              <Text style={styles.historyDate}>
+                {new Date(service.serviceDate).toLocaleDateString('hr-HR')}
+              </Text>
+              <View style={[styles.historyBadge, { backgroundColor: '#10b981' }]}>
+                <Text style={styles.historyBadgeText}>{service.status}</Text>
+              </View>
+            </View>
+            {service.notes && (
+              <Text style={styles.historyNotes}>{service.notes}</Text>
+            )}
+            {service.defectsFound === 1 && (
+              <View style={styles.defectTag}>
+                <Ionicons name="warning" size={14} color="#f59e0b" />
+                <Text style={styles.defectText}>Nedostaci pronađeni</Text>
+              </View>
+            )}
+          </View>
+        ))
+      )}
+    </View>
+  );
+
+  const renderRepairsTab = () => (
+    <View style={styles.tabContent}>
+      {repairs.length === 0 ? (
+        <View style={styles.emptyState}>
+          <Ionicons name="construct-outline" size={48} color="#d1d5db" />
+          <Text style={styles.emptyText}>Nema popravaka</Text>
+        </View>
+      ) : (
+        repairs.map((repair, index) => (
+          <View key={repair.id || index} style={styles.historyCard}>
+            <View style={styles.historyHeader}>
+              <Text style={styles.historyDate}>
+                {new Date(repair.reportedDate).toLocaleDateString('hr-HR')}
+              </Text>
+              <View style={[
+                styles.historyBadge,
+                {
+                  backgroundColor:
+                    repair.status === 'completed' ? '#10b981' :
+                    repair.status === 'in_progress' ? '#f59e0b' : '#ef4444'
+                }
+              ]}>
+                <Text style={styles.historyBadgeText}>{repair.status}</Text>
+              </View>
+            </View>
+            <Text style={styles.historyNotes}>{repair.faultDescription}</Text>
+            {repair.priority === 'urgent' && (
+              <View style={[styles.defectTag, { backgroundColor: '#fee2e2' }]}>
+                <Ionicons name="alert-circle" size={14} color="#ef4444" />
+                <Text style={[styles.defectText, { color: '#ef4444' }]}>HITNO</Text>
+              </View>
+            )}
+          </View>
+        ))
+      )}
+    </View>
+  );
+
+  return (
+    <View style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color="#111827" />
+        </TouchableOpacity>
+        <View style={styles.headerInfo}>
+          <Text style={styles.headerTitle}>{elevator.address}</Text>
+          <Text style={styles.headerSubtitle}>{elevator.buildingCode}</Text>
+        </View>
+        <View style={[styles.headerStatus, { backgroundColor: getStatusColor(elevator.status) }]}>
+          <Text style={styles.headerStatusText}>{getStatusLabel(elevator.status)}</Text>
+        </View>
+      </View>
+
+      {/* Tabs */}
+      <View style={styles.tabs}>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'info' && styles.tabActive]}
+          onPress={() => setActiveTab('info')}
+        >
+          <Text style={[styles.tabText, activeTab === 'info' && styles.tabTextActive]}>
+            Informacije
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'services' && styles.tabActive]}
+          onPress={() => setActiveTab('services')}
+        >
+          <Text style={[styles.tabText, activeTab === 'services' && styles.tabTextActive]}>
+            Servisi ({services.length})
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'repairs' && styles.tabActive]}
+          onPress={() => setActiveTab('repairs')}
+        >
+          <Text style={[styles.tabText, activeTab === 'repairs' && styles.tabTextActive]}>
+            Popravci ({repairs.length})
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Content */}
+      <ScrollView style={styles.scrollView}>
+        {activeTab === 'info' && renderInfoTab()}
+        {activeTab === 'services' && renderServicesTab()}
+        {activeTab === 'repairs' && renderRepairsTab()}
+      </ScrollView>
+
+      {/* Floating Action Buttons */}
+      <View style={styles.fabContainer}>
+        <TouchableOpacity style={[styles.fab, styles.fabSecondary]} onPress={handleReportFault}>
+          <Ionicons name="warning" size={24} color="#fff" />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.fab} onPress={handleAddService}>
+          <Ionicons name="add" size={28} color="#fff" />
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+// Helper component
+function InfoRow({ icon, label, value }) {
+  return (
+    <View style={styles.infoRow}>
+      <View style={styles.infoLeft}>
+        <Ionicons name={icon} size={18} color="#6b7280" />
+        <Text style={styles.infoLabel}>{label}</Text>
+      </View>
+      <Text style={styles.infoValue}>{value || '-'}</Text>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#f9fafb',
+  },
+  header: {
+    backgroundColor: '#fff',
+    paddingTop: 60,
+    paddingBottom: 16,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  backButton: {
+    marginRight: 12,
+  },
+  headerInfo: {
+    flex: 1,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    color: '#6b7280',
+    marginTop: 2,
+  },
+  headerStatus: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  headerStatusText: {
+    fontSize: 12,
+    color: '#fff',
+    fontWeight: '600',
+  },
+  tabs: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  tabActive: {
+    borderBottomColor: '#2563eb',
+  },
+  tabText: {
+    fontSize: 14,
+    color: '#6b7280',
+    fontWeight: '500',
+  },
+  tabTextActive: {
+    color: '#2563eb',
+    fontWeight: '600',
+  },
+  scrollView: {
+    flex: 1,
+  },
+  tabContent: {
+    padding: 16,
+  },
+  infoSection: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 12,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  infoLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  infoLabel: {
+    fontSize: 14,
+    color: '#6b7280',
+  },
+  infoValue: {
+    fontSize: 14,
+    color: '#111827',
+    fontWeight: '500',
+  },
+  notesText: {
+    fontSize: 14,
+    color: '#4b5563',
+    lineHeight: 20,
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  actionButton: {
+    flex: 1,
+    backgroundColor: '#2563eb',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 14,
+    borderRadius: 12,
+    gap: 8,
+  },
+  actionButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  historyCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  historyHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  historyDate: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  historyBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  historyBadgeText: {
+    fontSize: 11,
+    color: '#fff',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
+  historyNotes: {
+    fontSize: 14,
+    color: '#4b5563',
+    lineHeight: 20,
+  },
+  defectTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+    backgroundColor: '#fef3c7',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  defectText: {
+    fontSize: 12,
+    color: '#f59e0b',
+    fontWeight: '600',
+  },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 48,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#9ca3af',
+    marginTop: 12,
+  },
+  fabContainer: {
+    position: 'absolute',
+    bottom: 24,
+    right: 20,
+    flexDirection: 'row',
+    gap: 12,
+  },
+  fab: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#2563eb',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  fabSecondary: {
+    backgroundColor: '#f59e0b',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+  },
+});

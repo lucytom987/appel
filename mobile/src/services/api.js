@@ -1,0 +1,112 @@
+import axios from 'axios';
+import * as SecureStore from 'expo-secure-store';
+
+// Backend URL - produkcija na Render
+const API_URL = 'https://appel-backend.onrender.com/api';
+
+// Axios instance sa default konfiguracijom
+const api = axios.create({
+  baseURL: API_URL,
+  timeout: 10000,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// Request interceptor - dodaj JWT token
+api.interceptors.request.use(
+  async (config) => {
+    const token = await SecureStore.getItemAsync('userToken');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+// Response interceptor - handle errors
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    if (error.response?.status === 401) {
+      // Token je istekao - logout
+      await SecureStore.deleteItemAsync('userToken');
+      await SecureStore.deleteItemAsync('userData');
+    }
+    return Promise.reject(error);
+  }
+);
+
+// Auth API
+export const authAPI = {
+  login: (email, lozinka) => api.post('/auth/login', { email, lozinka }),
+  register: (data) => api.post('/auth/register', data),
+  getMe: () => api.get('/auth/me'),
+};
+
+// Elevators API
+export const elevatorsAPI = {
+  getAll: () => api.get('/elevators'),
+  getOne: (id) => api.get(`/elevators/${id}`),
+  create: (data) => api.post('/elevators', data),
+  update: (id, data) => api.put(`/elevators/${id}`, data),
+  delete: (id) => api.delete(`/elevators/${id}`),
+  getStats: () => api.get('/elevators/stats/overview'),
+};
+
+// Services API
+export const servicesAPI = {
+  getAll: (params) => api.get('/services', { params }),
+  getOne: (id) => api.get(`/services/${id}`),
+  create: (data) => api.post('/services', data),
+  update: (id, data) => api.put(`/services/${id}`, data),
+  delete: (id) => api.delete(`/services/${id}`),
+  getMonthlyStats: (year, month) => api.get('/services/stats/monthly', { params: { year, month } }),
+};
+
+// Repairs API
+export const repairsAPI = {
+  getAll: (params) => api.get('/repairs', { params }),
+  getOne: (id) => api.get(`/repairs/${id}`),
+  create: (data) => api.post('/repairs', data),
+  update: (id, data) => api.put(`/repairs/${id}`, data),
+  delete: (id) => api.delete(`/repairs/${id}`),
+  getStats: () => api.get('/repairs/stats/overview'),
+  getMonthlyStats: (year, month) => api.get('/repairs/stats/monthly', { params: { year, month } }),
+};
+
+// ChatRooms API
+export const chatroomsAPI = {
+  getAll: () => api.get('/chatrooms'),
+  getOne: (id) => api.get(`/chatrooms/${id}`),
+  create: (data) => api.post('/chatrooms', data),
+  update: (id, data) => api.put(`/chatrooms/${id}`, data),
+  delete: (id) => api.delete(`/chatrooms/${id}`),
+  addMember: (id, userId) => api.post(`/chatrooms/${id}/members`, { userId }),
+  removeMember: (id, userId) => api.delete(`/chatrooms/${id}/members/${userId}`),
+};
+
+// Messages API
+export const messagesAPI = {
+  getByRoom: (roomId, params) => api.get(`/messages/room/${roomId}`, { params }),
+  send: (data) => api.post('/messages', data),
+  markAsRead: (id) => api.put(`/messages/${id}/read`),
+  delete: (id) => api.delete(`/messages/${id}`),
+  getUnreadCount: () => api.get('/messages/unread/count'),
+};
+
+// SimCards API
+export const simcardsAPI = {
+  getAll: (params) => api.get('/simcards', { params }),
+  getOne: (id) => api.get(`/simcards/${id}`),
+  create: (data) => api.post('/simcards', data),
+  update: (id, data) => api.put(`/simcards/${id}`, data),
+  delete: (id) => api.delete(`/simcards/${id}`),
+  getExpiringSoon: (days) => api.get('/simcards/expiring/soon', { params: { days } }),
+  getStats: () => api.get('/simcards/stats/overview'),
+};
+
+export default api;

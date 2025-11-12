@@ -7,7 +7,7 @@ const API_URL = 'https://appel-backend.onrender.com/api';
 // Axios instance sa default konfiguracijom
 const api = axios.create({
   baseURL: API_URL,
-  timeout: 10000,
+  timeout: 30000, // 30 sekundi timeout za Render free tier
   headers: {
     'Content-Type': 'application/json',
   },
@@ -16,22 +16,56 @@ const api = axios.create({
 // Request interceptor - dodaj JWT token
 api.interceptors.request.use(
   async (config) => {
+    console.log('🚀 Axios Request:', {
+      method: config.method,
+      url: config.url,
+      baseURL: config.baseURL,
+      fullURL: `${config.baseURL}${config.url}`,
+      data: config.data,
+      headers: config.headers,
+    });
+    
     const token = await SecureStore.getItemAsync('userToken');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+      console.log('🔑 Token dodan u request');
+    } else {
+      console.log('⚠️ Nema tokena');
     }
     return config;
   },
   (error) => {
+    console.error('❌ Request interceptor error:', error);
     return Promise.reject(error);
   }
 );
 
 // Response interceptor - handle errors
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    console.log('✅ Axios Response:', {
+      status: response.status,
+      statusText: response.statusText,
+      data: response.data,
+    });
+    return response;
+  },
   async (error) => {
+    console.error('❌ Axios Response Error:', {
+      message: error.message,
+      code: error.code,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data,
+      config: {
+        url: error.config?.url,
+        method: error.config?.method,
+        baseURL: error.config?.baseURL,
+      }
+    });
+    
     if (error.response?.status === 401) {
+      console.log('🔓 401 Unauthorized - brišem token');
       // Token je istekao - logout
       await SecureStore.deleteItemAsync('userToken');
       await SecureStore.deleteItemAsync('userData');

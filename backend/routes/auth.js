@@ -36,7 +36,7 @@ router.post('/login', async (req, res) => {
 
     res.json({
       token,
-      user: user.toJSON()
+      korisnik: user.toJSON()
     });
   } catch (error) {
     console.error('❌ Login greška:', error);

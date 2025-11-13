@@ -38,6 +38,12 @@ export default function EditElevatorScreen({ navigation, route }) {
       email: elevator.kontaktOsoba?.email || '',
       ulaznaKoda: elevator.kontaktOsoba?.ulaznaKoda || '',
     },
+
+    // GPS Koordinate
+    koordinate: {
+      latitude: elevator.koordinate?.latitude || 0,
+      longitude: elevator.koordinate?.longitude || 0,
+    },
     
     // Status
     status: elevator.status || 'aktivan',
@@ -95,13 +101,17 @@ export default function EditElevatorScreen({ navigation, route }) {
         mjesto: formData.mjesto,
         brojDizala: formData.brojDizala,
         kontaktOsoba: formData.kontaktOsoba,
+        koordinate: {
+          latitude: parseFloat(formData.koordinate.latitude) || 0,
+          longitude: parseFloat(formData.koordinate.longitude) || 0,
+        },
         status: formData.status,
         intervalServisa: parseInt(formData.intervalServisa) || 1,
         napomene: formData.napomene,
       };
 
       // Ažuriraj na backend
-      const response = await api.put(`/elevators/${elevator._id}`, elevatorData);
+      const response = await elevatorsAPI.update(elevator._id, elevatorData);
 
       // Ažuriraj u lokalnoj bazi
       elevatorDB.update(elevator._id, {
@@ -330,6 +340,35 @@ export default function EditElevatorScreen({ navigation, route }) {
               kontaktOsoba: { ...prev.kontaktOsoba, ulaznaKoda: text }
             }))}
             placeholder="npr. 1234#"
+          />
+        </View>
+
+        {/* Servisiranje */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Lokacija (GPS)</Text>
+          
+          <Text style={styles.label}>Geografska širina (latitude)</Text>
+          <TextInput
+            style={styles.input}
+            value={formData.koordinate.latitude.toString()}
+            onChangeText={(text) => setFormData(prev => ({
+              ...prev,
+              koordinate: { ...prev.koordinate, latitude: parseFloat(text) || 0 }
+            }))}
+            placeholder="npr. 45.815"
+            keyboardType="decimal-pad"
+          />
+
+          <Text style={styles.label}>Geografska dužina (longitude)</Text>
+          <TextInput
+            style={styles.input}
+            value={formData.koordinate.longitude.toString()}
+            onChangeText={(text) => setFormData(prev => ({
+              ...prev,
+              koordinate: { ...prev.koordinate, longitude: parseFloat(text) || 0 }
+            }))}
+            placeholder="npr. 15.982"
+            keyboardType="decimal-pad"
           />
         </View>
 

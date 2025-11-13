@@ -91,14 +91,18 @@ export default function AddServiceScreen({ navigation, route }) {
         serviserID: user._id,
         datum: formData.serviceDate.toISOString(),
         napomene: formData.napomene,
-        imaNedostataka: false, // Nema nedostataka osim ako se ne naznači
+        imaNedostataka: false,
         nedostaci: [],
         sljedeciServis: formData.nextServiceDate.toISOString(),
         checklist: [
-          { stavka: 'provjera uređaja', provjereno: checklist.engineCheck },
-          { stavka: 'provjera govorne veze', provjereno: checklist.cableInspection },
-          { stavka: 'čišćenje šahta', provjereno: checklist.doorSystem },
-          { stavka: 'podmazivanje vodilica', provjereno: checklist.lubrication },
+          { stavka: 'engine_check', provjereno: checklist.engineCheck ? 1 : 0, napomena: '' },
+          { stavka: 'cable_inspection', provjereno: checklist.cableInspection ? 1 : 0, napomena: '' },
+          { stavka: 'door_system', provjereno: checklist.doorSystem ? 1 : 0, napomena: '' },
+          { stavka: 'emergency_brake', provjereno: checklist.emergencyBrake ? 1 : 0, napomena: '' },
+          { stavka: 'control_panel', provjereno: checklist.controlPanel ? 1 : 0, napomena: '' },
+          { stavka: 'safety_devices', provjereno: checklist.safetyDevices ? 1 : 0, napomena: '' },
+          { stavka: 'lubrication', provjereno: checklist.lubrication ? 1 : 0, napomena: '' },
+          { stavka: 'lighting', provjereno: checklist.lighting ? 1 : 0, napomena: '' },
         ],
       };
 

@@ -11,14 +11,18 @@ const serviceSchema = new mongoose.Schema({
     stavka: {
       type: String,
       enum: [
-        'provjera uređaja',
-        'provjera govorne veze',
-        'čišćenje šahta',
-        'podmazivanje vodilica'
+        'engine_check',
+        'cable_inspection',
+        'door_system',
+        'emergency_brake',
+        'control_panel',
+        'safety_devices',
+        'lubrication',
+        'lighting'
       ],
       required: true
     },
-    provjereno: { type: Boolean, default: false },
+    provjereno: { type: Number, enum: [0, 1], default: 0 }, // 0 = ne, 1 = da
     napomena: String
   }],
   

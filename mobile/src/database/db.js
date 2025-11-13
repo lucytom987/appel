@@ -4,7 +4,7 @@ import * as SQLite from 'expo-sqlite';
 const db = SQLite.openDatabaseSync('appel.db');
 
 // Database version
-const DB_VERSION = 3; // Povećano zbog promjene sheme dizala (split adresa, kontaktOsoba)
+const DB_VERSION = 4; // Povećano - forsira brisanje sve stare baze
 
 // Provjeri verziju baze i migriraj ako je potrebno
 const checkAndMigrate = () => {
@@ -22,13 +22,22 @@ const checkAndMigrate = () => {
     if (currentVersion < DB_VERSION) {
       console.log(`🔄 Migriram bazu sa verzije ${currentVersion} na ${DB_VERSION}`);
       
-      // Migracija sa v1/v2 na v3 - nova shema elevators tablice
-      if (currentVersion < 3) {
-        console.log('🔄 Migriram elevators tablicu na novu shemu...');
+      // Za bilo koju staru verziju - obriši sve i kreiraj novo
+      console.log('🔄 Brisem sve stare tablice...');
+      try {
         db.execSync(`
           DROP TABLE IF EXISTS elevators;
+          DROP TABLE IF EXISTS services;
+          DROP TABLE IF EXISTS repairs;
+          DROP TABLE IF EXISTS chatrooms;
+          DROP TABLE IF EXISTS messages;
+          DROP TABLE IF EXISTS simcards;
+          DROP TABLE IF EXISTS users;
+          DROP TABLE IF EXISTS sync_queue;
         `);
-        console.log('✅ Stara elevators tablica obrisana');
+        console.log('✅ Sve stare tablice obrisane - počinjemo od čista!');
+      } catch (e) {
+        console.log('⚠️ Neke tablice nisu postojale (OK za prvu instalaciju)');
       }
 
       // Ažuriraj verziju
@@ -196,7 +205,11 @@ export const elevatorDB = {
     const elevators = db.getAllSync('SELECT * FROM elevators ORDER BY nazivStranke');
     return elevators.map(e => ({
       ...e,
-      kontaktOsoba: typeof e.kontaktOsoba === 'string' ? JSON.parse(e.kontaktOsoba || '{}') : (e.kontaktOsoba || {})
+      kontaktOsoba: typeof e.kontaktOsoba === 'string' ? JSON.parse(e.kontaktOsoba || '{}') : (e.kontaktOsoba || {}),
+      koordinate: {
+        latitude: e.koordinate_lat || 0,
+        longitude: e.koordinate_lng || 0,
+      }
     }));
   },
   
@@ -204,6 +217,10 @@ export const elevatorDB = {
     const elevator = db.getFirstSync('SELECT * FROM elevators WHERE id = ?', [id]);
     if (elevator) {
       elevator.kontaktOsoba = typeof elevator.kontaktOsoba === 'string' ? JSON.parse(elevator.kontaktOsoba || '{}') : (elevator.kontaktOsoba || {});
+      elevator.koordinate = {
+        latitude: elevator.koordinate_lat || 0,
+        longitude: elevator.koordinate_lng || 0,
+      };
     }
     return elevator;
   },

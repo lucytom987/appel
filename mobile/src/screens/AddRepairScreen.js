@@ -27,17 +27,10 @@ export default function AddRepairScreen({ navigation, route }) {
   const [formData, setFormData] = useState({
     reportedDate: new Date(),
     opis: '',
-    priority: 'normal',
-    status: 'pending',
-    estimatedCost: '',
     napomene: '',
   });
 
-  const priorities = [
-    { value: 'low', label: 'Nizak', color: '#10b981' },
-    { value: 'normal', label: 'Normalan', color: '#f59e0b' },
-    { value: 'urgent', label: 'Hitan', color: '#ef4444' },
-  ];
+
 
   const handleDateChange = (event, selectedDate) => {
     setShowDatePicker(false);
@@ -153,33 +146,6 @@ export default function AddRepairScreen({ navigation, route }) {
           )}
         </View>
 
-        {/* Prioritet */}
-        <View style={styles.section}>
-          <Text style={styles.label}>Prioritet</Text>
-          <View style={styles.priorityContainer}>
-            {priorities.map(priority => (
-              <TouchableOpacity
-                key={priority.value}
-                style={[
-                  styles.priorityButton,
-                  formData.priority === priority.value && {
-                    backgroundColor: priority.color,
-                    borderColor: priority.color,
-                  }
-                ]}
-                onPress={() => setFormData(prev => ({ ...prev, priority: priority.value }))}
-              >
-                <Text style={[
-                  styles.priorityText,
-                  formData.priority === priority.value && styles.priorityTextActive
-                ]}>
-                  {priority.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
         {/* Opis kvara */}
         <View style={styles.section}>
           <Text style={styles.label}>Opis kvara *</Text>
@@ -191,18 +157,6 @@ export default function AddRepairScreen({ navigation, route }) {
             multiline
             numberOfLines={4}
             textAlignVertical="top"
-          />
-        </View>
-
-        {/* Procijenjena cijena */}
-        <View style={styles.section}>
-          <Text style={styles.label}>Procijenjena cijena (EUR)</Text>
-          <TextInput
-            style={styles.input}
-            value={formData.estimatedCost}
-            onChangeText={(text) => setFormData(prev => ({ ...prev, estimatedCost: text }))}
-            placeholder="0.00"
-            keyboardType="decimal-pad"
           />
         </View>
 

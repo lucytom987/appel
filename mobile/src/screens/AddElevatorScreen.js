@@ -39,6 +39,12 @@ export default function AddElevatorScreen({ navigation }) {
       email: '',
       ulaznaKoda: '',
     },
+
+    // GPS Koordinate - backend očekuje
+    koordinate: {
+      latitude: 0,
+      longitude: 0,
+    },
     
     // Napomene za adresu
     napomene: '',
@@ -109,6 +115,10 @@ export default function AddElevatorScreen({ navigation }) {
           kontaktOsoba: formData.kontaktOsoba,
           intervalServisa: parseInt(elevator.intervalServisa) || 1,
           napomene: formData.napomene,
+          koordinate: {
+            latitude: parseFloat(formData.koordinate.latitude) || 0,
+            longitude: parseFloat(formData.koordinate.longitude) || 0,
+          },
           status: 'aktivan',
         };
 
@@ -300,6 +310,35 @@ export default function AddElevatorScreen({ navigation }) {
               kontaktOsoba: { ...prev.kontaktOsoba, ulaznaKoda: text }
             }))}
             placeholder="npr. 1234#"
+          />
+        </View>
+
+        {/* Napomene */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Lokacija (GPS)</Text>
+          
+          <Text style={styles.label}>Geografska širina (latitude)</Text>
+          <TextInput
+            style={styles.input}
+            value={formData.koordinate.latitude.toString()}
+            onChangeText={(text) => setFormData(prev => ({
+              ...prev,
+              koordinate: { ...prev.koordinate, latitude: parseFloat(text) || 0 }
+            }))}
+            placeholder="npr. 45.815"
+            keyboardType="decimal-pad"
+          />
+
+          <Text style={styles.label}>Geografska dužina (longitude)</Text>
+          <TextInput
+            style={styles.input}
+            value={formData.koordinate.longitude.toString()}
+            onChangeText={(text) => setFormData(prev => ({
+              ...prev,
+              koordinate: { ...prev.koordinate, longitude: parseFloat(text) || 0 }
+            }))}
+            placeholder="npr. 15.982"
+            keyboardType="decimal-pad"
           />
         </View>
 

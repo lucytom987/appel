@@ -10,7 +10,6 @@ const { logAction } = require('../services/auditService');
 router.get('/', authenticate, async (req, res) => {
   try {
     const elevators = await Elevator.find()
-      .populate('simCard', 'phoneNumber provider expiryDate')
       .sort({ nazivStranke: 1 })
       .lean();
 
@@ -62,7 +61,6 @@ router.get('/stats/overview', authenticate, async (req, res) => {
 router.get('/:id', authenticate, async (req, res) => {
   try {
     const elevator = await Elevator.findById(req.params.id)
-      .populate('simCard', 'phoneNumber provider expiryDate status')
       .lean();
 
     if (!elevator) {

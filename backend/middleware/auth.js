@@ -26,13 +26,16 @@ const auth = async (req, res, next) => {
 };
 
 // Middleware za provjeru role
-const checkRole = (...roles) => {
+const checkRole = (allowedRoles) => {
   return (req, res, next) => {
     if (!req.user) {
       return res.status(401).json({ message: 'Korisnik nije autentificiran' });
     }
 
-    if (!roles.includes(req.user.uloga)) {
+    // Ako je proslijeđen string, pretvori u array
+    const rolesArray = Array.isArray(allowedRoles) ? allowedRoles : [allowedRoles];
+    
+    if (!rolesArray.includes(req.user.uloga)) {
       return res.status(403).json({ message: 'Nemate dozvolu za ovu akciju' });
     }
 

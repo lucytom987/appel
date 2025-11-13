@@ -179,16 +179,16 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
           <View key={service.id || index} style={styles.historyCard}>
             <View style={styles.historyHeader}>
               <Text style={styles.historyDate}>
-                {new Date(service.serviceDate).toLocaleDateString('hr-HR')}
+                {new Date(service.datum || service.serviceDate).toLocaleDateString('hr-HR')}
               </Text>
               <View style={[styles.historyBadge, { backgroundColor: '#10b981' }]}>
-                <Text style={styles.historyBadgeText}>{service.status}</Text>
+                <Text style={styles.historyBadgeText}>Obavljen</Text>
               </View>
             </View>
-            {service.notes && (
-              <Text style={styles.historyNotes}>{service.notes}</Text>
+            {(service.napomene || service.notes) && (
+              <Text style={styles.historyNotes}>{service.napomene || service.notes}</Text>
             )}
-            {service.defectsFound === 1 && (
+            {(service.imaNedostataka === 1 || service.imaNedostataka === true) && (
               <View style={styles.defectTag}>
                 <Ionicons name="warning" size={14} color="#f59e0b" />
                 <Text style={styles.defectText}>Nedostaci pronađeni</Text>
@@ -212,26 +212,20 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
           <View key={repair.id || index} style={styles.historyCard}>
             <View style={styles.historyHeader}>
               <Text style={styles.historyDate}>
-                {new Date(repair.reportedDate).toLocaleDateString('hr-HR')}
+                {new Date(repair.datumPrijave || repair.reportedDate).toLocaleDateString('hr-HR')}
               </Text>
               <View style={[
                 styles.historyBadge,
                 {
                   backgroundColor:
-                    repair.status === 'completed' ? '#10b981' :
-                    repair.status === 'in_progress' ? '#f59e0b' : '#ef4444'
+                    repair.status === 'završen' ? '#10b981' :
+                    repair.status === 'u tijeku' ? '#f59e0b' : '#ef4444'
                 }
               ]}>
-                <Text style={styles.historyBadgeText}>{repair.status}</Text>
+                <Text style={styles.historyBadgeText}>{repair.status === 'završen' ? 'Završeno' : repair.status === 'u tijeku' ? 'U tijeku' : 'Na čekanju'}</Text>
               </View>
             </View>
-            <Text style={styles.historyNotes}>{repair.faultDescription}</Text>
-            {repair.priority === 'urgent' && (
-              <View style={[styles.defectTag, { backgroundColor: '#fee2e2' }]}>
-                <Ionicons name="alert-circle" size={14} color="#ef4444" />
-                <Text style={[styles.defectText, { color: '#ef4444' }]}>HITNO</Text>
-              </View>
-            )}
+            <Text style={styles.historyNotes}>{repair.opisKvara || repair.faultDescription}</Text>
           </View>
         ))
       )}

@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import * as SecureStore from 'expo-secure-store';
 import { useAuth } from '../context/AuthContext';
 import { repairDB } from '../database/db';
 import { repairsAPI } from '../services/api';
@@ -65,8 +66,24 @@ export default function AddRepairScreen({ navigation, route }) {
         napomene: formData.napomene,
       };
 
-      if (online) {
-        // Online - spremi na backend
+      // Provjeri je li offline korisnik (demo korisnik)
+      const token = await SecureStore.getItemAsync('userToken');
+      const isOfflineUser = token && token.startsWith('offline_token_');
+
+      if (isOfflineUser || !online) {
+        // Offline korisnik - spremi samo lokalno
+        console.log('📱 Demo/offline korisnik - dodajem popravak lokalno bez API poziva');
+        repairDB.insert({
+          id: 'local_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+          ...repairData,
+          synced: 0, // Bit će syncirano kada se prijavi s pravim korisnicima
+        });
+
+        Alert.alert('Uspjeh', 'Popravak je dodan lokalno (bit će sinkronizovan kada budete online s pravim korisničkim računom)', [
+          { text: 'OK', onPress: () => navigation.goBack() }
+        ]);
+      } else {
+        // Online s pravim korisničkim tokenom - spremi na backend
         try {
           const response = await repairsAPI.create(repairData);
 
@@ -84,20 +101,18 @@ export default function AddRepairScreen({ navigation, route }) {
           if (error.response?.status === 401) {
             throw new Error('Vaša prijava je istekla. Molim prijavite se ponovno.');
           }
-          throw error;
-        }
-      } else {
-        // Offline - spremi samo lokalno
-        console.log('📱 Offline - dodajem popravak lokalno');
-        repairDB.insert({
-          id: 'local_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-          ...repairData,
-          synced: 0, // Bit će syncirano kada je online
-        });
+          // Fallback na lokalnu bazu
+          console.log('⚠️ Backend greška - fallback na lokalnu bazu');
+          repairDB.insert({
+            id: 'local_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+            ...repairData,
+            synced: 0,
+          });
 
-        Alert.alert('Uspjeh', 'Popravak je dodan lokalno (bit će sinkronizovan kada budete online)', [
-          { text: 'OK', onPress: () => navigation.goBack() }
-        ]);
+          Alert.alert('Uspjeh', 'Popravak je dodan lokalno (bit će sinkronizovan kada budete online)', [
+            { text: 'OK', onPress: () => navigation.goBack() }
+          ]);
+        }
       }
 
     } catch (error) {

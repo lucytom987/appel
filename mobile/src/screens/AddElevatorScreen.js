@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as SecureStore from 'expo-secure-store';
 import { useAuth } from '../context/AuthContext';
 import { elevatorDB } from '../database/db';
 import { elevatorsAPI } from '../services/api';
@@ -97,6 +98,10 @@ export default function AddElevatorScreen({ navigation }) {
 
     try {
       let successCount = 0;
+
+      // Provjeri je li token offline token (demo korisnik)
+      const token = await SecureStore.getItemAsync('userToken');
+      const isOfflineUser = token && token.startsWith('offline_token_');
       
       // Dodaj svako dizalo
       for (const elevator of elevators) {
@@ -116,8 +121,18 @@ export default function AddElevatorScreen({ navigation }) {
           status: 'aktivan',
         };
 
-        if (online) {
-          // Online - spremi na backend
+        // Ako je offline korisnik ILI nema interneta - spremi samo lokalno
+        if (isOfflineUser || !online) {
+          console.log('📱 Demo/offline korisnik - dodajem dizalo lokalno bez API poziva');
+          elevatorDB.insert({
+            id: 'local_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+            ...elevatorData,
+            synced: 0, // Bit će syncirano kada se prijavi s pravim korisnicima
+          });
+          
+          successCount++;
+        } else {
+          // Online s pravim korisničkim tokenom - spremi na backend
           try {
             const response = await elevatorsAPI.create(elevatorData);
 
@@ -135,26 +150,22 @@ export default function AddElevatorScreen({ navigation }) {
             if (error.response?.status === 401) {
               throw new Error('Vaša prijava je istekla. Molim prijavite se ponovno.');
             }
-            // Inače - pokušaj offline
-            throw error;
+            // Inače - pokušaj offline fallback
+            console.log('⚠️ Backend greška - fallback na lokalnu bazu');
+            elevatorDB.insert({
+              id: 'local_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+              ...elevatorData,
+              synced: 0,
+            });
+            successCount++;
           }
-        } else {
-          // Offline - spremi samo lokalno
-          console.log('📱 Offline - dodajem dizalo lokalno');
-          elevatorDB.insert({
-            id: 'local_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-            ...elevatorData,
-            synced: 0, // Bit će syncirano kada je online
-          });
-          
-          successCount++;
         }
       }
 
       Alert.alert('Uspjeh', 
-        online 
-          ? `Uspješno dodano ${successCount} dizala` 
-          : `Uspješno dodano ${successCount} dizala (bit će sinkronizovano kada budete online)`,
+        isOfflineUser || !online
+          ? `Uspješno dodano ${successCount} dizala (bit će sinkronizovano kada budete online s pravim korisničkim računom)`
+          : `Uspješno dodano ${successCount} dizala`,
         [
           { 
             text: 'Gotovo', 

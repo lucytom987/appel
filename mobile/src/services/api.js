@@ -65,10 +65,17 @@ api.interceptors.response.use(
     });
     
     if (error.response?.status === 401) {
-      console.log('🔓 401 Unauthorized - brišem token');
-      // Token je istekao - logout
-      await SecureStore.deleteItemAsync('userToken');
-      await SecureStore.deleteItemAsync('userData');
+      console.log('🔓 401 Unauthorized - provjeriavam token tip');
+      // Token je istekao - ali ako je offline token, NE briši ga
+      const token = await SecureStore.getItemAsync('userToken');
+      if (token && token.startsWith('offline_token_')) {
+        console.log('⚠️ Offline token - ne brišem jer je to demo korisnik');
+        // NE briši offline token - korisnik je u offline modu
+      } else {
+        console.log('🔓 Brisanje online tokena jer je istekao');
+        await SecureStore.deleteItemAsync('userToken');
+        await SecureStore.deleteItemAsync('userData');
+      }
     }
     return Promise.reject(error);
   }

@@ -1,85 +1,74 @@
 const mongoose = require('mongoose');
 
 const elevatorSchema = new mongoose.Schema({
-  nazivDizala: { type: String, required: true },
-  brojUgovora: String,
-
-  // Niz individualnih dizala na istoj lokaciji
-  dizala: [{
-    _id: { type: mongoose.Schema.Types.ObjectId, default: () => new mongoose.Types.ObjectId() },
-    brojDizala: { type: String, required: true },
-    status: {
-      type: String,
-      enum: ['aktivan', 'neaktivan', 'van pogona', 'u remontu'],
-      default: 'aktivan'
-    },
-    napomena: String,
-    specifikacije: {
-      proizvodac: String,
-      model: String,
-      godinaProizvodnje: Number,
-      nosivost: Number,
-      brojKatova: Number,
-      tipDizala: {
-        type: String,
-        enum: ['putnička', 'teretna', 'panoramska', 'bolnička', 'ostalo'],
-        default: 'putnička'
-      }
-    }
-  }],
-
-  // SIM kartice
-  simKartice: [{
-    _id: { type: mongoose.Schema.Types.ObjectId, default: () => new mongoose.Types.ObjectId() },
-    serijaSimKartice: String,
-    brojTelefona: String,
-    vrstaUredaja: String,
-    datumIsteka: Date,
-    aktivna: { type: Boolean, default: true }
-  }],
-
-  // Lokacija
-  lokacija: {
-    adresa: { type: String, required: true },
-    grad: { type: String, required: true },
-    postanskiBroj: String,
-    drzava: { type: String, default: 'Hrvatska' },
-    ulaznaKoda: String,
-    koordinate: {
-      latitude: Number,
-      longitude: Number
-    }
+  // Osnovno
+  brojUgovora: { type: String, required: true },
+  nazivStranke: { type: String, required: true },
+  ulica: { type: String, required: true },
+  mjesto: { type: String, required: true },
+  brojDizala: { type: String, required: true },
+  
+  // Kontakt osoba
+  kontaktOsoba: {
+    imePrezime: String,
+    mobitel: String,
+    email: String,
+    ulaznaKoda: String
   },
-
-  // Klijent
-  klijent: {
-    naziv: { type: String, required: true },
-    kontaktOsoba: String,
-    telefon: String,
-    email: String
+  
+  // GPS koordinate (opcionalno za mapu)
+  koordinate: {
+    latitude: Number,
+    longitude: Number
   },
-
+  
+  // Status
+  status: {
+    type: String,
+    enum: ['aktivan', 'neaktivan', 'u kvaru', 'u servisu'],
+    default: 'aktivan'
+  },
+  
   // Servisiranje
-  servisiranje: {
-    zadnjiServis: Date,
-    sljedeciServis: Date,
-    intervalServisa: { type: Number, default: 30 }
-  },
-
+  intervalServisa: { type: Number, default: 1 }, // mjeseci
+  zadnjiServis: Date,
+  sljedeciServis: Date,
+  
+  // Napomene
   napomene: String,
+  
+  // Metadata
+  kreiranOd: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
   kreiranDatum: { type: Date, default: Date.now },
   azuriranDatum: { type: Date, default: Date.now }
+}, { 
+  strict: false, // Dozvoli dodatna polja ako dolaze
+  timestamps: false 
 });
 
-// Ažuriraj azuriranDatum pri spremi
+// Ažuriraj azuriranDatum pri spremanju
 elevatorSchema.pre('save', function (next) {
   this.azuriranDatum = Date.now();
+  
+  // Automatski izračunaj sljedeći servis ako je postavljen zadnji servis
+  if (this.zadnjiServis && this.intervalServisa) {
+    const nextDate = new Date(this.zadnjiServis);
+    nextDate.setMonth(nextDate.getMonth() + this.intervalServisa);
+    this.sljedeciServis = nextDate;
+  }
+  
   next();
 });
 
 // Index za brže pretraživanje
-elevatorSchema.index({ 'lokacija.grad': 1 });
-elevatorSchema.index({ 'lokacija.adresa': 1 });
-elevatorSchema.index({ 'dizala.status': 1 });
+elevatorSchema.index({ brojUgovora: 1 });
+elevatorSchema.index({ nazivStranke: 1 });
+elevatorSchema.index({ ulica: 1 });
+elevatorSchema.index({ mjesto: 1 });
+elevatorSchema.index({ brojDizala: 1 });
+elevatorSchema.index({ status: 1 });
 
 module.exports = mongoose.model('Elevator', elevatorSchema);

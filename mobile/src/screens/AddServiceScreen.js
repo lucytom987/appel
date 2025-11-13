@@ -77,12 +77,6 @@ export default function AddServiceScreen({ navigation, route }) {
       return;
     }
 
-    // Provjeri je li online (samo online može pisati servise)
-    if (!online) {
-      Alert.alert('Offline', 'Za logiranje servisa morate biti online');
-      return;
-    }
-
     setLoading(true);
 
     try {
@@ -106,23 +100,44 @@ export default function AddServiceScreen({ navigation, route }) {
         ],
       };
 
-      // Spremi na backend
-      const response = await servicesAPI.create(serviceData);
+      if (online) {
+        // Online - spremi na backend
+        try {
+          const response = await servicesAPI.create(serviceData);
 
-      // Spremi u lokalnu bazu
-      serviceDB.insert({
-        ...response.data,
-        localId: Date.now().toString(),
-        synced: true,
-      });
+          // Spremi u lokalnu bazu
+          serviceDB.insert({
+            ...response.data,
+            synced: true,
+          });
 
-      Alert.alert('Uspjeh', 'Servis uspješno logiran', [
-        { text: 'OK', onPress: () => navigation.goBack() }
-      ]);
+          Alert.alert('Uspjeh', 'Servis uspješno logiran', [
+            { text: 'OK', onPress: () => navigation.goBack() }
+          ]);
+        } catch (error) {
+          console.error('Greška pri slanju na backend:', error);
+          if (error.response?.status === 401) {
+            throw new Error('Vaša prijava je istekla. Molim prijavite se ponovno.');
+          }
+          throw error;
+        }
+      } else {
+        // Offline - spremi samo lokalno
+        console.log('📱 Offline - dodajem servis lokalno');
+        serviceDB.insert({
+          id: 'local_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+          ...serviceData,
+          synced: 0, // Bit će syncirano kada je online
+        });
+
+        Alert.alert('Uspjeh', 'Servis je dodan lokalno (bit će sinkronizovan kada budete online)', [
+          { text: 'OK', onPress: () => navigation.goBack() }
+        ]);
+      }
 
     } catch (error) {
       console.error('Greška pri logranju servisa:', error);
-      Alert.alert('Greška', error.response?.data?.message || 'Nije moguće logirati servis');
+      Alert.alert('Greška', error.message || error.response?.data?.message || 'Nije moguće logirati servis');
     } finally {
       setLoading(false);
     }

@@ -49,12 +49,6 @@ export default function AddRepairScreen({ navigation, route }) {
       return;
     }
 
-    // Provjeri je li online (samo online može pisati popravke)
-    if (!online) {
-      Alert.alert('Offline', 'Za logiranje popravaka morate biti online');
-      return;
-    }
-
     setLoading(true);
 
     try {
@@ -71,23 +65,44 @@ export default function AddRepairScreen({ navigation, route }) {
         napomene: formData.napomene,
       };
 
-      // Spremi na backend
-      const response = await repairsAPI.create(repairData);
+      if (online) {
+        // Online - spremi na backend
+        try {
+          const response = await repairsAPI.create(repairData);
 
-      // Spremi u lokalnu bazu
-      repairDB.insert({
-        ...response.data,
-        localId: Date.now().toString(),
-        synced: true,
-      });
+          // Spremi u lokalnu bazu
+          repairDB.insert({
+            ...response.data,
+            synced: true,
+          });
 
-      Alert.alert('Uspjeh', 'Popravak uspješno logiran', [
-        { text: 'OK', onPress: () => navigation.goBack() }
-      ]);
+          Alert.alert('Uspjeh', 'Popravak uspješno logiran', [
+            { text: 'OK', onPress: () => navigation.goBack() }
+          ]);
+        } catch (error) {
+          console.error('Greška pri slanju na backend:', error);
+          if (error.response?.status === 401) {
+            throw new Error('Vaša prijava je istekla. Molim prijavite se ponovno.');
+          }
+          throw error;
+        }
+      } else {
+        // Offline - spremi samo lokalno
+        console.log('📱 Offline - dodajem popravak lokalno');
+        repairDB.insert({
+          id: 'local_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+          ...repairData,
+          synced: 0, // Bit će syncirano kada je online
+        });
+
+        Alert.alert('Uspjeh', 'Popravak je dodan lokalno (bit će sinkronizovan kada budete online)', [
+          { text: 'OK', onPress: () => navigation.goBack() }
+        ]);
+      }
 
     } catch (error) {
       console.error('Greška pri logranju popravka:', error);
-      Alert.alert('Greška', error.response?.data?.message || 'Nije moguće logirati popravak');
+      Alert.alert('Greška', error.message || error.response?.data?.message || 'Nije moguće logirati popravak');
     } finally {
       setLoading(false);
     }

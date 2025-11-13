@@ -93,12 +93,6 @@ export default function AddElevatorScreen({ navigation }) {
       return;
     }
 
-    // Provjeri je li online (samo online može dodavati dizala)
-    if (!online) {
-      Alert.alert('Offline', 'Za dodavanje dizala morate biti online');
-      return;
-    }
-
     setLoading(true);
 
     try {
@@ -122,28 +116,56 @@ export default function AddElevatorScreen({ navigation }) {
           status: 'aktivan',
         };
 
-        const response = await elevatorsAPI.create(elevatorData);
+        if (online) {
+          // Online - spremi na backend
+          try {
+            const response = await elevatorsAPI.create(elevatorData);
 
-        // Spremi u lokalnu bazu
-        elevatorDB.insert({
-          _id: response.data._id,
-          ...response.data,
-          synced: true,
-        });
-        
-        successCount++;
+            // Spremi u lokalnu bazu
+            elevatorDB.insert({
+              _id: response.data._id || response.data.id,
+              ...response.data,
+              synced: true,
+            });
+            
+            successCount++;
+          } catch (error) {
+            console.error('Greška pri slanju na backend:', error);
+            // Ako je 401 - korisnik je odjavljenje, obavijesti ga
+            if (error.response?.status === 401) {
+              throw new Error('Vaša prijava je istekla. Molim prijavite se ponovno.');
+            }
+            // Inače - pokušaj offline
+            throw error;
+          }
+        } else {
+          // Offline - spremi samo lokalno
+          console.log('📱 Offline - dodajem dizalo lokalno');
+          elevatorDB.insert({
+            id: 'local_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+            ...elevatorData,
+            synced: 0, // Bit će syncirano kada je online
+          });
+          
+          successCount++;
+        }
       }
 
-      Alert.alert('Uspjeh', `Uspješno dodano ${successCount} dizala`, [
-        { 
-          text: 'Gotovo', 
-          onPress: () => navigation.goBack() 
-        }
-      ]);
+      Alert.alert('Uspjeh', 
+        online 
+          ? `Uspješno dodano ${successCount} dizala` 
+          : `Uspješno dodano ${successCount} dizala (bit će sinkronizovano kada budete online)`,
+        [
+          { 
+            text: 'Gotovo', 
+            onPress: () => navigation.goBack() 
+          }
+        ]
+      );
 
     } catch (error) {
       console.error('Greška pri dodavanju dizala:', error);
-      Alert.alert('Greška', error.response?.data?.message || 'Nije moguće dodati dizalo');
+      Alert.alert('Greška', error.message || error.response?.data?.message || 'Nije moguće dodati dizalo');
     } finally {
       setLoading(false);
     }

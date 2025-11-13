@@ -51,11 +51,16 @@ export const AuthProvider = ({ children }) => {
       if (token && userData) {
         setUser(JSON.parse(userData));
         
-        // Ako si online I imaš token, pokreni sync odmah
-        if (online) {
+        // Ako je offline token - NE pokreći sync
+        const isOfflineUser = token.startsWith('offline_token_');
+        
+        // Ako si online I imaš token I token je pravi JWT - pokreni sync odmah
+        if (online && !isOfflineUser) {
           console.log('🔄 Auto-login - pokrećem inicijalni sync...');
           await syncAll().catch(err => console.log('⚠️ Sync error:', err));
           startAutoSync();
+        } else if (isOfflineUser) {
+          console.log('⚠️ Offline korisnik (demo) - NE pokrećem sync');
         }
       } else {
         // Ako nemaš token, dodaj dummy podatke za testiranje

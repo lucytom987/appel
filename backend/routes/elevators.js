@@ -11,7 +11,7 @@ router.get('/', authenticate, async (req, res) => {
   try {
     const elevators = await Elevator.find()
       .populate('simCard', 'phoneNumber provider expiryDate')
-      .sort({ address: 1 })
+      .sort({ nazivStranke: 1 })
       .lean();
 
     res.json({
@@ -87,8 +87,8 @@ router.get('/:id', authenticate, async (req, res) => {
 
 // @route   POST /api/elevators
 // @desc    Kreiraj novo dizalo
-// @access  Private (Admin, Manager)
-router.post('/', authenticate, checkRole(['admin', 'manager']), async (req, res) => {
+// @access  Private
+router.post('/', authenticate, async (req, res) => {
   try {
     const elevator = new Elevator({
       ...req.body,
@@ -99,8 +99,8 @@ router.post('/', authenticate, checkRole(['admin', 'manager']), async (req, res)
 
     // Audit log
     await logAction(req.user.id, 'CREATE', 'Elevator', elevator._id, {
-      address: elevator.address,
-      buildingCode: elevator.buildingCode
+      brojUgovora: elevator.brojUgovora,
+      nazivStranke: elevator.nazivStranke
     });
 
     res.status(201).json({
@@ -120,8 +120,8 @@ router.post('/', authenticate, checkRole(['admin', 'manager']), async (req, res)
 
 // @route   PUT /api/elevators/:id
 // @desc    Ažuriraj dizalo
-// @access  Private (Admin, Manager)
-router.put('/:id', authenticate, checkRole(['admin', 'manager']), async (req, res) => {
+// @access  Private
+router.put('/:id', authenticate, async (req, res) => {
   try {
     const oldElevator = await Elevator.findById(req.params.id).lean();
     
@@ -143,8 +143,8 @@ router.put('/:id', authenticate, checkRole(['admin', 'manager']), async (req, re
 
     // Audit log
     await logAction(req.user.id, 'UPDATE', 'Elevator', elevator._id, {
-      old: { address: oldElevator.address, status: oldElevator.status },
-      new: { address: elevator.address, status: elevator.status }
+      old: { nazivStranke: oldElevator.nazivStranke, status: oldElevator.status },
+      new: { nazivStranke: elevator.nazivStranke, status: elevator.status }
     });
 
     res.json({
@@ -180,8 +180,8 @@ router.delete('/:id', authenticate, checkRole(['admin']), async (req, res) => {
 
     // Audit log
     await logAction(req.user.id, 'DELETE', 'Elevator', req.params.id, {
-      address: elevator.address,
-      buildingCode: elevator.buildingCode
+      brojUgovora: elevator.brojUgovora,
+      nazivStranke: elevator.nazivStranke
     });
 
     res.json({

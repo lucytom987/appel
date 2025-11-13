@@ -6,7 +6,7 @@ const { authenticate, checkRole } = require('../middleware/auth');
 // @route   GET /api/audit-logs
 // @desc    Dohvati sve audit logove (sa filterima)
 // @access  Private (Admin, Manager)
-router.get('/', authenticate, checkRole(['admin', 'manager']), async (req, res) => {
+router.get('/', authenticate, checkRole(['admin', 'menadzer']), async (req, res) => {
   try {
     const { userId, action, entityType, startDate, endDate, limit = 100, skip = 0 } = req.query;
     
@@ -49,7 +49,7 @@ router.get('/', authenticate, checkRole(['admin', 'manager']), async (req, res) 
 // @route   GET /api/audit-logs/user/:userId
 // @desc    Dohvati sve aktivnosti jednog korisnika
 // @access  Private (Admin, Manager)
-router.get('/user/:userId', authenticate, checkRole(['admin', 'manager']), async (req, res) => {
+router.get('/user/:userId', authenticate, checkRole(['admin', 'menadzer']), async (req, res) => {
   try {
     const { limit = 50, skip = 0 } = req.query;
 
@@ -80,7 +80,7 @@ router.get('/user/:userId', authenticate, checkRole(['admin', 'manager']), async
 // @route   GET /api/audit-logs/entity/:entityType/:entityId
 // @desc    Dohvati sve aktivnosti na određenom entitetu
 // @access  Private (Admin, Manager)
-router.get('/entity/:entityType/:entityId', authenticate, checkRole(['admin', 'manager']), async (req, res) => {
+router.get('/entity/:entityType/:entityId', authenticate, checkRole(['admin', 'menadzer']), async (req, res) => {
   try {
     const logs = await AuditLog.find({
       entityType: req.params.entityType,
@@ -134,7 +134,7 @@ router.delete('/cleanup', authenticate, checkRole(['admin']), async (req, res) =
 // @route   GET /api/audit-logs/stats/activity
 // @desc    Statistika aktivnosti po tipu akcije
 // @access  Private (Admin, Manager)
-router.get('/stats/activity', authenticate, checkRole(['admin', 'manager']), async (req, res) => {
+router.get('/stats/activity', authenticate, checkRole(['admin', 'menadzer']), async (req, res) => {
   try {
     const stats = await AuditLog.aggregate([
       {
@@ -164,7 +164,7 @@ router.get('/stats/activity', authenticate, checkRole(['admin', 'manager']), asy
 // @route   GET /api/audit-logs/:id
 // @desc    Dohvati jedan audit log
 // @access  Private (Admin, Manager)
-router.get('/:id', authenticate, checkRole(['admin', 'manager']), async (req, res) => {
+router.get('/:id', authenticate, checkRole(['admin', 'menadzer']), async (req, res) => {
   try {
     const log = await AuditLog.findById(req.params.id)
       .populate('user', 'name email role')

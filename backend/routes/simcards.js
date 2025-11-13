@@ -138,7 +138,7 @@ router.get('/:id', authenticate, async (req, res) => {
 // @route   POST /api/simcards
 // @desc    Kreiraj novu SIM karticu
 // @access  Private (Admin, Manager)
-router.post('/', authenticate, checkRole(['admin', 'manager']), async (req, res) => {
+router.post('/', authenticate, checkRole(['admin', 'menadzer']), async (req, res) => {
   try {
     const simcard = new SimCard(req.body);
     await simcard.save();
@@ -176,7 +176,7 @@ router.post('/', authenticate, checkRole(['admin', 'manager']), async (req, res)
 // @route   PUT /api/simcards/:id
 // @desc    Ažuriraj SIM karticu
 // @access  Private (Admin, Manager)
-router.put('/:id', authenticate, checkRole(['admin', 'manager']), async (req, res) => {
+router.put('/:id', authenticate, checkRole(['admin', 'menadzer']), async (req, res) => {
   try {
     const oldSimCard = await SimCard.findById(req.params.id).lean();
 

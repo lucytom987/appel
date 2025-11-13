@@ -62,7 +62,7 @@ router.get('/:id', authenticate, async (req, res) => {
 // @route   POST /api/chatrooms
 // @desc    Kreiraj novu chat sobu
 // @access  Private (Manager, Admin)
-router.post('/', authenticate, checkRole(['admin', 'manager']), async (req, res) => {
+router.post('/', authenticate, checkRole(['admin', 'menadzer']), async (req, res) => {
   try {
     const { name, description, members } = req.body;
 
@@ -108,7 +108,7 @@ router.post('/', authenticate, checkRole(['admin', 'manager']), async (req, res)
 // @route   PUT /api/chatrooms/:id
 // @desc    Ažuriraj chat sobu (ime, članove)
 // @access  Private (Manager, Admin)
-router.put('/:id', authenticate, checkRole(['admin', 'manager']), async (req, res) => {
+router.put('/:id', authenticate, checkRole(['admin', 'menadzer']), async (req, res) => {
   try {
     const existingRoom = await ChatRoom.findById(req.params.id);
 
@@ -184,7 +184,7 @@ router.delete('/:id', authenticate, checkRole(['admin']), async (req, res) => {
 // @route   POST /api/chatrooms/:id/members
 // @desc    Dodaj člana u chat sobu
 // @access  Private (Manager, Admin)
-router.post('/:id/members', authenticate, checkRole(['admin', 'manager']), async (req, res) => {
+router.post('/:id/members', authenticate, checkRole(['admin', 'menadzer']), async (req, res) => {
   try {
     const { userId } = req.body;
 
@@ -227,7 +227,7 @@ router.post('/:id/members', authenticate, checkRole(['admin', 'manager']), async
 // @route   DELETE /api/chatrooms/:id/members/:userId
 // @desc    Ukloni člana iz chat sobe
 // @access  Private (Manager, Admin)
-router.delete('/:id/members/:userId', authenticate, checkRole(['admin', 'manager']), async (req, res) => {
+router.delete('/:id/members/:userId', authenticate, checkRole(['admin', 'menadzer']), async (req, res) => {
   try {
     const chatroom = await ChatRoom.findById(req.params.id);
     

@@ -193,11 +193,19 @@ export const initDatabase = () => {
 // CRUD operacije za Elevators
 export const elevatorDB = {
   getAll: () => {
-    return db.getAllSync('SELECT * FROM elevators ORDER BY nazivStranke');
+    const elevators = db.getAllSync('SELECT * FROM elevators ORDER BY nazivStranke');
+    return elevators.map(e => ({
+      ...e,
+      kontaktOsoba: typeof e.kontaktOsoba === 'string' ? JSON.parse(e.kontaktOsoba || '{}') : (e.kontaktOsoba || {})
+    }));
   },
   
   getById: (id) => {
-    return db.getFirstSync('SELECT * FROM elevators WHERE id = ?', [id]);
+    const elevator = db.getFirstSync('SELECT * FROM elevators WHERE id = ?', [id]);
+    if (elevator) {
+      elevator.kontaktOsoba = typeof elevator.kontaktOsoba === 'string' ? JSON.parse(elevator.kontaktOsoba || '{}') : (elevator.kontaktOsoba || {});
+    }
+    return elevator;
   },
   
   insert: (elevator) => {
@@ -274,14 +282,26 @@ export const elevatorDB = {
 // CRUD operacije za Services
 export const serviceDB = {
   getAll: (elevatorId = null) => {
+    let services;
     if (elevatorId) {
-      return db.getAllSync('SELECT * FROM services WHERE elevatorId = ? ORDER BY datum DESC', [elevatorId]);
+      services = db.getAllSync('SELECT * FROM services WHERE elevatorId = ? ORDER BY datum DESC', [elevatorId]);
+    } else {
+      services = db.getAllSync('SELECT * FROM services ORDER BY datum DESC');
     }
-    return db.getAllSync('SELECT * FROM services ORDER BY datum DESC');
+    return services.map(s => ({
+      ...s,
+      checklist: typeof s.checklist === 'string' ? JSON.parse(s.checklist || '[]') : (s.checklist || []),
+      nedostaci: typeof s.nedostaci === 'string' ? JSON.parse(s.nedostaci || '[]') : (s.nedostaci || [])
+    }));
   },
   
   getById: (id) => {
-    return db.getFirstSync('SELECT * FROM services WHERE id = ?', [id]);
+    const service = db.getFirstSync('SELECT * FROM services WHERE id = ?', [id]);
+    if (service) {
+      service.checklist = typeof service.checklist === 'string' ? JSON.parse(service.checklist || '[]') : (service.checklist || []);
+      service.nedostaci = typeof service.nedostaci === 'string' ? JSON.parse(service.nedostaci || '[]') : (service.nedostaci || []);
+    }
+    return service;
   },
   
   insert: (service) => {
@@ -333,7 +353,12 @@ export const serviceDB = {
   },
   
   getUnsynced: () => {
-    return db.getAllSync('SELECT * FROM services WHERE synced = 0');
+    const services = db.getAllSync('SELECT * FROM services WHERE synced = 0');
+    return services.map(s => ({
+      ...s,
+      checklist: typeof s.checklist === 'string' ? JSON.parse(s.checklist || '[]') : (s.checklist || []),
+      nedostaci: typeof s.nedostaci === 'string' ? JSON.parse(s.nedostaci || '[]') : (s.nedostaci || [])
+    }));
   },
   
   bulkInsert: (services) => {
@@ -354,10 +379,16 @@ export const serviceDB = {
 // CRUD operacije za Repairs
 export const repairDB = {
   getAll: (elevatorId = null) => {
+    let repairs;
     if (elevatorId) {
-      return db.getAllSync('SELECT * FROM repairs WHERE elevatorId = ? ORDER BY datumPrijave DESC', [elevatorId]);
+      repairs = db.getAllSync('SELECT * FROM repairs WHERE elevatorId = ? ORDER BY datumPrijave DESC', [elevatorId]);
+    } else {
+      repairs = db.getAllSync('SELECT * FROM repairs ORDER BY datumPrijave DESC');
     }
-    return db.getAllSync('SELECT * FROM repairs ORDER BY datumPrijave DESC');
+    return repairs.map(r => ({
+      ...r,
+      // Repair model doesn't have nested JSON fields, but keep consistent
+    }));
   },
   
   getById: (id) => {

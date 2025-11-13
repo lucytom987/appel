@@ -306,13 +306,23 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
 
 // Helper component
 function InfoRow({ icon, label, value }) {
+  // Osiguraj da je value string
+  let displayValue = '-';
+  if (value) {
+    if (typeof value === 'object') {
+      displayValue = JSON.stringify(value);
+    } else {
+      displayValue = String(value);
+    }
+  }
+
   return (
     <View style={styles.infoRow}>
       <View style={styles.infoLeft}>
         <Ionicons name={icon} size={18} color="#6b7280" />
         <Text style={styles.infoLabel}>{label}</Text>
       </View>
-      <Text style={styles.infoValue}>{value || '-'}</Text>
+      <Text style={styles.infoValue}>{displayValue}</Text>
     </View>
   );
 }

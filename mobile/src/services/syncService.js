@@ -356,14 +356,14 @@ export const startAutoSync = () => {
     return; // Već pokrenut
   }
 
-  console.log('🔄 Auto-sync pokrenut (30s interval)');
+  console.log('🔄 Auto-sync pokrenut (5 minuta interval)');
   
   syncInterval = setInterval(async () => {
     const online = await checkOnlineStatus();
     if (online) {
       syncAll();
     }
-  }, 30000); // 30 sekundi
+  }, 5 * 60 * 1000); // 5 minuta - smanjuje potrošnju baterije
 };
 
 // Zaustavi auto-sync

@@ -6,16 +6,19 @@ import {
   FlatList,
   TouchableOpacity,
   RefreshControl,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { serviceDB } from '../database/db';
+import { serviceDB, elevatorDB } from '../database/db';
 import { syncAll } from '../services/syncService';
+import { servicesAPI } from '../services/api';
 
 export default function ServicesListScreen({ navigation }) {
   const [services, setServices] = useState([]);
   const [filteredServices, setFilteredServices] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState('all'); // all, thisMonth, lastMonth
+  const [deleting, setDeleting] = useState(null);
 
   useEffect(() => {
     loadServices();
@@ -30,7 +33,7 @@ export default function ServicesListScreen({ navigation }) {
       const allServices = serviceDB.getAll() || [];
       // Sortiraj po datumu - najnoviji prvo
       const sorted = allServices.sort((a, b) => 
-        new Date(b.serviceDate) - new Date(a.serviceDate)
+        new Date(b.datum) - new Date(a.datum)
       );
       setServices(sorted);
     } catch (error) {
@@ -48,14 +51,14 @@ export default function ServicesListScreen({ navigation }) {
 
     if (filter === 'thisMonth') {
       filtered = services.filter(s => {
-        const date = new Date(s.serviceDate);
+        const date = new Date(s.datum);
         return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
       });
     } else if (filter === 'lastMonth') {
       const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
       const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear;
       filtered = services.filter(s => {
-        const date = new Date(s.serviceDate);
+        const date = new Date(s.datum);
         return date.getMonth() === lastMonth && date.getFullYear() === lastMonthYear;
       });
     }
@@ -70,50 +73,102 @@ export default function ServicesListScreen({ navigation }) {
     setRefreshing(false);
   };
 
+  const handleDeleteService = async (service) => {
+    Alert.alert(
+      'Obriši servis',
+      'Sigurno želiš obrisati ovaj servis?',
+      [
+        { text: 'Otkaži', style: 'cancel' },
+        {
+          text: 'Obriši',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setDeleting(service.id);
+              // Obriši s backenda ako je sinkroniziran
+              if (service.synced && !service.id.startsWith('local_')) {
+                await servicesAPI.delete(service.id);
+              }
+              // Obriši iz lokalne baze
+              serviceDB.delete(service.id);
+              loadServices();
+            } catch (error) {
+              console.error('Greška pri brisanju servisa:', error);
+              Alert.alert('Greška', 'Nije moguće obrisati servis');
+            } finally {
+              setDeleting(null);
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const renderServiceItem = ({ item }) => {
-    const serviceDate = new Date(item.serviceDate);
-    const nextServiceDate = new Date(item.nextServiceDate);
-    const daysUntilNext = Math.ceil((nextServiceDate - new Date()) / (1000 * 60 * 60 * 24));
+    const serviceDate = new Date(item.datum);
+    const sljedeciServisDate = item.sljedeciServis ? new Date(item.sljedeciServis) : null;
+    const daysUntilNext = sljedeciServisDate ? 
+      Math.ceil((sljedeciServisDate - new Date()) / (1000 * 60 * 60 * 24)) : null;
+    
+    // Pronađi dizalo po ID-u
+    const elevator = elevatorDB.getById(item.elevatorId);
 
     return (
-      <TouchableOpacity
-        style={styles.serviceCard}
-        onPress={() => navigation.navigate('ServiceDetails', { service: item })}
-      >
-        <View style={styles.serviceHeader}>
-          <View style={styles.serviceInfo}>
-            <Text style={styles.elevatorName}>{item.elevator?.lokacija || 'N/A'}</Text>
-            <Text style={styles.serviceDate}>
-              {serviceDate.toLocaleDateString('hr-HR')}
-            </Text>
+      <View style={styles.serviceCard}>
+        <TouchableOpacity
+          onPress={() => navigation.navigate('ServiceDetails', { service: item })}
+          style={styles.serviceContent}
+        >
+          <View style={styles.serviceHeader}>
+            <View style={styles.serviceInfo}>
+              <Text style={styles.elevatorName}>
+                {elevator?.nazivStranke || 'N/A'} - {elevator?.ulica || ''} ({elevator?.brojDizala || 'N/A'})
+              </Text>
+              <Text style={styles.serviceDate}>
+                {serviceDate.toLocaleDateString('hr-HR')}
+              </Text>
+            </View>
+            {daysUntilNext !== null && (
+              <View style={[
+                styles.nextServiceBadge,
+                daysUntilNext < 7 && styles.nextServiceBadgeUrgent,
+                daysUntilNext < 0 && styles.nextServiceBadgeOverdue
+              ]}>
+                <Text style={styles.nextServiceText}>
+                  {daysUntilNext < 0 ? 'Prekoračeno' : `${daysUntilNext}d`}
+                </Text>
+              </View>
+            )}
           </View>
-          <View style={[
-            styles.nextServiceBadge,
-            daysUntilNext < 7 && styles.nextServiceBadgeUrgent,
-            daysUntilNext < 0 && styles.nextServiceBadgeOverdue
-          ]}>
-            <Text style={styles.nextServiceText}>
-              {daysUntilNext < 0 ? 'Prekoračeno' : `${daysUntilNext}d`}
-            </Text>
-          </View>
-        </View>
 
-        <Text style={styles.serviceDescription} numberOfLines={2}>
-          {item.opis}
-        </Text>
+          <Text style={styles.serviceDescription} numberOfLines={2}>
+            {item.napomene || 'Bez napomena'}
+          </Text>
 
-        <View style={styles.serviceFooter}>
-          <View style={styles.technicianInfo}>
-            <Ionicons name="person-outline" size={16} color="#666" />
-            <Text style={styles.technicianName}>
-              {item.korisnik?.ime || 'N/A'} {item.korisnik?.prezime || ''}
-            </Text>
+          <View style={styles.serviceFooter}>
+            <View style={styles.technicianInfo}>
+              <Ionicons name="person-outline" size={16} color="#666" />
+              <Text style={styles.technicianName}>
+                {item.serviserID || 'Nepoznat serviser'}
+              </Text>
+            </View>
+            {item.synced && (
+              <Ionicons name="cloud-done-outline" size={16} color="#10b981" />
+            )}
           </View>
-          {item.synced && (
-            <Ionicons name="cloud-done-outline" size={16} color="#10b981" />
-          )}
+        </TouchableOpacity>
+
+        {/* Action buttons */}
+        <View style={styles.actionButtons}>
+          <TouchableOpacity
+            style={[styles.actionButton, styles.deleteButton]}
+            onPress={() => handleDeleteService(item)}
+            disabled={deleting === item.id}
+          >
+            <Ionicons name="trash-outline" size={18} color="#ef4444" />
+          </TouchableOpacity>
         </View>
-      </TouchableOpacity>
+      </View>
     );
   };
 
@@ -238,13 +293,17 @@ const styles = StyleSheet.create({
   serviceCard: {
     backgroundColor: '#fff',
     borderRadius: 12,
-    padding: 15,
     marginBottom: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 2,
     elevation: 2,
+    flexDirection: 'row',
+  },
+  serviceContent: {
+    flex: 1,
+    padding: 15,
   },
   serviceHeader: {
     flexDirection: 'row',
@@ -321,5 +380,16 @@ const styles = StyleSheet.create({
     color: '#999',
     marginTop: 5,
     textAlign: 'center',
+  },
+  actionButtons: {
+    justifyContent: 'center',
+    paddingRight: 10,
+  },
+  actionButton: {
+    padding: 12,
+    borderRadius: 8,
+  },
+  deleteButton: {
+    backgroundColor: '#fee2e2',
   },
 });

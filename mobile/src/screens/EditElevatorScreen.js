@@ -12,7 +12,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { elevatorDB } from '../database/db';
-import { api } from '../services/api';
+import { elevatorsAPI } from '../services/api';
 
 export default function EditElevatorScreen({ navigation, route }) {
   const { elevator } = route.params;
@@ -155,7 +155,7 @@ export default function EditElevatorScreen({ navigation, route }) {
 
     try {
       // Obriši s backenda
-      await api.delete(`/elevators/${elevator._id}`);
+      await elevatorsAPI.delete(elevator._id);
 
       // Obriši iz lokalne baze
       elevatorDB.delete(elevator._id);

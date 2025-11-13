@@ -7,16 +7,20 @@ import {
   TouchableOpacity,
   RefreshControl,
   ScrollView,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { repairDB } from '../database/db';
+import { repairDB, elevatorDB } from '../database/db';
 import { syncAll } from '../services/syncService';
+import { repairsAPI } from '../services/api';
 
 export default function RepairsListScreen({ navigation }) {
   const [repairs, setRepairs] = useState([]);
   const [filteredRepairs, setFilteredRepairs] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
-  const [filter, setFilter] = useState('all'); // all, pending, inProgress, completed, urgent
+  const [filter, setFilter] = useState('all'); // all, čekanje, u tijeku, završeno
+  const [deleting, setDeleting] = useState(null);
+  const [updating, setUpdating] = useState(null);
 
   useEffect(() => {
     loadRepairs();
@@ -31,7 +35,7 @@ export default function RepairsListScreen({ navigation }) {
       const allRepairs = repairDB.getAll() || [];
       // Sortiraj po datumu - najnoviji prvo
       const sorted = allRepairs.sort((a, b) => 
-        new Date(b.reportedDate) - new Date(a.reportedDate)
+        new Date(b.datumPrijave) - new Date(a.datumPrijave)
       );
       setRepairs(sorted);
     } catch (error) {
@@ -44,21 +48,106 @@ export default function RepairsListScreen({ navigation }) {
     let filtered = repairs;
 
     switch (filter) {
-      case 'pending':
-        filtered = repairs.filter(r => r.status === 'pending');
+      case 'čekanje':
+        filtered = repairs.filter(r => r.status === 'čekanje');
         break;
-      case 'inProgress':
-        filtered = repairs.filter(r => r.status === 'in_progress');
+      case 'u tijeku':
+        filtered = repairs.filter(r => r.status === 'u tijeku');
         break;
-      case 'completed':
-        filtered = repairs.filter(r => r.status === 'completed');
-        break;
-      case 'urgent':
-        filtered = repairs.filter(r => r.priority === 'urgent' && r.status !== 'completed');
+      case 'završeno':
+        filtered = repairs.filter(r => r.status === 'završeno');
         break;
     }
 
     setFilteredRepairs(filtered);
+  };
+
+  const handleDeleteRepair = async (repair) => {
+    Alert.alert(
+      'Obriši popravak',
+      'Sigurno želiš obrisati ovaj popravak?',
+      [
+        { text: 'Otkaži', style: 'cancel' },
+        {
+          text: 'Obriši',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setDeleting(repair.id);
+              // Obriši s backenda ako je sinkroniziran
+              if (repair.synced && !repair.id.startsWith('local_')) {
+                await repairsAPI.delete(repair.id);
+              }
+              // Obriši iz lokalne baze
+              repairDB.delete(repair.id);
+              loadRepairs();
+            } catch (error) {
+              console.error('Greška pri brisanju popravka:', error);
+              Alert.alert('Greška', 'Nije moguće obrisati popravak');
+            } finally {
+              setDeleting(null);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleUpdateStatus = async (repair) => {
+    const statusOptions = [
+      { label: 'Na čekanju', value: 'čekanje' },
+      { label: 'U tijeku', value: 'u tijeku' },
+      { label: 'Završeno', value: 'završeno' },
+    ];
+
+    Alert.alert(
+      'Ažuriraj status',
+      'Odaberi novi status:',
+      [
+        ...statusOptions.map(option => ({
+          text: option.label,
+          onPress: async () => {
+            try {
+              setUpdating(repair.id);
+              const updated = { ...repair, status: option.value };
+              
+              // Ažuriraj na backenda ako je sinkroniziran
+              if (repair.synced && !repair.id.startsWith('local_')) {
+                await repairsAPI.update(repair.id, updated);
+              }
+              
+              // Ažuriraj lokalnu bazu
+              repairDB.update(repair.id, updated);
+              loadRepairs();
+            } catch (error) {
+              console.error('Greška pri ažuriranju:', error);
+              Alert.alert('Greška', 'Nije moguće ažurirati status');
+            } finally {
+              setUpdating(null);
+            }
+          }
+        })),
+        { text: 'Otkaži', style: 'cancel' }
+      ]
+    );
+  };
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'čekanje': return '#f59e0b';
+      case 'u tijeku': return '#3b82f6';
+      case 'završeno': return '#10b981';
+      default: return '#6b7280';
+    }
+  };
+
+  const getStatusLabel = (status) => {
+    switch (status) {
+      case 'čekanje': return 'Na čekanju';
+      case 'u tijeku': return 'U tijeku';
+      case 'završeno': return 'Završeno';
+      default: return status;
+    }
   };
 
   const onRefresh = async () => {
@@ -68,85 +157,67 @@ export default function RepairsListScreen({ navigation }) {
     setRefreshing(false);
   };
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'pending': return '#f59e0b';
-      case 'in_progress': return '#3b82f6';
-      case 'completed': return '#10b981';
-      default: return '#6b7280';
-    }
-  };
-
-  const getStatusLabel = (status) => {
-    switch (status) {
-      case 'pending': return 'Na čekanju';
-      case 'in_progress': return 'U tijeku';
-      case 'completed': return 'Završeno';
-      default: return status;
-    }
-  };
-
-  const getPriorityColor = (priority) => {
-    switch (priority) {
-      case 'urgent': return '#ef4444';
-      case 'normal': return '#f59e0b';
-      case 'low': return '#10b981';
-      default: return '#6b7280';
-    }
-  };
-
   const renderRepairItem = ({ item }) => {
-    const reportedDate = new Date(item.reportedDate);
+    const datumPrijave = new Date(item.datumPrijave);
+    
+    // Pronađi dizalo po ID-u
+    const elevator = elevatorDB.getById(item.elevatorId);
 
     return (
-      <TouchableOpacity
-        style={[
-          styles.repairCard,
-          item.priority === 'urgent' && item.status !== 'completed' && styles.repairCardUrgent
-        ]}
-        onPress={() => navigation.navigate('RepairDetails', { repair: item })}
-      >
-        <View style={styles.repairHeader}>
-          <View style={styles.repairInfo}>
-            <Text style={styles.elevatorName}>{item.elevator?.lokacija || 'N/A'}</Text>
-            <Text style={styles.repairDate}>
-              {reportedDate.toLocaleDateString('hr-HR')}
-            </Text>
-          </View>
-          <View style={styles.badges}>
-            {item.priority === 'urgent' && (
-              <View style={[styles.priorityBadge, { backgroundColor: getPriorityColor(item.priority) }]}>
-                <Ionicons name="warning" size={12} color="#fff" />
-                <Text style={styles.badgeText}>Hitno</Text>
-              </View>
-            )}
+      <View style={styles.repairCard}>
+        <TouchableOpacity
+          onPress={() => navigation.navigate('RepairDetails', { repair: item })}
+          style={styles.repairContent}
+        >
+          <View style={styles.repairHeader}>
+            <View style={styles.repairInfo}>
+              <Text style={styles.elevatorName}>
+                {elevator?.nazivStranke || 'N/A'} - {elevator?.ulica || ''} ({elevator?.brojDizala || 'N/A'})
+              </Text>
+              <Text style={styles.repairDate}>
+                {datumPrijave.toLocaleDateString('hr-HR')}
+              </Text>
+            </View>
             <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
               <Text style={styles.badgeText}>{getStatusLabel(item.status)}</Text>
             </View>
           </View>
-        </View>
 
-        <Text style={styles.repairDescription} numberOfLines={2}>
-          {item.opis}
-        </Text>
+          <Text style={styles.repairDescription} numberOfLines={2}>
+            {item.opisKvara || 'Bez opisa'}
+          </Text>
 
-        <View style={styles.repairFooter}>
-          <View style={styles.technicianInfo}>
-            <Ionicons name="person-outline" size={16} color="#666" />
-            <Text style={styles.technicianName}>
-              {item.reportedBy?.ime || 'N/A'} {item.reportedBy?.prezime || ''}
-            </Text>
-          </View>
-          <View style={styles.footerRight}>
-            {item.estimatedCost && (
-              <Text style={styles.costText}>€{item.estimatedCost.toFixed(2)}</Text>
-            )}
+          <View style={styles.repairFooter}>
+            <View style={styles.technicianInfo}>
+              <Ionicons name="person-outline" size={16} color="#666" />
+              <Text style={styles.technicianName}>
+                {item.serviserID || 'Nepoznat serviser'}
+              </Text>
+            </View>
             {item.synced && (
               <Ionicons name="cloud-done-outline" size={16} color="#10b981" />
             )}
           </View>
+        </TouchableOpacity>
+
+        {/* Action buttons */}
+        <View style={styles.actionButtons}>
+          <TouchableOpacity
+            style={[styles.actionButton, styles.statusButton]}
+            onPress={() => handleUpdateStatus(item)}
+            disabled={updating === item.id}
+          >
+            <Ionicons name="swap-vertical" size={18} color="#3b82f6" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.actionButton, styles.deleteButton]}
+            onPress={() => handleDeleteRepair(item)}
+            disabled={deleting === item.id}
+          >
+            <Ionicons name="trash-outline" size={18} color="#ef4444" />
+          </TouchableOpacity>
         </View>
-      </TouchableOpacity>
+      </View>
     );
   };
 
@@ -155,10 +226,9 @@ export default function RepairsListScreen({ navigation }) {
       <Ionicons name="construct-outline" size={64} color="#ccc" />
       <Text style={styles.emptyText}>Nema popravaka</Text>
       <Text style={styles.emptySubtext}>
-        {filter === 'urgent' ? 'Nema hitnih popravaka' :
-         filter === 'pending' ? 'Nema popravaka na čekanju' :
-         filter === 'inProgress' ? 'Nema popravaka u tijeku' :
-         filter === 'completed' ? 'Nema završenih popravaka' :
+        {filter === 'čekanje' ? 'Nema popravaka na čekanju' :
+         filter === 'u tijeku' ? 'Nema popravaka u tijeku' :
+         filter === 'završeno' ? 'Nema završenih popravaka' :
          'Još nema logiranih popravaka'}
       </Text>
     </View>
@@ -295,17 +365,17 @@ const styles = StyleSheet.create({
   repairCard: {
     backgroundColor: '#fff',
     borderRadius: 12,
-    padding: 15,
     marginBottom: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 2,
     elevation: 2,
+    flexDirection: 'row',
   },
-  repairCardUrgent: {
-    borderLeftWidth: 4,
-    borderLeftColor: '#ef4444',
+  repairContent: {
+    flex: 1,
+    padding: 15,
   },
   repairHeader: {
     flexDirection: 'row',
@@ -325,18 +395,6 @@ const styles = StyleSheet.create({
   repairDate: {
     fontSize: 14,
     color: '#666',
-  },
-  badges: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  priorityBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
   },
   statusBadge: {
     paddingHorizontal: 8,
@@ -370,16 +428,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
   },
-  footerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  costText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#10b981',
-  },
   emptyState: {
     flex: 1,
     justifyContent: 'center',
@@ -397,5 +445,20 @@ const styles = StyleSheet.create({
     color: '#999',
     marginTop: 5,
     textAlign: 'center',
+  },
+  actionButtons: {
+    justifyContent: 'center',
+    paddingRight: 10,
+    gap: 8,
+  },
+  actionButton: {
+    padding: 12,
+    borderRadius: 8,
+  },
+  statusButton: {
+    backgroundColor: '#dbeafe',
+  },
+  deleteButton: {
+    backgroundColor: '#fee2e2',
   },
 });

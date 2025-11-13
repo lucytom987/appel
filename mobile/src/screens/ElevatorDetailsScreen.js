@@ -64,22 +64,7 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
     }
   };
 
-  const handleCallPhone = () => {
-    if (elevator.simCard?.phoneNumber) {
-      Linking.openURL(`tel:${elevator.simCard.phoneNumber}`);
-    } else {
-      Alert.alert('Nema telefona', 'SIM kartica nije dodjeljena ili nema broj');
-    }
-  };
 
-  const handleOpenMap = () => {
-    if (elevator.location_lat && elevator.location_lng) {
-      const url = `https://www.google.com/maps/search/?api=1&query=${elevator.location_lat},${elevator.location_lng}`;
-      Linking.openURL(url);
-    } else {
-      Alert.alert('Nema lokacije', 'Geografska lokacija nije postavljena');
-    }
-  };
 
   const handleAddService = () => {
     if (!isOnline) {

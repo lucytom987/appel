@@ -10,6 +10,9 @@ const messageSchema = new mongoose.Schema({
   isRead: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   
   kreiranDatum: { type: Date, default: Date.now }
+}, { 
+  strict: false,
+  timestamps: false 
 });
 
 messageSchema.index({ chatRoomId: 1, kreiranDatum: -1 });

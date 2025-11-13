@@ -37,11 +37,8 @@ async function resetAdminPassword() {
     } else {
       console.log('📝 Admin korisnik pronađen - resetiram lozinku');
       
-      // Hash nove lozinke
-      const hashedPassword = await bcrypt.hash('admin123', 10);
-      
-      // Updateaj lozinku
-      admin.lozinka = hashedPassword;
+      // Postavi novu lozinku - pre('save') hook će je automatski hash-irati
+      admin.lozinka = 'admin123'; // NE hash-iraj ručno!
       admin.aktivan = true;
       await admin.save();
       

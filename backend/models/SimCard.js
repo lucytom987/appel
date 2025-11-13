@@ -12,6 +12,9 @@ const simCardSchema = new mongoose.Schema({
   
   kreiranDatum: { type: Date, default: Date.now },
   azuriranDatum: { type: Date, default: Date.now }
+}, { 
+  strict: false,
+  timestamps: false 
 });
 
 simCardSchema.index({ datumIsteka: 1 });

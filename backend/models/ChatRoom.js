@@ -14,6 +14,9 @@ const chatRoomSchema = new mongoose.Schema({
   
   kreiranDatum: { type: Date, default: Date.now },
   azuriranDatum: { type: Date, default: Date.now }
+}, { 
+  strict: false,
+  timestamps: false 
 });
 
 chatRoomSchema.index({ tip: 1 });

@@ -156,18 +156,15 @@ export default function EditElevatorScreen({ navigation, route }) {
       return;
     }
 
-    if (!online) {
-      Alert.alert('Offline', 'Za brisanje dizala morate biti online');
-      return;
-    }
-
     setDeleting(true);
 
     try {
-      // Obriši s backenda
-      await elevatorsAPI.delete(elevator._id);
+      // Ako je online - obriši s backenda prvo
+      if (online) {
+        await elevatorsAPI.delete(elevator._id);
+      }
 
-      // Obriši iz lokalne baze
+      // Obriši iz lokalne baze (uvijek, offline ili online)
       elevatorDB.delete(elevator._id);
 
       Alert.alert('Uspjeh', 'Dizalo obrisano', [
@@ -181,7 +178,27 @@ export default function EditElevatorScreen({ navigation, route }) {
 
     } catch (error) {
       console.error('Greška pri brisanju dizala:', error);
-      Alert.alert('Greška', error.response?.data?.message || 'Nije moguće obrisati dizalo');
+      
+      // Ako je greška s backenda - obriši lokalno i nastavи
+      if (online) {
+        // Ako je online i brisanje s backenda failalo - prikazi grešku
+        Alert.alert('Greška', error.response?.data?.message || 'Nije moguće obrisati dizalo s backenda');
+      } else {
+        // Ako je offline - obriši lokalno kako je planirano
+        try {
+          elevatorDB.delete(elevator._id);
+          Alert.alert('Uspjeh', 'Dizalo obrisano lokalno (sync će se obaviti kada budete online)', [
+            { 
+              text: 'OK', 
+              onPress: () => {
+                navigation.navigate('Elevators');
+              }
+            }
+          ]);
+        } catch (localError) {
+          Alert.alert('Greška', 'Nije moguće obrisati dizalo');
+        }
+      }
     } finally {
       setDeleting(false);
     }

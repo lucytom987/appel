@@ -77,8 +77,41 @@ export const AuthProvider = ({ children }) => {
     try {
       setLoading(true);
       console.log('🔑 Pokušavam login...', email);
-      console.log('🌐 API URL:', 'https://appel-backend.onrender.com/api');
       
+      // Offline login podršku - dummy korisnik za testiranje
+      const offlineAdminUser = {
+        _id: 'offline_admin',
+        email: 'admin@appel.com',
+        ime: 'Administrator',
+        prezime: 'Aplikacije',
+        uloga: 'admin',
+        aktivan: true,
+        telefon: '+385 1 0000 0000'
+      };
+
+      // Ako je korisnik koji se logira admin demo korisnik - dozvoli offline
+      if (email === 'admin@appel.com' && lozinka === 'admin123') {
+        console.log('⚠️ Offline login - admin demo korisnik');
+        
+        // Spremi token i user podatke (offline token)
+        await SecureStore.setItemAsync('userToken', 'offline_token_' + Date.now());
+        await SecureStore.setItemAsync('userData', JSON.stringify(offlineAdminUser));
+        
+        setUser(offlineAdminUser);
+        setLoading(false);
+        
+        return { success: true };
+      }
+
+      // Pokušaj online login
+      if (!isOnline) {
+        console.log('⚠️ Nema interneta i nije demo korisnik - login nije moguć');
+        return {
+          success: false,
+          message: 'Bez interneta možete se prijaviti kao admin@appel.com (lozinka: admin123)'
+        };
+      }
+
       const response = await authAPI.login(email, lozinka);
       console.log('✅ Login response:', response.data);
       

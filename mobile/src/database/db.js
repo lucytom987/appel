@@ -4,7 +4,7 @@ import * as SQLite from 'expo-sqlite';
 const db = SQLite.openDatabaseSync('appel.db');
 
 // Database version
-const DB_VERSION = 4; // Povećano - forsira brisanje sve stare baze
+const DB_VERSION = 5; // Povećano PONOVNO - mora biti veće od onoga što je user imao
 
 // Provjeri verziju baze i migriraj ako je potrebno
 const checkAndMigrate = () => {
@@ -19,33 +19,44 @@ const checkAndMigrate = () => {
     const versionRow = db.getFirstSync('SELECT version FROM db_version');
     const currentVersion = versionRow?.version || 0;
 
+    console.log(`📊 Trenutna verzija baze: ${currentVersion}, Očekivana: ${DB_VERSION}`);
+
     if (currentVersion < DB_VERSION) {
       console.log(`🔄 Migriram bazu sa verzije ${currentVersion} na ${DB_VERSION}`);
       
       // Za bilo koju staru verziju - obriši sve i kreiraj novo
       console.log('🔄 Brisem sve stare tablice...');
       try {
-        db.execSync(`
-          DROP TABLE IF EXISTS elevators;
-          DROP TABLE IF EXISTS services;
-          DROP TABLE IF EXISTS repairs;
-          DROP TABLE IF EXISTS chatrooms;
-          DROP TABLE IF EXISTS messages;
-          DROP TABLE IF EXISTS simcards;
-          DROP TABLE IF EXISTS users;
-          DROP TABLE IF EXISTS sync_queue;
-        `);
+        // Prvo obriši sve tablice osim db_version
+        const tables = [
+          'elevators', 'services', 'repairs', 'chatrooms', 'messages', 
+          'simcards', 'users', 'sync_queue', 'repairs_old', 'services_old'
+        ];
+        
+        tables.forEach(table => {
+          try {
+            db.execSync(`DROP TABLE IF EXISTS ${table};`);
+            console.log(`  ✅ Obrisana tablica: ${table}`);
+          } catch (e) {
+            console.log(`  ⚠️  Tablica ${table} nije postojala`);
+          }
+        });
+        
         console.log('✅ Sve stare tablice obrisane - počinjemo od čista!');
       } catch (e) {
-        console.log('⚠️ Neke tablice nisu postojale (OK za prvu instalaciju)');
+        console.error('❌ Greška pri brisanju tablica:', e);
       }
 
       // Ažuriraj verziju
-      db.execSync(`
-        DELETE FROM db_version;
-        INSERT INTO db_version (version) VALUES (${DB_VERSION});
-      `);
-      console.log(`✅ Baza migrirana na verziju ${DB_VERSION}`);
+      try {
+        db.execSync(`DELETE FROM db_version;`);
+        db.execSync(`INSERT INTO db_version (version) VALUES (${DB_VERSION});`);
+        console.log(`✅ db_version ažurirana na ${DB_VERSION}`);
+      } catch (e) {
+        console.error('❌ Greška pri ažuriranju verzije:', e);
+      }
+    } else {
+      console.log(`✅ Baza je već na verziji ${DB_VERSION}`);
     }
   } catch (error) {
     console.error('❌ Greška pri migraciji baze:', error);

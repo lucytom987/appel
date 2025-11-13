@@ -38,7 +38,11 @@ export default function HomeScreen({ navigation }) {
       // Servisi ovaj mjesec
       const now = new Date();
       const thisMonth = services.filter(s => {
-        const date = new Date(s.datum);
+        // ✅ FIX: Pokušaj oboje - novi 'datum' i stari 'serviceDate' ako migration nije završena
+        const dateStr = s.datum || s.serviceDate;
+        if (!dateStr) return false;
+        
+        const date = new Date(dateStr);
         return date.getMonth() === now.getMonth() && 
                date.getFullYear() === now.getFullYear();
       });

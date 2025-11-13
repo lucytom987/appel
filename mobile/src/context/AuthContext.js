@@ -1,7 +1,7 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import { authAPI } from '../services/api';
-import { initDatabase, elevatorDB, serviceDB, repairDB } from '../database/db';
+import { initDatabase, elevatorDB, serviceDB, repairDB, resetDatabase } from '../database/db';
 import { seedDummyData } from '../utils/dummyData';
 import { 
   syncAll, 
@@ -40,13 +40,6 @@ export const AuthProvider = ({ children }) => {
       console.log('🔄 Inicijaliziram bazu...');
       initDatabase();
       
-      // 2. Dodaj dummy podatke za testiranje
-      const elevatorCount = elevatorDB.getAll().length;
-      if (elevatorCount === 0) {
-        console.log('📝 Dodajem dummy podatke...');
-        seedDummyData(elevatorDB, serviceDB, repairDB);
-      }
-
       // 3. Provjeri online status
       const online = await checkOnlineStatus();
       setIsOnline(online);
@@ -58,11 +51,18 @@ export const AuthProvider = ({ children }) => {
       if (token && userData) {
         setUser(JSON.parse(userData));
         
-        // Ako si online I imaš token, pokreni sync u pozadini
+        // Ako si online I imaš token, pokreni sync odmah
         if (online) {
-          console.log('🔄 Auto-login - pokrećem sync...');
-          syncAll().catch(err => console.log('⚠️ Background sync error:', err));
+          console.log('🔄 Auto-login - pokrećem inicijalni sync...');
+          await syncAll().catch(err => console.log('⚠️ Sync error:', err));
           startAutoSync();
+        }
+      } else {
+        // Ako nemaš token, dodaj dummy podatke za testiranje
+        const elevatorCount = elevatorDB.getAll().length;
+        if (elevatorCount === 0) {
+          console.log('📝 Dodajem dummy podatke...');
+          seedDummyData(elevatorDB, serviceDB, repairDB);
         }
       }
       
@@ -118,6 +118,9 @@ export const AuthProvider = ({ children }) => {
       // Obriši token i user podatke
       await SecureStore.deleteItemAsync('userToken');
       await SecureStore.deleteItemAsync('userData');
+      
+      // Obriši sve lokalne podatke iz baze
+      resetDatabase();
       
       setUser(null);
     } catch (error) {

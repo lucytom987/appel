@@ -38,30 +38,24 @@ export default function HomeScreen({ navigation }) {
       // Servisi ovaj mjesec
       const now = new Date();
       const thisMonth = services.filter(s => {
-        const date = new Date(s.serviceDate);
+        const date = new Date(s.datum);
         return date.getMonth() === now.getMonth() && 
                date.getFullYear() === now.getFullYear();
       });
 
-      // Popravci pending
+      // Popravci pending ili u tijeku
       const pending = repairs.filter(r => 
-        r.status === 'pending' || r.status === 'in_progress'
-      );
-
-      // Hitni popravci
-      const urgent = repairs.filter(r => 
-        r.priority === 'urgent' && r.status !== 'completed'
+        r.status === 'čekanje' || r.status === 'u tijeku'
       );
 
       setStats({
         totalElevators: elevators.length,
         servicesThisMonth: thisMonth.length,
         repairsPending: pending.length,
-        repairsUrgent: urgent.length,
+        repairsUrgent: 0, // U novoj shemi nema priority polja
       });
     } catch (error) {
       console.error('Greška pri učitavanju statistike:', error);
-      // Postavi default stats ako nešto pukne
       setStats({
         totalElevators: 0,
         servicesThisMonth: 0,
@@ -151,33 +145,6 @@ export default function HomeScreen({ navigation }) {
           >
             <Ionicons name="list" size={24} color="#2563eb" />
             <Text style={styles.actionText}>Sva dizala</Text>
-            <Ionicons name="chevron-forward" size={20} color="#999" />
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={styles.actionButton}
-            onPress={() => navigation.navigate('Map')}
-          >
-            <Ionicons name="map" size={24} color="#10b981" />
-            <Text style={styles.actionText}>Mapa dizala</Text>
-            <Ionicons name="chevron-forward" size={20} color="#999" />
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={styles.actionButton}
-            onPress={() => navigation.navigate('Chat')}
-          >
-            <Ionicons name="chatbubbles" size={24} color="#f59e0b" />
-            <Text style={styles.actionText}>Chat</Text>
-            <Ionicons name="chevron-forward" size={20} color="#999" />
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={styles.actionButton}
-            onPress={() => navigation.navigate('Statistics')}
-          >
-            <Ionicons name="stats-chart" size={24} color="#8b5cf6" />
-            <Text style={styles.actionText}>Statistika</Text>
             <Ionicons name="chevron-forward" size={20} color="#999" />
           </TouchableOpacity>
         </View>

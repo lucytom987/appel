@@ -36,12 +36,14 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'active':
+      case 'aktivan':
         return '#10b981';
-      case 'out_of_order':
+      case 'u kvaru':
         return '#ef4444';
-      case 'maintenance':
+      case 'u servisu':
         return '#f59e0b';
+      case 'neaktivan':
+        return '#6b7280';
       default:
         return '#6b7280';
     }
@@ -49,12 +51,14 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
 
   const getStatusLabel = (status) => {
     switch (status) {
-      case 'active':
+      case 'aktivan':
         return 'Aktivno';
-      case 'out_of_order':
-        return 'Neispravno';
-      case 'maintenance':
-        return 'Održavanje';
+      case 'u kvaru':
+        return 'U kvaru';
+      case 'u servisu':
+        return 'U servisu';
+      case 'neaktivan':
+        return 'Neaktivno';
       default:
         return status;
     }
@@ -96,51 +100,84 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
   const renderInfoTab = () => (
     <View style={styles.tabContent}>
       <View style={styles.infoSection}>
-        <Text style={styles.sectionTitle}>Osnovne informacije</Text>
+        <Text style={styles.sectionTitle}>Osnovno</Text>
         
-        <InfoRow icon="location" label="Adresa" value={elevator.address} />
-        <InfoRow icon="qr-code" label="Kod zgrade" value={elevator.buildingCode} />
-        <InfoRow icon="business" label="Proizvođač" value={elevator.manufacturer} />
-        <InfoRow icon="settings" label="Model" value={elevator.model} />
-        <InfoRow icon="barcode" label="Serijski broj" value={elevator.serialNumber} />
+        <InfoRow icon="document-text" label="Broj ugovora" value={elevator.brojUgovora} />
+        <InfoRow icon="briefcase" label="Naziv stranke" value={elevator.nazivStranke} />
+        <InfoRow icon="location" label="Ulica" value={elevator.ulica} />
+        <InfoRow icon="business-outline" label="Mjesto" value={elevator.mjesto} />
+        <InfoRow icon="barcode" label="Broj dizala" value={elevator.brojDizala} />
       </View>
 
       <View style={styles.infoSection}>
-        <Text style={styles.sectionTitle}>Datumi</Text>
+        <Text style={styles.sectionTitle}>Kontakt osoba</Text>
         
-        {elevator.installationDate && (
-          <InfoRow
-            icon="calendar"
-            label="Instalacija"
-            value={new Date(elevator.installationDate).toLocaleDateString('hr-HR')}
-          />
+        {elevator.kontaktOsoba?.imePrezime && (
+          <InfoRow icon="person" label="Ime i prezime" value={elevator.kontaktOsoba.imePrezime} />
         )}
-        {elevator.lastServiceDate && (
-          <InfoRow
-            icon="checkmark-circle"
-            label="Zadnji servis"
-            value={new Date(elevator.lastServiceDate).toLocaleDateString('hr-HR')}
-          />
+        {elevator.kontaktOsoba?.mobitel && (
+          <InfoRow icon="call" label="Mobitel" value={elevator.kontaktOsoba.mobitel} />
+        )}
+        {elevator.kontaktOsoba?.email && (
+          <InfoRow icon="mail" label="E-mail" value={elevator.kontaktOsoba.email} />
+        )}
+        {elevator.kontaktOsoba?.ulaznaKoda && (
+          <InfoRow icon="key" label="Ulazna \u0161ifra" value={elevator.kontaktOsoba.ulaznaKoda} />
         )}
       </View>
 
-      {elevator.notes && (
+      <View style={styles.infoSection}>
+        <Text style={styles.sectionTitle}>Servisiranje</Text>
+        
+        {elevator.zadnjiServis && (
+          <InfoRow
+            icon="checkmark-circle"
+            label="Zadnji servis"
+            value={new Date(elevator.zadnjiServis).toLocaleDateString('hr-HR')}
+          />
+        )}
+        {elevator.sljedeciServis && (
+          <InfoRow
+            icon="time-outline"
+            label="Sljede\u0107i servis"
+            value={new Date(elevator.sljedeciServis).toLocaleDateString('hr-HR')}
+          />
+        )}
+        {elevator.intervalServisa && (
+          <InfoRow icon="repeat-outline" label="Interval servisa" value={`${elevator.intervalServisa} ${elevator.intervalServisa === 1 ? 'mjesec' : 'mjeseci'}`} />
+        )}
+      </View>
+
+      {elevator.napomene && (
         <View style={styles.infoSection}>
           <Text style={styles.sectionTitle}>Napomene</Text>
-          <Text style={styles.notesText}>{elevator.notes}</Text>
+          <Text style={styles.notesText}>{elevator.napomene}</Text>
         </View>
       )}
 
       <View style={styles.actionButtons}>
-        <TouchableOpacity style={styles.actionButton} onPress={handleCallPhone}>
-          <Ionicons name="call" size={20} color="#fff" />
-          <Text style={styles.actionButtonText}>Pozovi</Text>
-        </TouchableOpacity>
+        {elevator.kontaktOsoba?.mobitel && (
+          <TouchableOpacity 
+            style={styles.actionButton} 
+            onPress={() => Linking.openURL(`tel:${elevator.kontaktOsoba.mobitel}`)}
+          >
+            <Ionicons name="call" size={20} color="#fff" />
+            <Text style={styles.actionButtonText}>Pozovi kontakt osobu</Text>
+          </TouchableOpacity>
+        )}
 
-        <TouchableOpacity style={styles.actionButton} onPress={handleOpenMap}>
-          <Ionicons name="map" size={20} color="#fff" />
-          <Text style={styles.actionButtonText}>Mapa</Text>
-        </TouchableOpacity>
+        {elevator.koordinate?.latitude && elevator.koordinate?.longitude && (
+          <TouchableOpacity 
+            style={styles.actionButton}
+            onPress={() => {
+              const url = `https://maps.google.com/?q=${elevator.koordinate.latitude},${elevator.koordinate.longitude}`;
+              Linking.openURL(url);
+            }}
+          >
+            <Ionicons name="map" size={20} color="#fff" />
+            <Text style={styles.actionButtonText}>Otvori u Mapama</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -224,11 +261,19 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
           <Ionicons name="arrow-back" size={24} color="#111827" />
         </TouchableOpacity>
         <View style={styles.headerInfo}>
-          <Text style={styles.headerTitle}>{elevator.address}</Text>
-          <Text style={styles.headerSubtitle}>{elevator.buildingCode}</Text>
+          <Text style={styles.headerTitle}>{elevator.nazivStranke}</Text>
+          <Text style={styles.headerSubtitle}>{elevator.ulica}, {elevator.mjesto}</Text>
         </View>
-        <View style={[styles.headerStatus, { backgroundColor: getStatusColor(elevator.status) }]}>
-          <Text style={styles.headerStatusText}>{getStatusLabel(elevator.status)}</Text>
+        <View style={styles.headerRight}>
+          <TouchableOpacity 
+            onPress={() => navigation.navigate('EditElevator', { elevator })}
+            style={styles.editButton}
+          >
+            <Ionicons name="create-outline" size={24} color="#2563eb" />
+          </TouchableOpacity>
+          <View style={[styles.headerStatus, { backgroundColor: getStatusColor(elevator.status) }]}>
+            <Text style={styles.headerStatusText}>{getStatusLabel(elevator.status)}</Text>
+          </View>
         </View>
       </View>
 
@@ -323,6 +368,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6b7280',
     marginTop: 2,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  editButton: {
+    padding: 4,
   },
   headerStatus: {
     paddingHorizontal: 12,

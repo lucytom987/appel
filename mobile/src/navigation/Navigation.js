@@ -9,6 +9,12 @@ import LoginScreen from '../screens/LoginScreen';
 import HomeScreen from '../screens/HomeScreen';
 import ElevatorsListScreen from '../screens/ElevatorsListScreen';
 import ElevatorDetailsScreen from '../screens/ElevatorDetailsScreen';
+import AddElevatorScreen from '../screens/AddElevatorScreen';
+import EditElevatorScreen from '../screens/EditElevatorScreen';
+import ServicesListScreen from '../screens/ServicesListScreen';
+import AddServiceScreen from '../screens/AddServiceScreen';
+import RepairsListScreen from '../screens/RepairsListScreen';
+import AddRepairScreen from '../screens/AddRepairScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -32,6 +38,12 @@ export default function Navigation() {
             <Stack.Screen name="Home" component={HomeScreen} />
             <Stack.Screen name="Elevators" component={ElevatorsListScreen} />
             <Stack.Screen name="ElevatorDetails" component={ElevatorDetailsScreen} />
+            <Stack.Screen name="AddElevator" component={AddElevatorScreen} />
+            <Stack.Screen name="EditElevator" component={EditElevatorScreen} />
+            <Stack.Screen name="Services" component={ServicesListScreen} />
+            <Stack.Screen name="AddService" component={AddServiceScreen} />
+            <Stack.Screen name="Repairs" component={RepairsListScreen} />
+            <Stack.Screen name="AddRepair" component={AddRepairScreen} />
           </>
         ) : (
           <Stack.Screen name="Login" component={LoginScreen} />

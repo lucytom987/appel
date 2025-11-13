@@ -51,9 +51,11 @@ export default function ElevatorsListScreen({ navigation }) {
     // Filter po search query
     if (searchQuery) {
       filtered = filtered.filter(e =>
-        e.address?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        e.buildingCode?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        e.manufacturer?.toLowerCase().includes(searchQuery.toLowerCase())
+        e.nazivStranke?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        e.ulica?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        e.mjesto?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        e.brojUgovora?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        e.brojDizala?.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
 
@@ -105,8 +107,8 @@ export default function ElevatorsListScreen({ navigation }) {
     >
       <View style={styles.elevatorHeader}>
         <View style={styles.elevatorInfo}>
-          <Text style={styles.address}>{item.address}</Text>
-          <Text style={styles.buildingCode}>{item.buildingCode}</Text>
+          <Text style={styles.address}>{item.nazivStranke}</Text>
+          <Text style={styles.buildingCode}>{item.ulica}, {item.mjesto}</Text>
         </View>
         <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
           <Text style={styles.statusText}>{getStatusLabel(item.status)}</Text>
@@ -115,17 +117,13 @@ export default function ElevatorsListScreen({ navigation }) {
 
       <View style={styles.elevatorDetails}>
         <View style={styles.detailRow}>
-          <Ionicons name="business-outline" size={16} color="#6b7280" />
-          <Text style={styles.detailText}>{item.manufacturer} {item.model}</Text>
+          <Ionicons name="document-text-outline" size={16} color="#6b7280" />
+          <Text style={styles.detailText}>Ugovor: {item.brojUgovora}</Text>
         </View>
-        {item.lastServiceDate && (
-          <View style={styles.detailRow}>
-            <Ionicons name="calendar-outline" size={16} color="#6b7280" />
-            <Text style={styles.detailText}>
-              Zadnji servis: {new Date(item.lastServiceDate).toLocaleDateString('hr-HR')}
-            </Text>
-          </View>
-        )}
+        <View style={styles.detailRow}>
+          <Ionicons name="barcode-outline" size={16} color="#6b7280" />
+          <Text style={styles.detailText}>Dizalo: {item.brojDizala}</Text>
+        </View>
       </View>
 
       <Ionicons name="chevron-forward" size={20} color="#d1d5db" style={styles.chevron} />
@@ -148,7 +146,7 @@ export default function ElevatorsListScreen({ navigation }) {
         <Ionicons name="search" size={20} color="#9ca3af" style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Pretraži po adresi, kodu..."
+          placeholder="Pretraži po nazivu, adresi, ugovoru..."
           value={searchQuery}
           onChangeText={setSearchQuery}
           placeholderTextColor="#9ca3af"
@@ -214,6 +212,16 @@ export default function ElevatorsListScreen({ navigation }) {
           </View>
         }
       />
+
+      {/* FAB - Dodaj dizalo */}
+      {isOnline && (
+        <TouchableOpacity
+          style={styles.fab}
+          onPress={() => navigation.navigate('AddElevator')}
+        >
+          <Ionicons name="add" size={28} color="#fff" />
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -367,5 +375,21 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontSize: 16,
     color: '#9ca3af',
+  },
+  fab: {
+    position: 'absolute',
+    right: 20,
+    bottom: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#2563eb',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 8,
   },
 });

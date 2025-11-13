@@ -2,7 +2,7 @@ import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 
 // Backend URL - produkcija na Render
-const API_URL = 'https://appel-backend.onrender.com/api';
+const API_URL = 'https://appel-q97a.onrender.com/api';
 
 // Axios instance sa default konfiguracijom
 const api = axios.create({

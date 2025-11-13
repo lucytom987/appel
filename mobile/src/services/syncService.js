@@ -40,12 +40,24 @@ export const syncElevatorsFromServer = async () => {
 
     console.log('🔄 Syncing elevators from server...');
     const response = await elevatorsAPI.getAll();
-    const elevators = response.data.data;
+    const serverElevators = response.data.data;
+    const serverIds = serverElevators.map(e => e._id);
 
-    // Bulk insert u lokalnu bazu
-    elevatorDB.bulkInsert(elevators);
+    // Dohvati lokalne elevatore
+    const localElevators = elevatorDB.getAll();
+    const localIds = localElevators.map(e => e.id);
+
+    // Obriši lokalne koji više ne postoje na serveru
+    const deletedIds = localIds.filter(id => !serverIds.includes(id));
+    for (const id of deletedIds) {
+      elevatorDB.delete(id);
+      console.log(`🗑️ Obrisano lokalno dizalo ${id} (uklanjeno sa servera)`);
+    }
+
+    // Bulk insert nove/ažurirane elevatore
+    elevatorDB.bulkInsert(serverElevators);
     
-    console.log(`✅ Synced ${elevators.length} elevators`);
+    console.log(`✅ Synced ${serverElevators.length} elevators (obrisano ${deletedIds.length})`);
     return true;
   } catch (error) {
     // Ne loguj kao error ako je 401 (nije logiran), 502, 503, network error
@@ -60,7 +72,48 @@ export const syncElevatorsFromServer = async () => {
   }
 };
 
-// Sync unsynced servisi na server
+// Sync svi servisi sa servera u lokalnu bazu
+export const syncServicesFromServer = async () => {
+  try {
+    if (!isOnline) {
+      console.log('⚠️ Offline - preskačem sync services');
+      return false;
+    }
+
+    console.log('🔄 Syncing services from server...');
+    const response = await servicesAPI.getAll();
+    const serverServices = response.data.data || [];
+    const serverIds = serverServices.map(s => s._id);
+
+    // Dohvati lokalne servise
+    const localServices = serviceDB.getAll();
+    const localIds = localServices.map(s => s.id);
+
+    // Obriši lokalne koji više ne postoje na serveru (osim dummy-ja)
+    const deletedIds = localIds.filter(id => !serverIds.includes(id) && !id.startsWith('dummy_'));
+    for (const id of deletedIds) {
+      serviceDB.delete(id);
+      console.log(`🗑️ Obrisana lokalna usluga ${id} (uklanjene sa servera)`);
+    }
+
+    // Bulk insert nove/ažurirane servise
+    serviceDB.bulkInsert(serverServices);
+    
+    console.log(`✅ Synced ${serverServices.length} services (obrisano ${deletedIds.length})`);
+    return true;
+  } catch (error) {
+    if (error.response?.status === 401) {
+      console.log('⚠️ Nije autentificiran - sync će se izvršiti nakon logina');
+    } else if (error.response?.status === 502 || error.response?.status === 503 || !error.response) {
+      console.log('⚠️ Backend server trenutno nije dostupan - nastavaljam offline');
+    } else {
+      console.error('❌ Greška pri sync services:', error.message);
+    }
+    return false;
+  }
+};
+
+// Sync unsynced servici na server
 export const syncServicesToServer = async () => {
   try {
     if (!isOnline) {
@@ -139,6 +192,47 @@ export const syncServicesToServer = async () => {
       console.log('⚠️ Nije autentificiran - sync services preskočen');
     } else {
       console.error('❌ Greška pri sync services:', error.message);
+    }
+    return false;
+  }
+};
+
+// Sync unsynced repairs sa servera u lokalnu bazu
+export const syncRepairsFromServer = async () => {
+  try {
+    if (!isOnline) {
+      console.log('⚠️ Offline - preskačem sync repairs');
+      return false;
+    }
+
+    console.log('🔄 Syncing repairs from server...');
+    const response = await repairsAPI.getAll();
+    const serverRepairs = response.data.data || [];
+    const serverIds = serverRepairs.map(r => r._id);
+
+    // Dohvati lokalne popravke
+    const localRepairs = repairDB.getAll();
+    const localIds = localRepairs.map(r => r.id);
+
+    // Obriši lokalne koji više ne postoje na serveru (osim dummy-ja)
+    const deletedIds = localIds.filter(id => !serverIds.includes(id) && !id.startsWith('dummy_'));
+    for (const id of deletedIds) {
+      repairDB.delete(id);
+      console.log(`🗑️ Obrisana lokalna popravka ${id} (uklanjene sa servera)`);
+    }
+
+    // Bulk insert nove/ažurirane popravke
+    repairDB.bulkInsert(serverRepairs);
+    
+    console.log(`✅ Synced ${serverRepairs.length} repairs (obrisano ${deletedIds.length})`);
+    return true;
+  } catch (error) {
+    if (error.response?.status === 401) {
+      console.log('⚠️ Nije autentificiran - sync će se izvršiti nakon logina');
+    } else if (error.response?.status === 502 || error.response?.status === 503 || !error.response) {
+      console.log('⚠️ Backend server trenutno nije dostupan - nastavaljam offline');
+    } else {
+      console.error('❌ Greška pri sync repairs:', error.message);
     }
     return false;
   }
@@ -233,13 +327,19 @@ export const syncAll = async () => {
   console.log('🔄 Starting full sync...');
   
   try {
-    // 1. Sync elevatori sa servera (GET)
+    // 1. Sync elevatori sa servera (GET) - uključujući brisanje
     await syncElevatorsFromServer();
     
-    // 2. Sync servisi na server (POST/PUT)
+    // 2. Sync servici sa servera (GET) - uključujući brisanje
+    await syncServicesFromServer();
+    
+    // 3. Sync popravci sa servera (GET) - uključujući brisanje
+    await syncRepairsFromServer();
+    
+    // 4. Sync unsynced servici na server (POST/PUT)
     await syncServicesToServer();
     
-    // 3. Sync popravci na server (POST/PUT)
+    // 5. Sync unsynced popravci na server (POST/PUT)
     await syncRepairsToServer();
     
     console.log('✅ Full sync completed');

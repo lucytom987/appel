@@ -3,9 +3,52 @@ import * as SQLite from 'expo-sqlite';
 // Otvori ili kreiraj bazu
 const db = SQLite.openDatabaseSync('appel.db');
 
+// Database version
+const DB_VERSION = 3; // Povećano zbog promjene sheme dizala (split adresa, kontaktOsoba)
+
+// Provjeri verziju baze i migriraj ako je potrebno
+const checkAndMigrate = () => {
+  try {
+    // Kreiraj version tablicu ako ne postoji
+    db.execSync(`
+      CREATE TABLE IF NOT EXISTS db_version (
+        version INTEGER PRIMARY KEY
+      );
+    `);
+
+    const versionRow = db.getFirstSync('SELECT version FROM db_version');
+    const currentVersion = versionRow?.version || 0;
+
+    if (currentVersion < DB_VERSION) {
+      console.log(`🔄 Migriram bazu sa verzije ${currentVersion} na ${DB_VERSION}`);
+      
+      // Migracija sa v1/v2 na v3 - nova shema elevators tablice
+      if (currentVersion < 3) {
+        console.log('🔄 Migriram elevators tablicu na novu shemu...');
+        db.execSync(`
+          DROP TABLE IF EXISTS elevators;
+        `);
+        console.log('✅ Stara elevators tablica obrisana');
+      }
+
+      // Ažuriraj verziju
+      db.execSync(`
+        DELETE FROM db_version;
+        INSERT INTO db_version (version) VALUES (${DB_VERSION});
+      `);
+      console.log(`✅ Baza migrirana na verziju ${DB_VERSION}`);
+    }
+  } catch (error) {
+    console.error('❌ Greška pri migraciji baze:', error);
+  }
+};
+
 // Inicijaliziraj bazu - kreiraj tablice
 export const initDatabase = () => {
   try {
+    // Prvo provjeri i migriraj ako je potrebno
+    checkAndMigrate();
+
     db.execSync(`
       PRAGMA journal_mode = WAL;
       
@@ -25,18 +68,19 @@ export const initDatabase = () => {
       -- Dizala
       CREATE TABLE IF NOT EXISTS elevators (
         id TEXT PRIMARY KEY,
-        address TEXT,
-        buildingCode TEXT,
-        location_lat REAL,
-        location_lng REAL,
-        manufacturer TEXT,
-        model TEXT,
-        serialNumber TEXT,
-        installationDate TEXT,
-        lastServiceDate TEXT,
-        status TEXT DEFAULT 'active',
-        notes TEXT,
-        simCardId TEXT,
+        brojUgovora TEXT,
+        nazivStranke TEXT,
+        ulica TEXT,
+        mjesto TEXT,
+        brojDizala TEXT,
+        kontaktOsoba TEXT,
+        koordinate_lat REAL,
+        koordinate_lng REAL,
+        status TEXT DEFAULT 'aktivan',
+        intervalServisa INTEGER DEFAULT 1,
+        zadnjiServis TEXT,
+        sljedeciServis TEXT,
+        napomene TEXT,
         synced INTEGER DEFAULT 1,
         updated_at INTEGER
       );
@@ -45,17 +89,15 @@ export const initDatabase = () => {
       CREATE TABLE IF NOT EXISTS services (
         id TEXT PRIMARY KEY,
         elevatorId TEXT,
-        performedBy TEXT,
-        serviceDate TEXT,
-        status TEXT DEFAULT 'completed',
-        checklistUPS INTEGER DEFAULT 0,
-        checklistVoice INTEGER DEFAULT 0,
-        checklistShaft INTEGER DEFAULT 0,
-        checklistGuides INTEGER DEFAULT 0,
-        defectsFound INTEGER DEFAULT 0,
-        defectsDescription TEXT,
-        defectsPhotos TEXT,
-        notes TEXT,
+        serviserID TEXT,
+        datum TEXT,
+        checklist TEXT,
+        imaNedostataka INTEGER DEFAULT 0,
+        nedostaci TEXT,
+        napomene TEXT,
+        sljedeciServis TEXT,
+        kreiranDatum TEXT,
+        azuriranDatum TEXT,
         synced INTEGER DEFAULT 0,
         updated_at INTEGER,
         FOREIGN KEY (elevatorId) REFERENCES elevators(id)
@@ -65,18 +107,17 @@ export const initDatabase = () => {
       CREATE TABLE IF NOT EXISTS repairs (
         id TEXT PRIMARY KEY,
         elevatorId TEXT,
-        reportedBy TEXT,
-        reportedDate TEXT,
-        repairedBy TEXT,
-        repairedDate TEXT,
-        status TEXT DEFAULT 'pending',
-        priority TEXT DEFAULT 'normal',
-        faultDescription TEXT,
-        faultPhotos TEXT,
-        repairDescription TEXT,
-        workOrderSigned INTEGER DEFAULT 0,
-        repairCompleted INTEGER DEFAULT 0,
-        notes TEXT,
+        serviserID TEXT,
+        datumPrijave TEXT,
+        datumPopravka TEXT,
+        opisKvara TEXT,
+        opisPopravka TEXT,
+        status TEXT DEFAULT 'čekanje',
+        radniNalogPotpisan INTEGER DEFAULT 0,
+        popravkaUPotpunosti INTEGER DEFAULT 0,
+        napomene TEXT,
+        kreiranDatum TEXT,
+        azuriranDatum TEXT,
         synced INTEGER DEFAULT 0,
         updated_at INTEGER,
         FOREIGN KEY (elevatorId) REFERENCES elevators(id)
@@ -152,7 +193,7 @@ export const initDatabase = () => {
 // CRUD operacije za Elevators
 export const elevatorDB = {
   getAll: () => {
-    return db.getAllSync('SELECT * FROM elevators ORDER BY address');
+    return db.getAllSync('SELECT * FROM elevators ORDER BY nazivStranke');
   },
   
   getById: (id) => {
@@ -161,24 +202,25 @@ export const elevatorDB = {
   
   insert: (elevator) => {
     const result = db.runSync(
-      `INSERT INTO elevators (id, address, buildingCode, location_lat, location_lng, 
-       manufacturer, model, serialNumber, installationDate, lastServiceDate, status, 
-       notes, simCardId, synced, updated_at) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO elevators (id, brojUgovora, nazivStranke, ulica, mjesto, brojDizala, 
+       kontaktOsoba, koordinate_lat, koordinate_lng, status, 
+       intervalServisa, zadnjiServis, sljedeciServis, napomene, synced, updated_at) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         elevator.id || elevator._id,
-        elevator.address,
-        elevator.buildingCode,
-        elevator.location?.coordinates?.[1],
-        elevator.location?.coordinates?.[0],
-        elevator.manufacturer,
-        elevator.model,
-        elevator.serialNumber,
-        elevator.installationDate,
-        elevator.lastServiceDate,
-        elevator.status,
-        elevator.notes,
-        elevator.simCard?._id || elevator.simCard,
+        elevator.brojUgovora,
+        elevator.nazivStranke,
+        elevator.ulica,
+        elevator.mjesto,
+        elevator.brojDizala,
+        JSON.stringify(elevator.kontaktOsoba || {}),
+        elevator.koordinate?.latitude,
+        elevator.koordinate?.longitude,
+        elevator.status || 'aktivan',
+        elevator.intervalServisa || 1,
+        elevator.zadnjiServis,
+        elevator.sljedeciServis,
+        elevator.napomene,
         1,
         Date.now()
       ]
@@ -188,22 +230,24 @@ export const elevatorDB = {
   
   update: (id, elevator) => {
     return db.runSync(
-      `UPDATE elevators SET address=?, buildingCode=?, location_lat=?, location_lng=?, 
-       manufacturer=?, model=?, serialNumber=?, installationDate=?, lastServiceDate=?, 
-       status=?, notes=?, simCardId=?, synced=?, updated_at=? WHERE id=?`,
+      `UPDATE elevators SET brojUgovora=?, nazivStranke=?, ulica=?, mjesto=?, brojDizala=?, 
+       kontaktOsoba=?, koordinate_lat=?, koordinate_lng=?, 
+       status=?, intervalServisa=?, zadnjiServis=?, sljedeciServis=?, napomene=?, 
+       synced=?, updated_at=? WHERE id=?`,
       [
-        elevator.address,
-        elevator.buildingCode,
-        elevator.location?.coordinates?.[1],
-        elevator.location?.coordinates?.[0],
-        elevator.manufacturer,
-        elevator.model,
-        elevator.serialNumber,
-        elevator.installationDate,
-        elevator.lastServiceDate,
+        elevator.brojUgovora,
+        elevator.nazivStranke,
+        elevator.ulica,
+        elevator.mjesto,
+        elevator.brojDizala,
+        JSON.stringify(elevator.kontaktOsoba || {}),
+        elevator.koordinate?.latitude,
+        elevator.koordinate?.longitude,
         elevator.status,
-        elevator.notes,
-        elevator.simCard,
+        elevator.intervalServisa || 1,
+        elevator.zadnjiServis,
+        elevator.sljedeciServis,
+        elevator.napomene,
         0,
         Date.now(),
         id
@@ -231,9 +275,9 @@ export const elevatorDB = {
 export const serviceDB = {
   getAll: (elevatorId = null) => {
     if (elevatorId) {
-      return db.getAllSync('SELECT * FROM services WHERE elevatorId = ? ORDER BY serviceDate DESC', [elevatorId]);
+      return db.getAllSync('SELECT * FROM services WHERE elevatorId = ? ORDER BY datum DESC', [elevatorId]);
     }
-    return db.getAllSync('SELECT * FROM services ORDER BY serviceDate DESC');
+    return db.getAllSync('SELECT * FROM services ORDER BY datum DESC');
   },
   
   getById: (id) => {
@@ -241,27 +285,24 @@ export const serviceDB = {
   },
   
   insert: (service) => {
-    const id = service.id || `local_${Date.now()}`;
+    const id = service.id || service._id || `local_${Date.now()}`;
     return db.runSync(
-      `INSERT INTO services (id, elevatorId, performedBy, serviceDate, status, 
-       checklistUPS, checklistVoice, checklistShaft, checklistGuides, 
-       defectsFound, defectsDescription, defectsPhotos, notes, synced, updated_at) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO services (id, elevatorId, serviserID, datum, checklist, 
+       imaNedostataka, nedostaci, napomene, sljedeciServis, kreiranDatum, azuriranDatum, synced, updated_at) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         service.elevatorId || service.elevator,
-        service.performedBy,
-        service.serviceDate,
-        service.status || 'completed',
-        service.checklistUPS ? 1 : 0,
-        service.checklistVoice ? 1 : 0,
-        service.checklistShaft ? 1 : 0,
-        service.checklistGuides ? 1 : 0,
-        service.defectsFound ? 1 : 0,
-        service.defectsDescription,
-        JSON.stringify(service.defectsPhotos || []),
-        service.notes,
-        0,
+        service.serviserID,
+        service.datum,
+        JSON.stringify(service.checklist || []),
+        service.imaNedostataka ? 1 : 0,
+        JSON.stringify(service.nedostaci || []),
+        service.napomene,
+        service.sljedeciServis,
+        service.kreiranDatum || new Date().toISOString(),
+        service.azuriranDatum || new Date().toISOString(),
+        1,
         Date.now()
       ]
     );
@@ -269,20 +310,17 @@ export const serviceDB = {
   
   update: (id, service) => {
     return db.runSync(
-      `UPDATE services SET serviceDate=?, status=?, checklistUPS=?, checklistVoice=?, 
-       checklistShaft=?, checklistGuides=?, defectsFound=?, defectsDescription=?, 
-       defectsPhotos=?, notes=?, synced=?, updated_at=? WHERE id=?`,
+      `UPDATE services SET serviserID=?, datum=?, checklist=?, imaNedostataka=?, 
+       nedostaci=?, napomene=?, sljedeciServis=?, azuriranDatum=?, synced=?, updated_at=? WHERE id=?`,
       [
-        service.serviceDate,
-        service.status,
-        service.checklistUPS ? 1 : 0,
-        service.checklistVoice ? 1 : 0,
-        service.checklistShaft ? 1 : 0,
-        service.checklistGuides ? 1 : 0,
-        service.defectsFound ? 1 : 0,
-        service.defectsDescription,
-        JSON.stringify(service.defectsPhotos || []),
-        service.notes,
+        service.serviserID,
+        service.datum,
+        JSON.stringify(service.checklist || []),
+        service.imaNedostataka ? 1 : 0,
+        JSON.stringify(service.nedostaci || []),
+        service.napomene,
+        service.sljedeciServis,
+        service.azuriranDatum || new Date().toISOString(),
         0,
         Date.now(),
         id
@@ -298,6 +336,16 @@ export const serviceDB = {
     return db.getAllSync('SELECT * FROM services WHERE synced = 0');
   },
   
+  bulkInsert: (services) => {
+    services.forEach(service => {
+      try {
+        serviceDB.insert(service);
+      } catch (error) {
+        console.log(`Service ${service._id} već postoji`);
+      }
+    });
+  },
+  
   markSynced: (id, serverId) => {
     return db.runSync('UPDATE services SET synced = 1, id = ? WHERE id = ?', [serverId, id]);
   },
@@ -307,9 +355,9 @@ export const serviceDB = {
 export const repairDB = {
   getAll: (elevatorId = null) => {
     if (elevatorId) {
-      return db.getAllSync('SELECT * FROM repairs WHERE elevatorId = ? ORDER BY reportedDate DESC', [elevatorId]);
+      return db.getAllSync('SELECT * FROM repairs WHERE elevatorId = ? ORDER BY datumPrijave DESC', [elevatorId]);
     }
-    return db.getAllSync('SELECT * FROM repairs ORDER BY reportedDate DESC');
+    return db.getAllSync('SELECT * FROM repairs ORDER BY datumPrijave DESC');
   },
   
   getById: (id) => {
@@ -317,28 +365,27 @@ export const repairDB = {
   },
   
   insert: (repair) => {
-    const id = repair.id || `local_${Date.now()}`;
+    const id = repair.id || repair._id || `local_${Date.now()}`;
     return db.runSync(
-      `INSERT INTO repairs (id, elevatorId, reportedBy, reportedDate, repairedBy, 
-       repairedDate, status, priority, faultDescription, faultPhotos, 
-       repairDescription, workOrderSigned, repairCompleted, notes, synced, updated_at) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO repairs (id, elevatorId, serviserID, datumPrijave, datumPopravka, 
+       opisKvara, opisPopravka, status, radniNalogPotpisan, popravkaUPotpunosti, 
+       napomene, kreiranDatum, azuriranDatum, synced, updated_at) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         repair.elevatorId || repair.elevator,
-        repair.reportedBy,
-        repair.reportedDate,
-        repair.repairedBy,
-        repair.repairedDate,
-        repair.status || 'pending',
-        repair.priority || 'normal',
-        repair.faultDescription,
-        JSON.stringify(repair.faultPhotos || []),
-        repair.repairDescription,
-        repair.workOrderSigned ? 1 : 0,
-        repair.repairCompleted ? 1 : 0,
-        repair.notes,
-        0,
+        repair.serviserID,
+        repair.datumPrijave,
+        repair.datumPopravka,
+        repair.opisKvara,
+        repair.opisPopravka,
+        repair.status || 'čekanje',
+        repair.radniNalogPotpisan ? 1 : 0,
+        repair.popravkaUPotpunosti ? 1 : 0,
+        repair.napomene,
+        repair.kreiranDatum || new Date().toISOString(),
+        repair.azuriranDatum || new Date().toISOString(),
+        1,
         Date.now()
       ]
     );
@@ -346,16 +393,20 @@ export const repairDB = {
   
   update: (id, repair) => {
     return db.runSync(
-      `UPDATE repairs SET status=?, repairedBy=?, repairedDate=?, repairDescription=?, 
-       workOrderSigned=?, repairCompleted=?, notes=?, synced=?, updated_at=? WHERE id=?`,
+      `UPDATE repairs SET serviserID=?, datumPrijave=?, datumPopravka=?, opisKvara=?, 
+       opisPopravka=?, status=?, radniNalogPotpisan=?, popravkaUPotpunosti=?, 
+       napomene=?, azuriranDatum=?, synced=?, updated_at=? WHERE id=?`,
       [
+        repair.serviserID,
+        repair.datumPrijave,
+        repair.datumPopravka,
+        repair.opisKvara,
+        repair.opisPopravka,
         repair.status,
-        repair.repairedBy,
-        repair.repairedDate,
-        repair.repairDescription,
-        repair.workOrderSigned ? 1 : 0,
-        repair.repairCompleted ? 1 : 0,
-        repair.notes,
+        repair.radniNalogPotpisan ? 1 : 0,
+        repair.popravkaUPotpunosti ? 1 : 0,
+        repair.napomene,
+        repair.azuriranDatum || new Date().toISOString(),
         0,
         Date.now(),
         id
@@ -369,6 +420,16 @@ export const repairDB = {
   
   getUnsynced: () => {
     return db.getAllSync('SELECT * FROM repairs WHERE synced = 0');
+  },
+  
+  bulkInsert: (repairs) => {
+    repairs.forEach(repair => {
+      try {
+        repairDB.insert(repair);
+      } catch (error) {
+        console.log(`Repair ${repair._id} već postoji`);
+      }
+    });
   },
   
   markSynced: (id, repairId) => {
@@ -433,6 +494,31 @@ export const syncQueue = {
   clear: () => {
     return db.runSync('DELETE FROM sync_queue');
   },
+};
+
+// RESET cijele baze (obriši sve i rekreiraj)
+export const resetDatabase = () => {
+  try {
+    console.log('🔄 Resetiram bazu...');
+    db.execSync(`
+      DROP TABLE IF EXISTS elevators;
+      DROP TABLE IF EXISTS services;
+      DROP TABLE IF EXISTS repairs;
+      DROP TABLE IF EXISTS simcards;
+      DROP TABLE IF EXISTS chatrooms;
+      DROP TABLE IF EXISTS messages;
+      DROP TABLE IF EXISTS users;
+      DROP TABLE IF EXISTS sync_queue;
+      DROP TABLE IF EXISTS db_version;
+    `);
+    console.log('✅ Sve tablice obrisane');
+    
+    // Reinicijaliziraj
+    initDatabase();
+    console.log('✅ Baza resetirana i rekreirana');
+  } catch (error) {
+    console.error('❌ Greška pri resetiranju baze:', error);
+  }
 };
 
 export default db;

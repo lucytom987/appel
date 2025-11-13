@@ -100,6 +100,7 @@ export const AuthProvider = ({ children }) => {
         setUser(offlineAdminUser);
         setLoading(false);
         
+        // NE pokreći sync - offline korisnik ne može sinkronizirati
         return { success: true };
       }
 

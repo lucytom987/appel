@@ -1,4 +1,5 @@
 import NetInfo from '@react-native-community/netinfo';
+import * as SecureStore from 'expo-secure-store';
 import { elevatorsAPI, servicesAPI, repairsAPI, messagesAPI } from './api';
 import { elevatorDB, serviceDB, repairDB, messageDB, syncQueue } from '../database/db';
 
@@ -60,6 +61,13 @@ export const syncElevatorsFromServer = async () => {
     console.log(`✅ Synced ${serverElevators.length} elevators (obrisano ${deletedIds.length})`);
     return true;
   } catch (error) {
+    // Provjeri je li offline token
+    const token = await SecureStore.getItemAsync('userToken');
+    if (token && token.startsWith('offline_token_')) {
+      console.log('⚠️ Offline korisnik - sync nije moguć (nema valjanog JWT)');
+      return false;
+    }
+
     // Ne loguj kao error ako je 401 (nije logiran), 502, 503, network error
     if (error.response?.status === 401) {
       console.log('⚠️ Nije autentificiran - sync će se izvršiti nakon logina');
@@ -102,6 +110,13 @@ export const syncServicesFromServer = async () => {
     console.log(`✅ Synced ${serverServices.length} services (obrisano ${deletedIds.length})`);
     return true;
   } catch (error) {
+    // Provjeri je li offline token
+    const token = await SecureStore.getItemAsync('userToken');
+    if (token && token.startsWith('offline_token_')) {
+      console.log('⚠️ Offline korisnik - sync nije moguć (nema valjanog JWT)');
+      return false;
+    }
+
     if (error.response?.status === 401) {
       console.log('⚠️ Nije autentificiran - sync će se izvršiti nakon logina');
     } else if (error.response?.status === 502 || error.response?.status === 503 || !error.response) {
@@ -227,6 +242,13 @@ export const syncRepairsFromServer = async () => {
     console.log(`✅ Synced ${serverRepairs.length} repairs (obrisano ${deletedIds.length})`);
     return true;
   } catch (error) {
+    // Provjeri je li offline token
+    const token = await SecureStore.getItemAsync('userToken');
+    if (token && token.startsWith('offline_token_')) {
+      console.log('⚠️ Offline korisnik - sync nije moguć (nema valjanog JWT)');
+      return false;
+    }
+
     if (error.response?.status === 401) {
       console.log('⚠️ Nije autentificiran - sync će se izvršiti nakon logina');
     } else if (error.response?.status === 502 || error.response?.status === 503 || !error.response) {
@@ -321,6 +343,13 @@ export const syncAll = async () => {
   
   if (!online) {
     console.log('⚠️ Offline - preskačem sync');
+    return false;
+  }
+
+  // Provjeri je li offline token (demo korisnik)
+  const token = await SecureStore.getItemAsync('userToken');
+  if (token && token.startsWith('offline_token_')) {
+    console.log('⚠️ Offline korisnik - sync nije moguć (nema valjanog JWT)');
     return false;
   }
 

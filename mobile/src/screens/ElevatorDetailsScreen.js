@@ -30,6 +30,14 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
       : (rawElevator.koordinate || { latitude: 0, longitude: 0 })
   };
 
+  console.log('🔍 ElevatorDetailsScreen loaded:', {
+    id: elevator.id,
+    naziv: elevator.nazivStranke,
+    kontaktOsoba: elevator.kontaktOsoba,
+    koordinate: elevator.koordinate,
+    all_keys: Object.keys(elevator)
+  });
+
   useEffect(() => {
     loadData();
   }, []);
@@ -317,18 +325,27 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
 
 // Helper component
 function InfoRow({ icon, label, value }) {
-  // Osiguraj da je value string
+  // Osiguraj da je value sigurno string
   let displayValue = '-';
   if (value !== null && value !== undefined && value !== '') {
     if (typeof value === 'object') {
       // Ako je object, ne prikazuj ga - prikaži "-"
+      if (label && label.includes('Nedostaci')) {
+        console.warn('⚠️ InfoRow dobio object umjesto stringa za:', label, value);
+      }
       displayValue = '-';
     } else if (typeof value === 'string') {
-      displayValue = value;
+      displayValue = value.toString();
     } else {
       // Za brojeve i ostalo
       displayValue = String(value);
     }
+  }
+
+  // Osiguraj da je sve što rendiramo sigurno string
+  if (typeof displayValue !== 'string') {
+    console.error('❌ InfoRow displayValue je', typeof displayValue, ':', displayValue);
+    displayValue = String(displayValue || '-');
   }
 
   return (

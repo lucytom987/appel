@@ -6,6 +6,7 @@ const userSchema = new mongoose.Schema({
   prezime: { type: String, required: true },
   email: { type: String, required: true, unique: true },
   lozinka: { type: String, required: true },
+  privremenaLozinka: { type: String }, // Za admin reset - prikazuje se samo jednom
   uloga: {
     type: String,
     enum: ['serviser', 'menadzer', 'admin'],
@@ -33,7 +34,8 @@ userSchema.methods.provjeriLozinku = async function (unesenaLozinka) {
 // Makni lozinku iz responsa
 userSchema.methods.toJSON = function () {
   const obj = this.toObject();
-  delete obj.lozinka;
+  delete obj.lozinka; // Nikad ne vraćaj hashiranu lozinku
+  // privtemenaLozinka SE vraća jer je za prikaz admin-u samo jednom
   return obj;
 };
 

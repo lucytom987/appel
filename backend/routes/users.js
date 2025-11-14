@@ -253,6 +253,10 @@ router.put('/:id/reset-password', authenticate, adminOnly, async (req, res) => {
       return res.status(404).json({ message: 'Korisnik nije pronađen' });
     }
 
+    // Spremi novu lozinku kao privremenaLozinka (za prikaz admin-u)
+    user.privremenaLozinka = novaLozinka;
+    
+    // Spremi stvarnu lozinku (će biti hashirana u pre('save') hooku)
     user.lozinka = novaLozinka;
     user.azuriranDatum = new Date();
     await user.save();
@@ -272,6 +276,7 @@ router.put('/:id/reset-password', authenticate, adminOnly, async (req, res) => {
 
     res.json({
       message: 'Lozinka uspješno resetirana',
+      temporaryPassword: novaLozinka, // Prikaži admin-u samo jednom
       user: user.toJSON()
     });
   } catch (error) {

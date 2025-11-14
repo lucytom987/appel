@@ -11,6 +11,7 @@ import {
   Modal,
   TextInput,
   ScrollView,
+  Clipboard,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { usersAPI } from '../services/api';
@@ -153,8 +154,24 @@ const UserManagementScreen = ({ navigation }) => {
               return;
             }
             try {
-              await usersAPI.resetPassword(selectedUser._id || selectedUser.id, newPassword);
-              Alert.alert('Uspjeh', 'Lozinka je resetirana');
+              const response = await usersAPI.resetPassword(selectedUser._id || selectedUser.id, newPassword);
+              
+              // Prikaži novu lozinku admin-u
+              const tempPassword = response.data.temporaryPassword || newPassword;
+              Alert.alert(
+                '✅ Lozinka resetirana',
+                `Nova lozinka je: ${tempPassword}\n\nOvaj korisnik će morati koristiti ovu lozinku da se prijavi.`,
+                [
+                  {
+                    text: 'Kopiraj lozinku',
+                    onPress: async () => {
+                      await Clipboard.setString(tempPassword);
+                      Alert.alert('✅ Kopirано', `Lozinka je kopirana u clipboard`);
+                    }
+                  },
+                  { text: 'OK' }
+                ]
+              );
             } catch (error) {
               console.error('❌ Greška pri resetiranju lozinke:', error);
               Alert.alert('Greška', 'Greška pri resetiranju lozinke');

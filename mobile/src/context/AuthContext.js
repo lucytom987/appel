@@ -2,7 +2,6 @@ import React, { createContext, useState, useEffect, useContext } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import { authAPI, usersAPI } from '../services/api';
 import { initDatabase, elevatorDB, serviceDB, repairDB, userDB, resetDatabase } from '../database/db';
-import { seedDummyData } from '../utils/dummyData';
 import { 
   syncAll, 
   startAutoSync, 
@@ -63,12 +62,8 @@ export const AuthProvider = ({ children }) => {
           console.log('⚠️ Offline korisnik (demo) - NE pokrećem sync');
         }
       } else {
-        // Ako nemaš token, dodaj dummy podatke za testiranje
-        const elevatorCount = elevatorDB.getAll().length;
-        if (elevatorCount === 0) {
-          console.log('📝 Dodajem dummy podatke...');
-          seedDummyData(elevatorDB, serviceDB, repairDB);
-        }
+        // Ako nemaš token, login je obavezan
+        console.log('⚠️ Nema tokena - login je obavezan');
       }
       
       setLoading(false);

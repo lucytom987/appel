@@ -5,11 +5,14 @@ const User = require('../models/User');
  */
 async function seedDefaultUsers() {
   try {
-    // Obriši sve stare korisnike
-    await User.deleteMany({});
-    console.log('🗑️  Stari korisnici obrisani');
+    // Provjeri da li admin već postoji
+    const existingAdmin = await User.findOne({ email: 'vidacek@appel.com' });
+    if (existingAdmin) {
+      console.log('✅ Admin korisnik već postoji');
+      return;
+    }
 
-    // Kreiraj novi admin
+    // Kreiraj novi admin samo ako ne postoji
     const admin = new User({
       ime: 'Tomislav',
       prezime: 'Vidacek',

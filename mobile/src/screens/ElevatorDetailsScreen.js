@@ -106,11 +106,11 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
       <View style={styles.infoSection}>
         <Text style={styles.sectionTitle}>Osnovno</Text>
         
-        <InfoRow icon="document-text" label="Broj ugovora" value={elevator.brojUgovora} />
-        <InfoRow icon="briefcase" label="Naziv stranke" value={elevator.nazivStranke} />
-        <InfoRow icon="location" label="Ulica" value={elevator.ulica} />
-        <InfoRow icon="business-outline" label="Mjesto" value={elevator.mjesto} />
-        <InfoRow icon="barcode" label="Broj dizala" value={elevator.brojDizala} />
+        <InfoRow icon="document-text" label="Broj ugovora" value={String(elevator.brojUgovora || '')} />
+        <InfoRow icon="briefcase" label="Naziv stranke" value={String(elevator.nazivStranke || '')} />
+        <InfoRow icon="location" label="Ulica" value={String(elevator.ulica || '')} />
+        <InfoRow icon="business-outline" label="Mjesto" value={String(elevator.mjesto || '')} />
+        <InfoRow icon="barcode" label="Broj dizala" value={String(elevator.brojDizala || '')} />
       </View>
 
       <View style={styles.infoSection}>
@@ -152,7 +152,7 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
         )}
       </View>
 
-      {elevator.napomene && (
+      {elevator.napomene && typeof elevator.napomene === 'string' && (
         <View style={styles.infoSection}>
           <Text style={styles.sectionTitle}>Napomene</Text>
           <Text style={styles.notesText}>{elevator.napomene}</Text>
@@ -194,27 +194,34 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
           <Text style={styles.emptyText}>Nema servisa</Text>
         </View>
       ) : (
-        services.map((service, index) => (
-          <View key={service.id || index} style={styles.historyCard}>
-            <View style={styles.historyHeader}>
-              <Text style={styles.historyDate}>
-                {new Date(service.datum || service.serviceDate).toLocaleDateString('hr-HR')}
-              </Text>
-              <View style={[styles.historyBadge, { backgroundColor: '#10b981' }]}>
-                <Text style={styles.historyBadgeText}>Obavljen</Text>
+        services.map((service, index) => {
+          // Osiguraj da je service.napomene sigurno string
+          const serviceNotes = typeof (service.napomene || service.notes) === 'string'
+            ? (service.napomene || service.notes)
+            : '';
+          
+          return (
+            <View key={service.id || index} style={styles.historyCard}>
+              <View style={styles.historyHeader}>
+                <Text style={styles.historyDate}>
+                  {new Date(service.datum || service.serviceDate).toLocaleDateString('hr-HR')}
+                </Text>
+                <View style={[styles.historyBadge, { backgroundColor: '#10b981' }]}>
+                  <Text style={styles.historyBadgeText}>Obavljen</Text>
+                </View>
               </View>
+              {serviceNotes && (
+                <Text style={styles.historyNotes}>{serviceNotes}</Text>
+              )}
+              {(service.imaNedostataka === 1 || service.imaNedostataka === true) && (
+                <View style={styles.defectTag}>
+                  <Ionicons name="warning" size={14} color="#f59e0b" />
+                  <Text style={styles.defectText}>Nedostaci pronađeni</Text>
+                </View>
+              )}
             </View>
-            {(service.napomene || service.notes) && (
-              <Text style={styles.historyNotes}>{service.napomene || service.notes}</Text>
-            )}
-            {(service.imaNedostataka === 1 || service.imaNedostataka === true) && (
-              <View style={styles.defectTag}>
-                <Ionicons name="warning" size={14} color="#f59e0b" />
-                <Text style={styles.defectText}>Nedostaci pronađeni</Text>
-              </View>
-            )}
-          </View>
-        ))
+          );
+        })
       )}
     </View>
   );
@@ -227,26 +234,35 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
           <Text style={styles.emptyText}>Nema popravaka</Text>
         </View>
       ) : (
-        repairs.map((repair, index) => (
-          <View key={repair.id || index} style={styles.historyCard}>
-            <View style={styles.historyHeader}>
-              <Text style={styles.historyDate}>
-                {new Date(repair.datumPrijave || repair.reportedDate).toLocaleDateString('hr-HR')}
-              </Text>
-              <View style={[
-                styles.historyBadge,
-                {
-                  backgroundColor:
-                    repair.status === 'završen' ? '#10b981' :
-                    repair.status === 'u tijeku' ? '#f59e0b' : '#ef4444'
-                }
-              ]}>
-                <Text style={styles.historyBadgeText}>{repair.status === 'završen' ? 'Završeno' : repair.status === 'u tijeku' ? 'U tijeku' : 'Na čekanju'}</Text>
+        repairs.map((repair, index) => {
+          // Osiguraj da je repair.opisKvara sigurno string
+          const faultDescription = typeof (repair.opisKvara || repair.faultDescription) === 'string'
+            ? (repair.opisKvara || repair.faultDescription)
+            : '';
+          
+          return (
+            <View key={repair.id || index} style={styles.historyCard}>
+              <View style={styles.historyHeader}>
+                <Text style={styles.historyDate}>
+                  {new Date(repair.datumPrijave || repair.reportedDate).toLocaleDateString('hr-HR')}
+                </Text>
+                <View style={[
+                  styles.historyBadge,
+                  {
+                    backgroundColor:
+                      repair.status === 'završen' ? '#10b981' :
+                      repair.status === 'u tijeku' ? '#f59e0b' : '#ef4444'
+                  }
+                ]}>
+                  <Text style={styles.historyBadgeText}>{repair.status === 'završen' ? 'Završeno' : repair.status === 'u tijeku' ? 'U tijeku' : 'Na čekanju'}</Text>
+                </View>
               </View>
+              {faultDescription && (
+                <Text style={styles.historyNotes}>{faultDescription}</Text>
+              )}
             </View>
-            <Text style={styles.historyNotes}>{repair.opisKvara || repair.faultDescription}</Text>
-          </View>
-        ))
+          );
+        })
       )}
     </View>
   );

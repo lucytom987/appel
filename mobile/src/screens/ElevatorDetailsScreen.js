@@ -13,11 +13,22 @@ import { serviceDB, repairDB } from '../database/db';
 import { useAuth } from '../context/AuthContext';
 
 export default function ElevatorDetailsScreen({ route, navigation }) {
-  const { elevator } = route.params;
+  const { elevator: rawElevator } = route.params;
   const { user, isOnline } = useAuth();
   const [activeTab, setActiveTab] = useState('info'); // info, services, repairs
   const [services, setServices] = useState([]);
   const [repairs, setRepairs] = useState([]);
+
+  // Osiguraj da je elevator pravilno strukturiran
+  const elevator = {
+    ...rawElevator,
+    kontaktOsoba: typeof rawElevator.kontaktOsoba === 'string' 
+      ? JSON.parse(rawElevator.kontaktOsoba || '{}') 
+      : (rawElevator.kontaktOsoba || {}),
+    koordinate: Array.isArray(rawElevator.koordinate)
+      ? { latitude: rawElevator.koordinate[0], longitude: rawElevator.koordinate[1] }
+      : (rawElevator.koordinate || { latitude: 0, longitude: 0 })
+  };
 
   useEffect(() => {
     loadData();
@@ -97,16 +108,16 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
       <View style={styles.infoSection}>
         <Text style={styles.sectionTitle}>Kontakt osoba</Text>
         
-        {elevator.kontaktOsoba && typeof elevator.kontaktOsoba === 'object' && elevator.kontaktOsoba.imePrezime && (
+        {elevator.kontaktOsoba.imePrezime && (
           <InfoRow icon="person" label="Ime i prezime" value={elevator.kontaktOsoba.imePrezime} />
         )}
-        {elevator.kontaktOsoba && typeof elevator.kontaktOsoba === 'object' && elevator.kontaktOsoba.mobitel && (
+        {elevator.kontaktOsoba.mobitel && (
           <InfoRow icon="call" label="Mobitel" value={elevator.kontaktOsoba.mobitel} />
         )}
-        {elevator.kontaktOsoba && typeof elevator.kontaktOsoba === 'object' && elevator.kontaktOsoba.email && (
+        {elevator.kontaktOsoba.email && (
           <InfoRow icon="mail" label="E-mail" value={elevator.kontaktOsoba.email} />
         )}
-        {elevator.kontaktOsoba && typeof elevator.kontaktOsoba === 'object' && elevator.kontaktOsoba.ulaznaKoda && (
+        {elevator.kontaktOsoba.ulaznaKoda && (
           <InfoRow icon="key" label="Ulazna šifra" value={elevator.kontaktOsoba.ulaznaKoda} />
         )}
       </View>
@@ -141,7 +152,7 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
       )}
 
       <View style={styles.actionButtons}>
-        {elevator.kontaktOsoba?.mobitel && (
+        {elevator.kontaktOsoba.mobitel && (
           <TouchableOpacity 
             style={styles.actionButton} 
             onPress={() => Linking.openURL(`tel:${elevator.kontaktOsoba.mobitel}`)}
@@ -151,7 +162,7 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
           </TouchableOpacity>
         )}
 
-        {elevator.koordinate?.latitude && elevator.koordinate?.longitude && (
+        {elevator.koordinate.latitude && elevator.koordinate.longitude && (
           <TouchableOpacity 
             style={styles.actionButton}
             onPress={() => {

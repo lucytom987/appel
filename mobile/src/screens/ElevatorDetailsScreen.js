@@ -97,17 +97,17 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
       <View style={styles.infoSection}>
         <Text style={styles.sectionTitle}>Kontakt osoba</Text>
         
-        {elevator.kontaktOsoba?.imePrezime && (
+        {elevator.kontaktOsoba && typeof elevator.kontaktOsoba === 'object' && elevator.kontaktOsoba.imePrezime && (
           <InfoRow icon="person" label="Ime i prezime" value={elevator.kontaktOsoba.imePrezime} />
         )}
-        {elevator.kontaktOsoba?.mobitel && (
+        {elevator.kontaktOsoba && typeof elevator.kontaktOsoba === 'object' && elevator.kontaktOsoba.mobitel && (
           <InfoRow icon="call" label="Mobitel" value={elevator.kontaktOsoba.mobitel} />
         )}
-        {elevator.kontaktOsoba?.email && (
+        {elevator.kontaktOsoba && typeof elevator.kontaktOsoba === 'object' && elevator.kontaktOsoba.email && (
           <InfoRow icon="mail" label="E-mail" value={elevator.kontaktOsoba.email} />
         )}
-        {elevator.kontaktOsoba?.ulaznaKoda && (
-          <InfoRow icon="key" label="Ulazna \u0161ifra" value={elevator.kontaktOsoba.ulaznaKoda} />
+        {elevator.kontaktOsoba && typeof elevator.kontaktOsoba === 'object' && elevator.kontaktOsoba.ulaznaKoda && (
+          <InfoRow icon="key" label="Ulazna šifra" value={elevator.kontaktOsoba.ulaznaKoda} />
         )}
       </View>
 
@@ -308,10 +308,14 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
 function InfoRow({ icon, label, value }) {
   // Osiguraj da je value string
   let displayValue = '-';
-  if (value) {
+  if (value !== null && value !== undefined && value !== '') {
     if (typeof value === 'object') {
-      displayValue = JSON.stringify(value);
+      // Ako je object, ne prikazuj ga - prikaži "-"
+      displayValue = '-';
+    } else if (typeof value === 'string') {
+      displayValue = value;
     } else {
+      // Za brojeve i ostalo
       displayValue = String(value);
     }
   }

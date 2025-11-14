@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as SecureStore from 'expo-secure-store';
 import { useAuth } from '../context/AuthContext';
 import { elevatorDB } from '../database/db';
 import { elevatorsAPI } from '../services/api';
@@ -159,8 +160,12 @@ export default function EditElevatorScreen({ navigation, route }) {
     setDeleting(true);
 
     try {
-      // Ako je online - obriši s backenda prvo
-      if (online) {
+      // Provjeri je li offline korisnik (demo)
+      const token = await SecureStore.getItemAsync('userToken');
+      const isOfflineUser = token?.startsWith('offline_token_');
+
+      // Ako je online i pravi korisnik - obriši s backenda
+      if (online && !isOfflineUser) {
         await elevatorsAPI.delete(elevator._id);
       }
 

@@ -1,21 +1,13 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
-const { authenticate } = require('../middleware/auth');
+const { authenticate, checkRole } = require('../middleware/auth');
 const { logAction } = require('../services/auditService');
 
 const router = express.Router();
 
-// Middleware - samo admin može pristupiti user management rutiama
-const adminOnly = (req, res, next) => {
-  if (req.user.uloga !== 'admin') {
-    return res.status(403).json({ message: 'Samo admin može upravljati korisnicima' });
-  }
-  next();
-};
-
 // GET /api/users - Lista svih korisnika (admin only)
-router.get('/', authenticate, adminOnly, async (req, res) => {
+router.get('/', authenticate, checkRole(['admin']), async (req, res) => {
   try {
     const users = await User.find({}, { lozinka: 0 }); // Nikad nemoj vraćati lozinku
     res.json(users);
@@ -26,7 +18,7 @@ router.get('/', authenticate, adminOnly, async (req, res) => {
 });
 
 // GET /api/users/:id - Detalji korisnika (admin only)
-router.get('/:id', authenticate, adminOnly, async (req, res) => {
+router.get('/:id', authenticate, checkRole(['admin']), async (req, res) => {
   try {
     const user = await User.findById(req.params.id, { lozinka: 0 });
     if (!user) {
@@ -40,7 +32,7 @@ router.get('/:id', authenticate, adminOnly, async (req, res) => {
 });
 
 // POST /api/users - Kreiraj novog korisnika (admin only)
-router.post('/', authenticate, adminOnly, async (req, res) => {
+router.post('/', authenticate, checkRole(['admin']), async (req, res) => {
   try {
     const { ime, prezime, email, lozinka, uloga, telefon } = req.body;
 
@@ -97,7 +89,7 @@ router.post('/', authenticate, adminOnly, async (req, res) => {
 });
 
 // PUT /api/users/:id - Uredi korisnika (admin only)
-router.put('/:id', authenticate, adminOnly, async (req, res) => {
+router.put('/:id', authenticate, checkRole(['admin']), async (req, res) => {
   try {
     const { ime, prezime, lozinka, uloga, telefon, aktivan } = req.body;
     
@@ -158,7 +150,7 @@ router.put('/:id', authenticate, adminOnly, async (req, res) => {
 });
 
 // DELETE /api/users/:id - Obriši korisnika (admin only)
-router.delete('/:id', authenticate, adminOnly, async (req, res) => {
+router.delete('/:id', authenticate, checkRole(['admin']), async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
     if (!user) {
@@ -202,7 +194,7 @@ router.delete('/:id', authenticate, adminOnly, async (req, res) => {
 
 // GET /api/users/:id/password - Prikaži lozinku (admin only, za povrat ili reset)
 // NAPOMENA: Ova ruta je SAMO za admin koji želi vidjeti lozinku - trebala bi biti loirana i zaštićena!
-router.get('/:id/password', authenticate, adminOnly, async (req, res) => {
+router.get('/:id/password', authenticate, checkRole(['admin']), async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
     if (!user) {
@@ -240,7 +232,7 @@ router.get('/:id/password', authenticate, adminOnly, async (req, res) => {
 });
 
 // PUT /api/users/:id/reset-password - Reset lozinke (admin only)
-router.put('/:id/reset-password', authenticate, adminOnly, async (req, res) => {
+router.put('/:id/reset-password', authenticate, checkRole(['admin']), async (req, res) => {
   try {
     const { novaLozinka } = req.body;
 

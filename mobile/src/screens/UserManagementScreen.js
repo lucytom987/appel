@@ -44,22 +44,33 @@ const UserManagementScreen = ({ navigation }) => {
   const loadUsers = async () => {
     try {
       setLoading(true);
+      console.log('📋 Počinjem učitavati korisnike...');
+      
       // Učitaj sa lokalne baze
       const localUsers = userDB.getAll();
+      console.log('📚 Lokalni korisnici:', localUsers.length);
       setUsers(localUsers);
 
       // Pokušaj učitati sa servera
       try {
+        console.log('🌐 Pokušavam učitati sa servera...');
         const response = await usersAPI.getAll();
+        console.log('✅Server odgovorio:', response.data?.length || 'unknown');
         const serverUsers = response.data;
         userDB.bulkInsert(serverUsers);
         setUsers(serverUsers);
+        console.log('✅ Korisnici učitani sa servera:', serverUsers.length);
       } catch (error) {
-        console.log('⚠️ Greška pri učitavanju sa servera, koristim lokalnu bazu:', error.message);
+        console.error('❌ Greška pri učitavanju sa servera:');
+        console.error('  Status:', error.response?.status);
+        console.error('  Poruka:', error.response?.data?.message || error.message);
+        console.error('  URL:', error.config?.url);
+        console.error('  Method:', error.config?.method);
+        console.log('⚠️ Koristim lokalnu bazu - Server nije dostupan');
         // Koristi lokalnu bazu ako server nije dostupan
       }
     } catch (error) {
-      console.error('❌ Greška pri učitavanju korisnika:', error);
+      console.error('❌ Kritična greška pri učitavanju korisnika:', error);
       Alert.alert('Greška', 'Greška pri učitavanju korisnika');
     } finally {
       setLoading(false);

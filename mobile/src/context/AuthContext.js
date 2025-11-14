@@ -86,16 +86,16 @@ export const AuthProvider = ({ children }) => {
       // Offline login podršku - dummy korisnik za testiranje
       const offlineAdminUser = {
         _id: 'offline_admin',
-        email: 'admin@appel.com',
-        ime: 'Administrator',
-        prezime: 'Aplikacije',
+        email: 'vidacek@appel.com',
+        ime: 'Tomislav',
+        prezime: 'Vidacek',
         uloga: 'admin',
         aktivan: true,
-        telefon: '+385 1 0000 0000'
+        telefon: '0987654321'
       };
 
       // Ako je korisnik koji se logira admin demo korisnik - dozvoli offline
-      if (email === 'admin@appel.com' && lozinka === 'admin123') {
+      if (email === 'vidacek@appel.com' && lozinka === 'vidacek123') {
         console.log('⚠️ Offline login - admin demo korisnik');
         
         // Spremi token i user podatke (offline token)
@@ -114,7 +114,7 @@ export const AuthProvider = ({ children }) => {
         console.log('⚠️ Nema interneta i nije demo korisnik - login nije moguć');
         return {
           success: false,
-          message: 'Bez interneta možete se prijaviti kao admin@appel.com (lozinka: admin123)'
+          message: 'Bez interneta možete se prijaviti kao vidacek@appel.com (lozinka: vidacek123)'
         };
       }
 

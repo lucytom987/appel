@@ -19,7 +19,7 @@ import { useAuth } from '../context/AuthContext';
 import { userDB } from '../database/db';
 
 const UserManagementScreen = ({ navigation }) => {
-  const { user } = useAuth();
+  const { user, isOnline } = useAuth();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -37,6 +37,17 @@ const UserManagementScreen = ({ navigation }) => {
       <View style={styles.centeredContainer}>
         <Ionicons name="lock-closed" size={64} color="#FF6B6B" />
         <Text style={styles.errorText}>Samo admin može upravljati korisnicima!</Text>
+      </View>
+    );
+  }
+
+  // Provjeri je li korisnik online (offline admin ne može upravljati korisnicima sa servera)
+  if (!isOnline) {
+    return (
+      <View style={styles.centeredContainer}>
+        <Ionicons name="wifi-off" size={64} color="#FF6B6B" />
+        <Text style={styles.errorText}>Upravljanje korisnicima zahtijeva konekciju na internet!</Text>
+        <Text style={styles.infoText}>Trebate biti online da biste upravljali korisnicima.</Text>
       </View>
     );
   }
@@ -539,6 +550,11 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 16,
     color: '#FF6B6B',
+  },
+  infoText: {
+    marginTop: 8,
+    fontSize: 14,
+    color: '#999',
   },
   modalContainer: {
     flex: 1,

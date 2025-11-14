@@ -1,7 +1,7 @@
 import NetInfo from '@react-native-community/netinfo';
 import * as SecureStore from 'expo-secure-store';
-import { elevatorsAPI, servicesAPI, repairsAPI, messagesAPI } from './api';
-import { elevatorDB, serviceDB, repairDB, messageDB, syncQueue } from '../database/db';
+import { elevatorsAPI, servicesAPI, repairsAPI, messagesAPI, usersAPI } from './api';
+import { elevatorDB, serviceDB, repairDB, messageDB, userDB, syncQueue } from '../database/db';
 
 let isOnline = false;
 let syncInterval = null;
@@ -212,6 +212,70 @@ export const syncServicesToServer = async () => {
   }
 };
 
+// Sync svi korisnici sa servera u lokalnu bazu (admin only)
+export const syncUsersFromServer = async () => {
+  try {
+    if (!isOnline) {
+      console.log('⚠️ Offline - preskačem sync users');
+      return false;
+    }
+
+    // Provjeri je li trenutni korisnik admin
+    const userData = await SecureStore.getItemAsync('userData');
+    if (!userData) {
+      console.log('⚠️ Nema informacije o korisniku - preskačem sync users');
+      return false;
+    }
+
+    const user = JSON.parse(userData);
+    if (user.uloga !== 'admin') {
+      console.log('⚠️ Korisnik nije admin - preskačem sync users');
+      return false;
+    }
+
+    console.log('🔄 Syncing users from server...');
+    const response = await usersAPI.getAll();
+    const serverUsers = response.data;
+    const serverIds = serverUsers.map(u => u._id);
+
+    // Dohvati lokalne korisnike
+    const localUsers = userDB.getAll();
+    const localIds = localUsers.map(u => u.id);
+
+    // Obriši lokalne koji više ne postoje na serveru
+    const deletedIds = localIds.filter(id => !serverIds.includes(id));
+    for (const id of deletedIds) {
+      userDB.delete(id);
+      console.log(`🗑️ Obrisan lokalni korisnik ${id} (uklanjan sa servera)`);
+    }
+
+    // Bulk insert nove/ažurirane korisnike
+    userDB.bulkInsert(serverUsers);
+    
+    console.log(`✅ Synced ${serverUsers.length} users (obrisano ${deletedIds.length})`);
+    return true;
+  } catch (error) {
+    // Provjeri je li offline token
+    const token = await SecureStore.getItemAsync('userToken');
+    if (token && token.startsWith('offline_token_')) {
+      console.log('⚠️ Offline korisnik - sync nije moguć (nema valjanog JWT)');
+      return false;
+    }
+
+    // Ne loguj kao error ako je 401, 403 (nedostatak pristupa) ili network error
+    if (error.response?.status === 401) {
+      console.log('⚠️ Nije autentificiran - sync će se izvršiti nakon logina');
+    } else if (error.response?.status === 403) {
+      console.log('⚠️ Nemaš pristupa - samo admin može vidjeti korisnike');
+    } else if (error.response?.status === 502 || error.response?.status === 503 || !error.response) {
+      console.log('⚠️ Backend server trenutno nije dostupan - nastavaljam offline');
+    } else {
+      console.error('❌ Greška pri sync users:', error.message);
+    }
+    return false;
+  }
+};
+
 // Sync unsynced repairs sa servera u lokalnu bazu
 export const syncRepairsFromServer = async () => {
   try {
@@ -364,11 +428,14 @@ export const syncAll = async () => {
     
     // 3. Sync popravci sa servera (GET) - uključujući brisanje
     await syncRepairsFromServer();
+
+    // 4. Sync korisnici sa servera (GET) - admin only
+    await syncUsersFromServer();
     
-    // 4. Sync unsynced servici na server (POST/PUT)
+    // 5. Sync unsynced servici na server (POST/PUT)
     await syncServicesToServer();
     
-    // 5. Sync unsynced popravci na server (POST/PUT)
+    // 6. Sync unsynced popravci na server (POST/PUT)
     await syncRepairsToServer();
     
     console.log('✅ Full sync completed');
@@ -409,6 +476,9 @@ export default {
   checkOnlineStatus,
   subscribeToNetworkChanges,
   syncElevatorsFromServer,
+  syncServicesFromServer,
+  syncUsersFromServer,
+  syncRepairsFromServer,
   syncServicesToServer,
   syncRepairsToServer,
   syncAll,

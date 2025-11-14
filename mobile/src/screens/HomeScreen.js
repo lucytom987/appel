@@ -151,6 +151,23 @@ export default function HomeScreen({ navigation }) {
             <Text style={styles.actionText}>Sva dizala</Text>
             <Ionicons name="chevron-forward" size={20} color="#999" />
           </TouchableOpacity>
+
+          {/* Admin sekcija - samo za administratore */}
+          {user?.uloga === 'admin' && (
+            <>
+              <View style={{ height: 1, backgroundColor: '#e5e5e5', marginVertical: 15 }} />
+              <Text style={[styles.sectionTitle, { marginTop: 0 }]}>Administracija</Text>
+              
+              <TouchableOpacity 
+                style={[styles.actionButton, styles.adminButton]}
+                onPress={() => navigation.navigate('UserManagement')}
+              >
+                <Ionicons name="people" size={24} color="#FF6B6B" />
+                <Text style={styles.actionText}>Upravljanje korisnicima</Text>
+                <Ionicons name="chevron-forward" size={20} color="#999" />
+              </TouchableOpacity>
+            </>
+          )}
         </View>
       </ScrollView>
     </View>
@@ -256,5 +273,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#1f2937',
     marginLeft: 15,
+  },
+  adminButton: {
+    borderLeftWidth: 4,
+    borderLeftColor: '#FF6B6B',
   },
 });

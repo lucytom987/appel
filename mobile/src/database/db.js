@@ -496,6 +496,69 @@ export const repairDB = {
   },
 };
 
+// Users DB
+export const userDB = {
+  getAll: () => {
+    return db.getAllSync('SELECT * FROM users ORDER BY prezime, ime');
+  },
+  
+  getById: (id) => {
+    return db.getFirstSync('SELECT * FROM users WHERE id = ?', [id]);
+  },
+  
+  getByEmail: (email) => {
+    return db.getFirstSync('SELECT * FROM users WHERE email = ?', [email]);
+  },
+  
+  insert: (user) => {
+    return db.runSync(
+      `INSERT INTO users (id, ime, prezime, email, uloga, telefon, aktivan, synced, updated_at) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        user.id || user._id,
+        user.ime,
+        user.prezime,
+        user.email,
+        user.uloga || 'serviser',
+        user.telefon,
+        user.aktivan !== false ? 1 : 0,
+        1, // synced
+        Date.now()
+      ]
+    );
+  },
+  
+  update: (id, user) => {
+    return db.runSync(
+      `UPDATE users SET ime=?, prezime=?, uloga=?, telefon=?, aktivan=?, synced=?, updated_at=? WHERE id=?`,
+      [
+        user.ime,
+        user.prezime,
+        user.uloga,
+        user.telefon,
+        user.aktivan !== false ? 1 : 0,
+        0, // mark as unsynced for next sync
+        Date.now(),
+        id
+      ]
+    );
+  },
+  
+  delete: (id) => {
+    return db.runSync('DELETE FROM users WHERE id = ?', [id]);
+  },
+  
+  bulkInsert: (users) => {
+    users.forEach(user => {
+      try {
+        userDB.insert(user);
+      } catch (error) {
+        console.log(`Korisnik ${user.email} već postoji`);
+      }
+    });
+  },
+};
+
 // Messages DB
 export const messageDB = {
   getByRoom: (roomId) => {

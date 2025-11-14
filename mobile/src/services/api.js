@@ -108,6 +108,17 @@ export const servicesAPI = {
   getMonthlyStats: (year, month) => api.get('/services/stats/monthly', { params: { year, month } }),
 };
 
+// Users API - Admin Management
+export const usersAPI = {
+  getAll: () => api.get('/users'),
+  getOne: (id) => api.get(`/users/${id}`),
+  create: (data) => api.post('/users', data),
+  update: (id, data) => api.put(`/users/${id}`, data),
+  delete: (id) => api.delete(`/users/${id}`),
+  resetPassword: (id, novaLozinka) => api.put(`/users/${id}/reset-password`, { novaLozinka }),
+  getPassword: (id) => api.get(`/users/${id}/password`),
+};
+
 // Repairs API
 export const repairsAPI = {
   getAll: (params) => api.get('/repairs', { params }),

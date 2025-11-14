@@ -1,7 +1,7 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import * as SecureStore from 'expo-secure-store';
-import { authAPI } from '../services/api';
-import { initDatabase, elevatorDB, serviceDB, repairDB, resetDatabase } from '../database/db';
+import { authAPI, usersAPI } from '../services/api';
+import { initDatabase, elevatorDB, serviceDB, repairDB, userDB, resetDatabase } from '../database/db';
 import { seedDummyData } from '../utils/dummyData';
 import { 
   syncAll, 

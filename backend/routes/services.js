@@ -177,8 +177,8 @@ router.post('/', authenticate, async (req, res) => {
 
 // @route   PUT /api/services/:id
 // @desc    Ažuriraj servis
-// @access  Private (Technician who created it, Manager, Admin)
-router.put('/:id', authenticate, async (req, res) => {
+// @access  Private (Menadžer or Admin)
+router.put('/:id', authenticate, checkRole(['menadzer', 'admin']), async (req, res) => {
   try {
     const existingService = await Service.findById(req.params.id);
 
@@ -186,18 +186,6 @@ router.put('/:id', authenticate, async (req, res) => {
       return res.status(404).json({
         success: false,
         message: 'Servis nije pronađen'
-      });
-    }
-
-    // Provjeri da li korisnik može ažurirati (ili je kreator ili je admin/manager)
-    const canEdit = 
-      existingService.performedBy.toString() === req.user.id ||
-      ['admin', 'manager'].includes(req.user.role);
-
-    if (!canEdit) {
-      return res.status(403).json({
-        success: false,
-        message: 'Nemate dozvolu za ažuriranje ovog servisa'
       });
     }
 
@@ -231,8 +219,8 @@ router.put('/:id', authenticate, async (req, res) => {
 
 // @route   DELETE /api/services/:id
 // @desc    Obriši servis
-// @access  Private (Admin only)
-router.delete('/:id', authenticate, checkRole(['admin']), async (req, res) => {
+// @access  Private (Serviser, Menadžer or Admin)
+router.delete('/:id', authenticate, checkRole(['serviser', 'menadzer', 'admin']), async (req, res) => {
   try {
     const service = await Service.findById(req.params.id);
 

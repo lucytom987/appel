@@ -209,8 +209,8 @@ router.post('/', authenticate, async (req, res) => {
 
 // @route   PUT /api/repairs/:id
 // @desc    Ažuriraj popravku (status, opis popravka, itd.)
-// @access  Private
-router.put('/:id', authenticate, async (req, res) => {
+// @access  Private (Menadžer or Admin)
+router.put('/:id', authenticate, checkRole(['menadzer', 'admin']), async (req, res) => {
   try {
     const existingRepair = await Repair.findById(req.params.id);
 
@@ -259,8 +259,8 @@ router.put('/:id', authenticate, async (req, res) => {
 
 // @route   DELETE /api/repairs/:id
 // @desc    Obriši popravku
-// @access  Private (Admin only)
-router.delete('/:id', authenticate, checkRole(['admin']), async (req, res) => {
+// @access  Private (Serviser, Menadžer or Admin)
+router.delete('/:id', authenticate, checkRole(['serviser', 'menadzer', 'admin']), async (req, res) => {
   try {
     const repair = await Repair.findById(req.params.id);
 

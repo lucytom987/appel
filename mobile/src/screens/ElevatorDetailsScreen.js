@@ -30,14 +30,6 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
       : (rawElevator.koordinate || { latitude: 0, longitude: 0 })
   };
 
-  console.log('🔍 ElevatorDetailsScreen loaded:', {
-    id: elevator.id,
-    naziv: elevator.nazivStranke,
-    kontaktOsoba: elevator.kontaktOsoba,
-    koordinate: elevator.koordinate,
-    all_keys: Object.keys(elevator)
-  });
-
   useEffect(() => {
     loadData();
   }, []);
@@ -116,16 +108,16 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
       <View style={styles.infoSection}>
         <Text style={styles.sectionTitle}>Kontakt osoba</Text>
         
-        {elevator.kontaktOsoba.imePrezime && (
+        {elevator.kontaktOsoba && elevator.kontaktOsoba.imePrezime && (
           <InfoRow icon="person" label="Ime i prezime" value={elevator.kontaktOsoba.imePrezime} />
         )}
-        {elevator.kontaktOsoba.mobitel && (
+        {elevator.kontaktOsoba && elevator.kontaktOsoba.mobitel && (
           <InfoRow icon="call" label="Mobitel" value={elevator.kontaktOsoba.mobitel} />
         )}
-        {elevator.kontaktOsoba.email && (
+        {elevator.kontaktOsoba && elevator.kontaktOsoba.email && (
           <InfoRow icon="mail" label="E-mail" value={elevator.kontaktOsoba.email} />
         )}
-        {elevator.kontaktOsoba.ulaznaKoda && (
+        {elevator.kontaktOsoba && elevator.kontaktOsoba.ulaznaKoda && (
           <InfoRow icon="key" label="Ulazna šifra" value={elevator.kontaktOsoba.ulaznaKoda} />
         )}
       </View>
@@ -152,7 +144,7 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
         )}
       </View>
 
-      {elevator.napomene && typeof elevator.napomene === 'string' && (
+      {elevator.napomene && typeof elevator.napomene === 'string' && elevator.napomene.trim() && (
         <View style={styles.infoSection}>
           <Text style={styles.sectionTitle}>Napomene</Text>
           <Text style={styles.notesText}>{elevator.napomene}</Text>
@@ -160,7 +152,8 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
       )}
 
       <View style={styles.actionButtons}>
-        {elevator.kontaktOsoba.mobitel && (
+        {elevator.kontaktOsoba && typeof elevator.kontaktOsoba === 'object' && 
+         elevator.kontaktOsoba.mobitel && typeof elevator.kontaktOsoba.mobitel === 'string' && (
           <TouchableOpacity 
             style={styles.actionButton} 
             onPress={() => Linking.openURL(`tel:${elevator.kontaktOsoba.mobitel}`)}
@@ -170,7 +163,9 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
           </TouchableOpacity>
         )}
 
-        {elevator.koordinate.latitude && elevator.koordinate.longitude && (
+        {elevator.koordinate && typeof elevator.koordinate === 'object' && 
+         typeof elevator.koordinate.latitude === 'number' && elevator.koordinate.latitude !== 0 &&
+         typeof elevator.koordinate.longitude === 'number' && elevator.koordinate.longitude !== 0 && (
           <TouchableOpacity 
             style={styles.actionButton}
             onPress={() => {
@@ -275,8 +270,8 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
           <Ionicons name="arrow-back" size={24} color="#111827" />
         </TouchableOpacity>
         <View style={styles.headerInfo}>
-          <Text style={styles.headerTitle}>{elevator.nazivStranke}</Text>
-          <Text style={styles.headerSubtitle}>{elevator.ulica}, {elevator.mjesto}</Text>
+          <Text style={styles.headerTitle}>{String(elevator.nazivStranke || 'Dizalo')}</Text>
+          <Text style={styles.headerSubtitle}>{String(elevator.ulica || '')}, {String(elevator.mjesto || '')}</Text>
         </View>
         <View style={styles.headerRight}>
           <TouchableOpacity 
@@ -341,28 +336,8 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
 
 // Helper component
 function InfoRow({ icon, label, value }) {
-  // Osiguraj da je value sigurno string
-  let displayValue = '-';
-  if (value !== null && value !== undefined && value !== '') {
-    if (typeof value === 'object') {
-      // Ako je object, ne prikazuj ga - prikaži "-"
-      if (label && label.includes('Nedostaci')) {
-        console.warn('⚠️ InfoRow dobio object umjesto stringa za:', label, value);
-      }
-      displayValue = '-';
-    } else if (typeof value === 'string') {
-      displayValue = value.toString();
-    } else {
-      // Za brojeve i ostalo
-      displayValue = String(value);
-    }
-  }
-
-  // Osiguraj da je sve što rendiramo sigurno string
-  if (typeof displayValue !== 'string') {
-    console.error('❌ InfoRow displayValue je', typeof displayValue, ':', displayValue);
-    displayValue = String(displayValue || '-');
-  }
+  // Osiguraj da je vrijednost sigurno string ili prazna
+  const safeValue = value ? String(value).trim() : '';
 
   return (
     <View style={styles.infoRow}>
@@ -370,7 +345,7 @@ function InfoRow({ icon, label, value }) {
         <Ionicons name={icon} size={18} color="#6b7280" />
         <Text style={styles.infoLabel}>{label}</Text>
       </View>
-      <Text style={styles.infoValue}>{displayValue}</Text>
+      <Text style={styles.infoValue}>{safeValue || '-'}</Text>
     </View>
   );
 }

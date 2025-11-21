@@ -121,8 +121,19 @@ export const AuthProvider = ({ children }) => {
 
       const response = await authAPI.login(email, lozinka);
       console.log('✅ Login response:', response.data);
+      console.log('🔍 Response keys:', Object.keys(response.data));
       
       const { token, korisnik } = response.data;
+      
+      if (!token) {
+        console.error('❌ Token nije u odgovoru!', response.data);
+        throw new Error('Greška pri prijavi - nema tokena u odgovoru');
+      }
+      
+      if (!korisnik) {
+        console.error('❌ Korisnik nije u odgovoru!', response.data);
+        throw new Error('Greška pri prijavi - nema korisnika u odgovoru');
+      }
 
       // Spremi token i user podatke
       console.log('💾 Spreminjem token u SecureStore:', token.substring(0, 20) + '...');

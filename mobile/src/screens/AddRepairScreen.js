@@ -137,9 +137,9 @@ export default function AddRepairScreen({ navigation, route }) {
       <ScrollView style={styles.content}>
         {/* Informacije o dizalu */}
         <View style={styles.elevatorInfo}>
-          <Text style={styles.elevatorName}>{elevator.lokacija}</Text>
+          <Text style={styles.elevatorName}>{elevator.brojDizala} - {elevator.nazivStranke}</Text>
           <Text style={styles.elevatorDetail}>
-            {elevator.adresa} • {elevator.grad}
+            {elevator.ulica} • {elevator.mjesto}
           </Text>
         </View>
 

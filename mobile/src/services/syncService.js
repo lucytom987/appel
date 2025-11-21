@@ -412,6 +412,22 @@ export const syncAll = async () => {
 
   // Provjeri je li offline token (demo korisnik)
   const token = await SecureStore.getItemAsync('userToken');
+  console.log('🔐 syncAll: Token check', {
+    exists: !!token,
+    type: token ? (token.startsWith('offline_token_') ? 'OFFLINE' : 'ONLINE') : 'NONE'
+  });
+  
+  if (!token) {
+    console.warn('⚠️ Token nije dostupan pri sync-u - čekam...');
+    // Čekaj 500ms i pokušaj opet
+    await new Promise(resolve => setTimeout(resolve, 500));
+    const retryToken = await SecureStore.getItemAsync('userToken');
+    if (!retryToken) {
+      console.error('❌ Token nije dostupan ni nakon čekanja - sync otkazan');
+      return false;
+    }
+  }
+  
   if (token && token.startsWith('offline_token_')) {
     console.log('⚠️ Offline korisnik - sync nije moguć (nema valjanog JWT)');
     return false;

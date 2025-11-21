@@ -147,6 +147,18 @@ export const AuthProvider = ({ children }) => {
       setUser(korisnik);
       setLoading(false); // Odmah postavi loading na false
 
+      // Čekaj da se token pravilno sačuva prije nego što pokreneš sync
+      console.log('⏳ Čekam 500ms da se token sačuva u SecureStore...');
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Provjeri token prije nego što pokreneš sync
+      const tokenBeforeSync = await SecureStore.getItemAsync('userToken');
+      if (!tokenBeforeSync) {
+        console.error('❌ KRITIČNO: Token nije dostupan nakon čekanja!');
+        throw new Error('Token nije sačuvan pravilno - sync ne može da se pokrene');
+      }
+      console.log('✅ Token je dostupan - pokrećem sync');
+
       // Pokreni prvi sync u pozadini (ne blokiraj UI)
       console.log('🔄 Pokrećem sync nakon login-a...');
       syncAll().catch(err => console.log('⚠️ Background sync error:', err));

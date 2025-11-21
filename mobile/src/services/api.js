@@ -21,17 +21,26 @@ api.interceptors.request.use(
       url: config.url,
       baseURL: config.baseURL,
       fullURL: `${config.baseURL}${config.url}`,
-      data: config.data,
-      headers: config.headers,
     });
     
-    const token = await SecureStore.getItemAsync('userToken');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-      console.log('🔑 Token dodan u request');
-    } else {
-      console.log('⚠️ Nema tokena');
+    try {
+      const token = await SecureStore.getItemAsync('userToken');
+      console.log('🔑 Token fetch attempt:', {
+        tokenExists: !!token,
+        tokenType: token ? (token.startsWith('offline_token_') ? 'OFFLINE' : 'ONLINE') : 'NONE',
+        tokenPreview: token ? token.substring(0, 30) + '...' : 'NE',
+      });
+      
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+        console.log('✅ Token dodan u Authorization header');
+      } else {
+        console.warn('⚠️ Token nije pronađen u SecureStore!');
+      }
+    } catch (err) {
+      console.error('❌ Greška pri čitanju tokena iz SecureStore:', err);
     }
+    
     return config;
   },
   (error) => {

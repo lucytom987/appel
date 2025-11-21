@@ -46,6 +46,12 @@ export const AuthProvider = ({ children }) => {
       // 4. Provjeri da li postoji token (auto-login)
       const token = await SecureStore.getItemAsync('userToken');
       const userData = await SecureStore.getItemAsync('userData');
+      
+      console.log('🔍 Provjera auto-login:', {
+        tokenExists: !!token,
+        tokenPreview: token ? token.substring(0, 20) + '...' : 'NE',
+        userDataExists: !!userData,
+      });
 
       if (token && userData) {
         setUser(JSON.parse(userData));
@@ -119,13 +125,19 @@ export const AuthProvider = ({ children }) => {
       const { token, korisnik } = response.data;
 
       // Spremi token i user podatke
+      console.log('💾 Spreminjem token u SecureStore:', token.substring(0, 20) + '...');
       await SecureStore.setItemAsync('userToken', token);
       await SecureStore.setItemAsync('userData', JSON.stringify(korisnik));
+      
+      // Provjeri da li je token sačuvan
+      const savedToken = await SecureStore.getItemAsync('userToken');
+      console.log('✅ Token sačuvan:', savedToken ? 'DA' : 'NE');
       
       setUser(korisnik);
       setLoading(false); // Odmah postavi loading na false
 
       // Pokreni prvi sync u pozadini (ne blokiraj UI)
+      console.log('🔄 Pokrećem sync nakon login-a...');
       syncAll().catch(err => console.log('⚠️ Background sync error:', err));
       startAutoSync();
 

@@ -14,7 +14,6 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import * as SecureStore from 'expo-secure-store';
 import { useAuth } from '../context/AuthContext';
 import { repairDB } from '../database/db';
-import * as SecureStore from 'expo-secure-store';
 import { repairsAPI } from '../services/api';
 
 export default function AddRepairScreen({ navigation, route }) {

@@ -34,16 +34,14 @@ router.get('/stats/overview', authenticate, async (req, res) => {
   try {
     const total = await Elevator.countDocuments();
     const active = await Elevator.countDocuments({ status: 'aktivan' });
-    const outOfOrder = await Elevator.countDocuments({ status: 'u kvaru' });
-    const maintenance = await Elevator.countDocuments({ status: 'u servisu' });
+    const inactive = await Elevator.countDocuments({ status: 'neaktivan' });
 
     res.json({
       success: true,
       data: {
         total,
         active,
-        outOfOrder,
-        maintenance
+        inactive
       }
     });
   } catch (error) {

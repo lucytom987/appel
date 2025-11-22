@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 const elevatorSchema = new mongoose.Schema({
   // Osnovno
-  brojUgovora: { type: String, required: true },
+  brojUgovora: { type: String }, // Opcionalno
   nazivStranke: { type: String, required: true },
   ulica: { type: String, required: true },
   mjesto: { type: String, required: true },
@@ -25,7 +25,7 @@ const elevatorSchema = new mongoose.Schema({
   // Status
   status: {
     type: String,
-    enum: ['aktivan', 'neaktivan', 'u kvaru', 'u servisu'],
+    enum: ['aktivan', 'neaktivan'],
     default: 'aktivan'
   },
   

@@ -9,11 +9,20 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
+import * as SecureStore from 'expo-secure-store';
 import { elevatorDB, serviceDB, repairDB } from '../database/db';
 import { syncAll } from '../services/syncService';
 
 export default function HomeScreen({ navigation }) {
   const { user, isOnline, logout } = useAuth();
+  const [offlineDemo, setOfflineDemo] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const token = await SecureStore.getItemAsync('userToken');
+      setOfflineDemo(Boolean(token && token.startsWith('offline_token_')));
+    })();
+  }, []);
   const [stats, setStats] = useState({
     totalElevators: 0,
     servicesThisMonth: 0,
@@ -153,10 +162,20 @@ export default function HomeScreen({ navigation }) {
           </TouchableOpacity>
 
           {/* Admin sekcija - samo za administratore */}
-          {user?.uloga === 'admin' && (
+          {user?.uloga === 'admin' && !offlineDemo && (
             <>
               <View style={{ height: 1, backgroundColor: '#e5e5e5', marginVertical: 15 }} />
               <Text style={[styles.sectionTitle, { marginTop: 0 }]}>Administracija</Text>
+                        {user?.uloga === 'admin' && offlineDemo && (
+                          <View style={{ marginTop: 20 }}>
+                            <View style={{ height: 1, backgroundColor: '#e5e5e5', marginVertical: 15 }} />
+                            <Text style={[styles.sectionTitle, { marginTop: 0 }]}>Administracija</Text>
+                            <View style={styles.offlineAdminBox}>
+                              <Ionicons name="lock-closed" size={20} color="#ef4444" />
+                              <Text style={styles.offlineAdminText}>Offline demo korisnik – upravljanje korisnicima nedostupno dok se ne prijaviš online.</Text>
+                            </View>
+                          </View>
+                        )}
               
               <TouchableOpacity 
                 style={[styles.actionButton, styles.adminButton]}
@@ -277,5 +296,21 @@ const styles = StyleSheet.create({
   adminButton: {
     borderLeftWidth: 4,
     borderLeftColor: '#FF6B6B',
+  },
+  offlineAdminBox: {
+    backgroundColor: '#fef2f2',
+    borderRadius: 12,
+    padding: 14,
+    flexDirection: 'row',
+    gap: 12,
+    alignItems: 'flex-start',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+  },
+  offlineAdminText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#b91c1c',
+    lineHeight: 20,
   },
 });

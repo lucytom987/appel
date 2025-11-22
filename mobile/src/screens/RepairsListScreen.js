@@ -46,19 +46,9 @@ export default function RepairsListScreen({ navigation }) {
 
   const applyFilter = () => {
     let filtered = repairs;
-
-    switch (filter) {
-      case 'čekanje':
-        filtered = repairs.filter(r => r.status === 'čekanje');
-        break;
-      case 'u tijeku':
-        filtered = repairs.filter(r => r.status === 'u tijeku');
-        break;
-      case 'završeno':
-        filtered = repairs.filter(r => r.status === 'završeno');
-        break;
+    if (filter !== 'all') {
+      filtered = repairs.filter(r => r.status === filter);
     }
-
     setFilteredRepairs(filtered);
   };
 
@@ -75,11 +65,12 @@ export default function RepairsListScreen({ navigation }) {
             try {
               setDeleting(repair.id);
               // Obriši s backenda ako je sinkroniziran
-              if (repair.synced && !repair.id.startsWith('local_')) {
-                await repairsAPI.delete(repair.id);
+              const backendId = repair._id || repair.id;
+              if (repair.synced && backendId && !String(backendId).startsWith('local_')) {
+                await repairsAPI.delete(backendId);
               }
               // Obriši iz lokalne baze
-              repairDB.delete(repair.id);
+              repairDB.delete(backendId);
               loadRepairs();
             } catch (error) {
               console.error('Greška pri brisanju popravka:', error);
@@ -112,12 +103,13 @@ export default function RepairsListScreen({ navigation }) {
               const updated = { ...repair, status: option.value };
               
               // Ažuriraj na backenda ako je sinkroniziran
-              if (repair.synced && !repair.id.startsWith('local_')) {
-                await repairsAPI.update(repair.id, updated);
+              const backendId = repair._id || repair.id;
+              if (repair.synced && backendId && !String(backendId).startsWith('local_')) {
+                await repairsAPI.update(backendId, updated);
               }
               
               // Ažuriraj lokalnu bazu
-              repairDB.update(repair.id, updated);
+              repairDB.update(backendId, updated);
               loadRepairs();
             } catch (error) {
               console.error('Greška pri ažuriranju:', error);
@@ -136,7 +128,7 @@ export default function RepairsListScreen({ navigation }) {
     switch (status) {
       case 'čekanje': return '#f59e0b';
       case 'u tijeku': return '#3b82f6';
-      case 'završeno': return '#10b981';
+      case 'završen': return '#10b981';
       default: return '#6b7280';
     }
   };
@@ -145,7 +137,7 @@ export default function RepairsListScreen({ navigation }) {
     switch (status) {
       case 'čekanje': return 'Na čekanju';
       case 'u tijeku': return 'U tijeku';
-      case 'završeno': return 'Završeno';
+      case 'završen': return 'Završeno';
       default: return status;
     }
   };
@@ -247,58 +239,29 @@ export default function RepairsListScreen({ navigation }) {
 
       {/* Filter tabs */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterContainer}>
-        <TouchableOpacity
-          style={[styles.filterTab, filter === 'all' && styles.filterTabActive]}
-          onPress={() => setFilter('all')}
-        >
-          <Text style={[styles.filterText, filter === 'all' && styles.filterTextActive]}>
-            Svi
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.filterTab, filter === 'urgent' && styles.filterTabActive]}
-          onPress={() => setFilter('urgent')}
-        >
-          <Ionicons 
-            name="warning" 
-            size={16} 
-            color={filter === 'urgent' ? '#fff' : '#ef4444'} 
-          />
-          <Text style={[styles.filterText, filter === 'urgent' && styles.filterTextActive]}>
-            Hitni
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.filterTab, filter === 'pending' && styles.filterTabActive]}
-          onPress={() => setFilter('pending')}
-        >
-          <Text style={[styles.filterText, filter === 'pending' && styles.filterTextActive]}>
-            Na čekanju
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.filterTab, filter === 'inProgress' && styles.filterTabActive]}
-          onPress={() => setFilter('inProgress')}
-        >
-          <Text style={[styles.filterText, filter === 'inProgress' && styles.filterTextActive]}>
-            U tijeku
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.filterTab, filter === 'completed' && styles.filterTabActive]}
-          onPress={() => setFilter('completed')}
-        >
-          <Text style={[styles.filterText, filter === 'completed' && styles.filterTextActive]}>
-            Završeno
-          </Text>
-        </TouchableOpacity>
+        {[
+          { key: 'all', label: 'Svi' },
+          { key: 'čekanje', label: 'Na čekanju' },
+          { key: 'u tijeku', label: 'U tijeku' },
+          { key: 'završen', label: 'Završeno' },
+        ].map(opt => (
+          <TouchableOpacity
+            key={opt.key}
+            style={[styles.filterTab, filter === opt.key && styles.filterTabActive]}
+            onPress={() => setFilter(opt.key)}
+          >
+            <Text style={[styles.filterText, filter === opt.key && styles.filterTextActive]}>
+              {opt.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </ScrollView>
 
       {/* Repairs list */}
       <FlatList
         data={filteredRepairs}
         renderItem={renderRepairItem}
-        keyExtractor={(item) => item._id || item.localId}
+        keyExtractor={(item) => item._id || item.id}
         contentContainerStyle={styles.listContent}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />

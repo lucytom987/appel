@@ -180,6 +180,13 @@ const UserManagementScreen = ({ navigation }) => {
               
               // Prikaži novu lozinku admin-u
               const tempPassword = response.data.temporaryPassword || newPassword;
+              // Lokalno ažuriraj privremenaLozinka (cache) za prikaz dok se ne synca
+              try {
+                const localUser = { ...selectedUser, privremenaLozinka: tempPassword };
+                userDB.update(selectedUser._id || selectedUser.id, localUser);
+              } catch (e) {
+                console.log('⚠️ Ne mogu lokalno spremiti privremenu lozinku:', e.message);
+              }
               Alert.alert(
                 '✅ Lozinka resetirana',
                 `Nova lozinka je: ${tempPassword}\n\nOvaj korisnik će morati koristiti ovu lozinku da se prijavi.`,

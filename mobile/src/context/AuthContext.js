@@ -94,32 +94,35 @@ export const AuthProvider = ({ children }) => {
         aktivan: true,
         telefon: '0987654321'
       };
-
-      // Ako je korisnik koji se logira admin demo korisnik - dozvoli offline
-      if (email === 'vidacek@appel.com' && lozinka === 'vidacek123') {
-        console.log('⚠️ Offline login - admin demo korisnik');
-        
-        // Spremi token i user podatke (offline token)
-        await SecureStore.setItemAsync('userToken', 'offline_token_' + Date.now());
-        await SecureStore.setItemAsync('userData', JSON.stringify(offlineAdminUser));
-        
-        setUser(offlineAdminUser);
-        setLoading(false);
-        
-        // NE pokreći sync - offline korisnik ne može sinkronizirati
-        return { success: true };
+      // NOVO: Uvijek pokušaj online login prvo, čak i ako NetInfo kaže da si offline.
+      // Fallback na offline demo SAMO ako je network greška (nema response) ili 502/503.
+      let response;
+      let onlineAttemptFailed = false;
+      try {
+        response = await authAPI.login(email, lozinka);
+      } catch (err) {
+        const status = err.response?.status;
+        const networkProblem = !err.response || status === 502 || status === 503;
+        onlineAttemptFailed = true;
+        console.log('⚠️ Online login nije uspio. Status:', status, 'networkProblem:', networkProblem);
+        if (networkProblem && email === 'vidacek@appel.com' && lozinka === 'vidacek123') {
+          console.log('⚠️ Network problem - aktiviram OFFLINE DEMO fallback');
+          await SecureStore.setItemAsync('userToken', 'offline_token_' + Date.now());
+          await SecureStore.setItemAsync('userData', JSON.stringify(offlineAdminUser));
+          setUser(offlineAdminUser);
+          setLoading(false);
+          return { success: true, offlineDemo: true };
+        }
+        // Ako nije network problem, propagiraj grešku dalje (401, 400 ...)
+        throw err;
       }
 
-      // Pokušaj online login
-      if (!isOnline) {
-        console.log('⚠️ Nema interneta i nije demo korisnik - login nije moguć');
-        return {
-          success: false,
-          message: 'Bez interneta možete se prijaviti kao vidacek@appel.com (lozinka: vidacek123)'
-        };
+      if (onlineAttemptFailed && !response) {
+        // Ovo ne bi smjelo ostati bez response ako je fallback aktiviran
+        throw new Error('Login nije uspio i fallback nije aktiviran');
       }
 
-      const response = await authAPI.login(email, lozinka);
+      console.log('✅ Login response:', response.data);
       console.log('✅ Login response:', response.data);
       console.log('🔍 Response keys:', Object.keys(response.data));
       

@@ -4,7 +4,7 @@ import * as SQLite from 'expo-sqlite';
 const db = SQLite.openDatabaseSync('appel.db');
 
 // Database version
-const DB_VERSION = 5; // Povećano PONOVNO - mora biti veće od onoga što je user imao
+const DB_VERSION = 6; // Upgrade: dodan privremenaLozinka + novi indexi
 
 // Provjeri verziju baze i migriraj ako je potrebno
 const checkAndMigrate = () => {
@@ -80,6 +80,7 @@ export const initDatabase = () => {
         email TEXT UNIQUE,
         uloga TEXT,
         telefon TEXT,
+        privremenaLozinka TEXT,
         aktivan INTEGER DEFAULT 1,
         synced INTEGER DEFAULT 1,
         updated_at INTEGER
@@ -195,9 +196,11 @@ export const initDatabase = () => {
       CREATE INDEX IF NOT EXISTS idx_elevators_status ON elevators(status);
       CREATE INDEX IF NOT EXISTS idx_services_elevator ON services(elevatorId);
       CREATE INDEX IF NOT EXISTS idx_services_synced ON services(synced);
+      CREATE INDEX IF NOT EXISTS idx_services_datum ON services(datum);
       CREATE INDEX IF NOT EXISTS idx_repairs_elevator ON repairs(elevatorId);
       CREATE INDEX IF NOT EXISTS idx_repairs_status ON repairs(status);
       CREATE INDEX IF NOT EXISTS idx_repairs_synced ON repairs(synced);
+      CREATE INDEX IF NOT EXISTS idx_repairs_datumPrijave ON repairs(datumPrijave);
       CREATE INDEX IF NOT EXISTS idx_messages_chatroom ON messages(chatroomId);
       CREATE INDEX IF NOT EXISTS idx_messages_synced ON messages(synced);
     `);
@@ -512,8 +515,8 @@ export const userDB = {
   
   insert: (user) => {
     return db.runSync(
-      `INSERT INTO users (id, ime, prezime, email, uloga, telefon, aktivan, synced, updated_at) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO users (id, ime, prezime, email, uloga, telefon, privremenaLozinka, aktivan, synced, updated_at) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         user.id || user._id,
         user.ime,
@@ -521,6 +524,7 @@ export const userDB = {
         user.email,
         user.uloga || 'serviser',
         user.telefon,
+        user.privremenaLozinka || null,
         user.aktivan !== false ? 1 : 0,
         1, // synced
         Date.now()
@@ -530,12 +534,13 @@ export const userDB = {
   
   update: (id, user) => {
     return db.runSync(
-      `UPDATE users SET ime=?, prezime=?, uloga=?, telefon=?, aktivan=?, synced=?, updated_at=? WHERE id=?`,
+      `UPDATE users SET ime=?, prezime=?, uloga=?, telefon=?, privremenaLozinka=?, aktivan=?, synced=?, updated_at=? WHERE id=?`,
       [
         user.ime,
         user.prezime,
         user.uloga,
         user.telefon,
+        user.privremenaLozinka || null,
         user.aktivan !== false ? 1 : 0,
         0, // mark as unsynced for next sync
         Date.now(),

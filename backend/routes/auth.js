@@ -12,8 +12,9 @@ router.post('/login', async (req, res) => {
     console.log('📥 Login request body:', req.body);
     const { email, lozinka } = req.body;
 
-    console.log('📧 Email:', email);
-    console.log('🔑 Lozinka primljena:', lozinka ? 'DA' : 'NE');
+    console.log('📧 Email:', email, '(length:', email?.length, 'type:', typeof email, ')');
+    console.log('🔑 Lozinka primljena:', lozinka ? 'DA' : 'NE', '(length:', lozinka?.length, 'type:', typeof lozinka, ')');
+    console.log('🔍 Lozinka bytes:', lozinka ? Buffer.from(lozinka).toString('hex') : 'N/A');
 
     if (!email || !lozinka) {
       console.log('❌ Email ili lozinka nedostaju!');

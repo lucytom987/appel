@@ -20,7 +20,7 @@ export default function ElevatorsListScreen({ navigation }) {
   const [filteredElevators, setFilteredElevators] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
-  const [filter, setFilter] = useState('all'); // all, active, out_of_order, maintenance
+  const [filter, setFilter] = useState('all'); // all, aktivan, u kvaru, u servisu, neaktivan
 
   useEffect(() => {
     loadElevators();
@@ -43,19 +43,18 @@ export default function ElevatorsListScreen({ navigation }) {
   const filterElevators = () => {
     let filtered = elevators;
 
-    // Filter po statusu
     if (filter !== 'all') {
       filtered = filtered.filter(e => e.status === filter);
     }
 
-    // Filter po search query
     if (searchQuery) {
+      const q = searchQuery.toLowerCase();
       filtered = filtered.filter(e =>
-        e.nazivStranke?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        e.ulica?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        e.mjesto?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        e.brojUgovora?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        e.brojDizala?.toLowerCase().includes(searchQuery.toLowerCase())
+        e.nazivStranke?.toLowerCase().includes(q) ||
+        e.ulica?.toLowerCase().includes(q) ||
+        e.mjesto?.toLowerCase().includes(q) ||
+        e.brojUgovora?.toLowerCase().includes(q) ||
+        e.brojDizala?.toLowerCase().includes(q)
       );
     }
 
@@ -76,27 +75,21 @@ export default function ElevatorsListScreen({ navigation }) {
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'active':
-        return '#10b981';
-      case 'out_of_order':
-        return '#ef4444';
-      case 'maintenance':
-        return '#f59e0b';
-      default:
-        return '#6b7280';
+      case 'aktivan': return '#10b981';
+      case 'u kvaru': return '#ef4444';
+      case 'u servisu': return '#f59e0b';
+      case 'neaktivan': return '#6b7280';
+      default: return '#6b7280';
     }
   };
 
   const getStatusLabel = (status) => {
     switch (status) {
-      case 'active':
-        return 'Aktivno';
-      case 'out_of_order':
-        return 'Neispravno';
-      case 'maintenance':
-        return 'Održavanje';
-      default:
-        return status;
+      case 'aktivan': return 'Aktivno';
+      case 'u kvaru': return 'U kvaru';
+      case 'u servisu': return 'U servisu';
+      case 'neaktivan': return 'Neaktivno';
+      default: return status;
     }
   };
 
@@ -160,38 +153,23 @@ export default function ElevatorsListScreen({ navigation }) {
 
       {/* Filters */}
       <View style={styles.filterContainer}>
-        <TouchableOpacity
-          style={[styles.filterButton, filter === 'all' && styles.filterButtonActive]}
-          onPress={() => setFilter('all')}
-        >
-          <Text style={[styles.filterText, filter === 'all' && styles.filterTextActive]}>
-            Sva
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.filterButton, filter === 'active' && styles.filterButtonActive]}
-          onPress={() => setFilter('active')}
-        >
-          <Text style={[styles.filterText, filter === 'active' && styles.filterTextActive]}>
-            Aktivna
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.filterButton, filter === 'out_of_order' && styles.filterButtonActive]}
-          onPress={() => setFilter('out_of_order')}
-        >
-          <Text style={[styles.filterText, filter === 'out_of_order' && styles.filterTextActive]}>
-            Neispravna
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.filterButton, filter === 'maintenance' && styles.filterButtonActive]}
-          onPress={() => setFilter('maintenance')}
-        >
-          <Text style={[styles.filterText, filter === 'maintenance' && styles.filterTextActive]}>
-            Održavanje
-          </Text>
-        </TouchableOpacity>
+        {[
+          { key: 'all', label: 'Sva' },
+          { key: 'aktivan', label: 'Aktivna' },
+          { key: 'u kvaru', label: 'U kvaru' },
+          { key: 'u servisu', label: 'U servisu' },
+          { key: 'neaktivan', label: 'Neaktivna' },
+        ].map(opt => (
+          <TouchableOpacity
+            key={opt.key}
+            style={[styles.filterButton, filter === opt.key && styles.filterButtonActive]}
+            onPress={() => setFilter(opt.key)}
+          >
+            <Text style={[styles.filterText, filter === opt.key && styles.filterTextActive]}>
+              {opt.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
       {/* List */}

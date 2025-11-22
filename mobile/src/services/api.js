@@ -1,5 +1,6 @@
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
+import { syncQueue } from '../database/db';
 
 // Backend URL - produkcija na Render
 const API_URL = 'https://appel-q97a.onrender.com/api';
@@ -55,40 +56,78 @@ api.interceptors.response.use(
     console.log('✅ Axios Response:', {
       status: response.status,
       statusText: response.statusText,
-      data: response.data,
+      dataType: typeof response.data,
     });
     return response;
   },
   async (error) => {
+    const isNetwork = !error.response;
+    const status = error.response?.status;
+    const method = error.config?.method?.toUpperCase();
+    const endpoint = error.config?.url;
+
     console.error('❌ Axios Response Error:', {
+      network: isNetwork,
       message: error.message,
-      code: error.code,
-      status: error.response?.status,
-      statusText: error.response?.statusText,
-      data: error.response?.data,
-      config: {
-        url: error.config?.url,
-        method: error.config?.method,
-        baseURL: error.config?.baseURL,
-      }
+      status,
+      endpoint,
+      method,
     });
-    
-    if (error.response?.status === 401) {
-      console.log('🔓 401 Unauthorized - provjeriavam token tip');
-      // Token je istekao - ali ako je offline token, NE briši ga
+
+    // Standardiziraj error objekt
+    const normalized = {
+      status: status || 0,
+      network: isNetwork,
+      endpoint,
+      method,
+      message: error.response?.data?.message || error.message || 'Neuspješan zahtjev',
+      raw: error.response?.data,
+    };
+
+    // 401: token istekao (osim offline demo)
+    if (status === 401) {
       const token = await SecureStore.getItemAsync('userToken');
       if (token && token.startsWith('offline_token_')) {
-        console.log('⚠️ Offline token - ne brišem jer je to demo korisnik');
-        // NE briši offline token - korisnik je u offline modu
+        console.log('⚠️ Offline token (demo) - ne brišem');
       } else {
-        console.log('🔓 Brisanje online tokena jer je istekao');
         await SecureStore.deleteItemAsync('userToken');
         await SecureStore.deleteItemAsync('userData');
+        console.log('🔓 Token uklonjen (401)');
       }
     }
-    return Promise.reject(error);
+
+    // 403: nedovoljna prava - eksplicitna poruka
+    if (status === 403) {
+      normalized.message = 'Nedovoljna prava za ovu akciju.';
+    }
+
+    // Ako je network ili 5xx i radi se o mutaciji (POST/PUT/DELETE) -> offline queue
+    if ((isNetwork || (status && status >= 500)) && ['POST','PUT','DELETE'].includes(method)) {
+      try {
+        syncQueue.add(method, endpoint, error.config?.data || '{}');
+        console.log('🗂️ Zahtjev dodan u offline queue:', { method, endpoint });
+        return Promise.reject({ ...normalized, queued: true });
+      } catch (qErr) {
+        console.log('⚠️ Neuspješno spremanje u queue:', qErr.message);
+      }
+    }
+
+    return Promise.reject(normalized);
   }
 );
+
+// Generic helper s fallback-om (opcionalno za ručnu upotrebu)
+export const requestWithQueue = async (method, url, data = {}) => {
+  try {
+    const res = await api.request({ method, url, data });
+    return { data: res.data, status: res.status, queued: false };
+  } catch (err) {
+    if (err.queued) {
+      return { data: null, status: err.status, queued: true, message: err.message };
+    }
+    throw err; // Propagiraj normalizirani error ako nije queue slučaj
+  }
+};
 
 // Auth API
 export const authAPI = {

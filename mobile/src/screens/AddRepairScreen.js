@@ -14,16 +14,26 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import * as SecureStore from 'expo-secure-store';
 import { useAuth } from '../context/AuthContext';
 import { repairDB } from '../database/db';
+import * as SecureStore from 'expo-secure-store';
 import { repairsAPI } from '../services/api';
 
 export default function AddRepairScreen({ navigation, route }) {
   const { elevator } = route.params;
   const { user, isOnline } = useAuth();
+  const [isOfflineDemo, setIsOfflineDemo] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
 
   // Konvertiraj isOnline u boolean
   const online = Boolean(isOnline);
+
+  // Detektiraj offline demo token da omogući lokalni unos
+  React.useEffect(() => {
+    (async () => {
+      const token = await SecureStore.getItemAsync('userToken');
+      setIsOfflineDemo(Boolean(token && token.startsWith('offline_token_')));
+    })();
+  }, []);
 
   const [formData, setFormData] = useState({
     reportedDate: new Date(),
@@ -144,7 +154,7 @@ export default function AddRepairScreen({ navigation, route }) {
         </View>
 
         {/* Offline warning */}
-        {!online && (
+        {!online && !isOfflineDemo && (
           <View style={styles.offlineWarning}>
             <Ionicons name="warning" size={20} color="#ef4444" />
             <Text style={styles.offlineText}>
@@ -206,9 +216,9 @@ export default function AddRepairScreen({ navigation, route }) {
 
         {/* Submit button */}
         <TouchableOpacity
-          style={[styles.submitButton, (!online || loading) && styles.submitButtonDisabled]}
+          style={[styles.submitButton, (loading || (!online && !isOfflineDemo)) && styles.submitButtonDisabled]}
           onPress={handleSubmit}
-          disabled={!online || loading}
+          disabled={loading || (!online && !isOfflineDemo)}
         >
           {loading ? (
             <ActivityIndicator color="#fff" />

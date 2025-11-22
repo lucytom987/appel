@@ -86,11 +86,12 @@ export default function ServicesListScreen({ navigation }) {
             try {
               setDeleting(service.id);
               // Obriši s backenda ako je sinkroniziran
-              if (service.synced && !service.id.startsWith('local_')) {
-                await servicesAPI.delete(service.id);
+              const backendId = service._id || service.id;
+              if (service.synced && backendId && !String(backendId).startsWith('local_')) {
+                await servicesAPI.delete(backendId);
               }
               // Obriši iz lokalne baze
-              serviceDB.delete(service.id);
+              serviceDB.delete(backendId);
               loadServices();
             } catch (error) {
               console.error('Greška pri brisanju servisa:', error);
@@ -224,10 +225,10 @@ export default function ServicesListScreen({ navigation }) {
       </View>
 
       {/* Services list */}
-      <FlatList
-        data={filteredServices}
-        renderItem={renderServiceItem}
-        keyExtractor={(item) => item._id || item.localId}
+          <FlatList
+            data={filteredServices}
+            renderItem={renderServiceItem}
+            keyExtractor={(item) => item._id || item.id}
         contentContainerStyle={styles.listContent}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />

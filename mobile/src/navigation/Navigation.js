@@ -13,8 +13,10 @@ import AddElevatorScreen from '../screens/AddElevatorScreen';
 import EditElevatorScreen from '../screens/EditElevatorScreen';
 import ServicesListScreen from '../screens/ServicesListScreen';
 import AddServiceScreen from '../screens/AddServiceScreen';
+import ServiceDetailsScreen from '../screens/ServiceDetailsScreen';
 import RepairsListScreen from '../screens/RepairsListScreen';
 import AddRepairScreen from '../screens/AddRepairScreen';
+import RepairDetailsScreen from '../screens/RepairDetailsScreen';
 import UserManagementScreen from '../screens/UserManagementScreen';
 import AddUserScreen from '../screens/AddUserScreen';
 
@@ -43,8 +45,10 @@ export default function Navigation() {
             <Stack.Screen name="AddElevator" component={AddElevatorScreen} />
             <Stack.Screen name="EditElevator" component={EditElevatorScreen} />
             <Stack.Screen name="Services" component={ServicesListScreen} />
+            <Stack.Screen name="ServiceDetails" component={ServiceDetailsScreen} />
             <Stack.Screen name="AddService" component={AddServiceScreen} />
             <Stack.Screen name="Repairs" component={RepairsListScreen} />
+            <Stack.Screen name="RepairDetails" component={RepairDetailsScreen} />
             <Stack.Screen name="AddRepair" component={AddRepairScreen} />
             <Stack.Screen name="UserManagement" component={UserManagementScreen} />
             <Stack.Screen name="AddUser" component={AddUserScreen} />

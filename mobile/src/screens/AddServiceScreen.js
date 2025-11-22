@@ -13,17 +13,25 @@ import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as SecureStore from 'expo-secure-store';
 import { useAuth } from '../context/AuthContext';
-import { serviceDB } from '../database/db';
+import { serviceDB, elevatorDB } from '../database/db';
 import { servicesAPI } from '../services/api';
 
 export default function AddServiceScreen({ navigation, route }) {
   const { elevator } = route.params;
   const { user, isOnline } = useAuth();
+  const [isOfflineDemo, setIsOfflineDemo] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
 
   // Konvertiraj isOnline u boolean
   const online = Boolean(isOnline);
+
+  React.useEffect(() => {
+    (async () => {
+      const token = await SecureStore.getItemAsync('userToken');
+      setIsOfflineDemo(Boolean(token && token.startsWith('offline_token_')));
+    })();
+  }, []);
 
   const [formData, setFormData] = useState({
     serviceDate: new Date(),
@@ -128,6 +136,18 @@ export default function AddServiceScreen({ navigation, route }) {
             synced: true,
           });
 
+          // Lokalno osvježi dizalo (zadnji/sljedeći servis)
+          try {
+            const elev = elevatorDB.getById(elevator._id || elevator.id);
+            if (elev) {
+              const zadnji = serviceData.datum;
+              const next = serviceData.sljedeciServis;
+              elevatorDB.update(elev.id, { ...elev, zadnjiServis: zadnji, sljedeciServis: next });
+            }
+          } catch (e) {
+            console.log('⚠️ Ne mogu lokalno osvježiti dizalo servis datume:', e.message);
+          }
+
           Alert.alert('Uspjeh', 'Servis uspješno logiran', [
             { text: 'OK', onPress: () => navigation.goBack() }
           ]);
@@ -138,11 +158,23 @@ export default function AddServiceScreen({ navigation, route }) {
           }
           // Fallback na lokalnu bazu
           console.log('⚠️ Backend greška - fallback na lokalnu bazu');
+          const localId = 'local_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
           serviceDB.insert({
-            id: 'local_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+            id: localId,
             ...serviceData,
             synced: 0,
           });
+          // Lokalno osvježi dizalo (zadnji/sljedeći servis)
+          try {
+            const elev = elevatorDB.getById(elevator._id || elevator.id);
+            if (elev) {
+              const zadnji = serviceData.datum;
+              const next = serviceData.sljedeciServis;
+              elevatorDB.update(elev.id, { ...elev, zadnjiServis: zadnji, sljedeciServis: next });
+            }
+          } catch (e) {
+            console.log('⚠️ Ne mogu lokalno osvježiti dizalo servis datume (offline fallback):', e.message);
+          }
 
           Alert.alert('Uspjeh', 'Servis je dodan lokalno (bit će sinkronizovan kada budete online)', [
             { text: 'OK', onPress: () => navigation.goBack() }
@@ -179,7 +211,7 @@ export default function AddServiceScreen({ navigation, route }) {
         </View>
 
         {/* Offline warning */}
-        {!online && (
+        {!online && !isOfflineDemo && (
           <View style={styles.offlineWarning}>
             <Ionicons name="warning" size={20} color="#ef4444" />
             <Text style={styles.offlineText}>
@@ -276,9 +308,9 @@ export default function AddServiceScreen({ navigation, route }) {
 
         {/* Submit button */}
         <TouchableOpacity
-          style={[styles.submitButton, (!online || loading) && styles.submitButtonDisabled]}
+          style={[styles.submitButton, (loading || (!online && !isOfflineDemo)) && styles.submitButtonDisabled]}
           onPress={handleSubmit}
-          disabled={!online || loading}
+          disabled={loading || (!online && !isOfflineDemo)}
         >
           {loading ? (
             <ActivityIndicator color="#fff" />

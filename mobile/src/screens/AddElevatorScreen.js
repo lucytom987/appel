@@ -135,12 +135,13 @@ export default function AddElevatorScreen({ navigation }) {
           // Online s pravim korisničkim tokenom - spremi na backend
           try {
             const response = await elevatorsAPI.create(elevatorData);
+            const created = response.data?.data || response.data;
 
-            // Spremi u lokalnu bazu
+            // Spremi u lokalnu bazu s ispravnim poljima
             elevatorDB.insert({
-              _id: response.data._id || response.data.id,
-              ...response.data,
-              synced: true,
+              id: created._id || created.id,
+              ...created,
+              synced: 1,
             });
             
             successCount++;

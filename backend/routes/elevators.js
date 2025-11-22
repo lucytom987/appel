@@ -33,9 +33,9 @@ router.get('/', authenticate, async (req, res) => {
 router.get('/stats/overview', authenticate, async (req, res) => {
   try {
     const total = await Elevator.countDocuments();
-    const active = await Elevator.countDocuments({ status: 'active' });
-    const outOfOrder = await Elevator.countDocuments({ status: 'out_of_order' });
-    const maintenance = await Elevator.countDocuments({ status: 'maintenance' });
+    const active = await Elevator.countDocuments({ status: 'aktivan' });
+    const outOfOrder = await Elevator.countDocuments({ status: 'u kvaru' });
+    const maintenance = await Elevator.countDocuments({ status: 'u servisu' });
 
     res.json({
       success: true,
@@ -90,15 +90,21 @@ router.post('/', authenticate, async (req, res) => {
   try {
     const elevator = new Elevator({
       ...req.body,
-      createdBy: req.user.id
+      kreiranOd: req.user._id
     });
 
     await elevator.save();
 
     // Audit log
-    await logAction(req.user.id, 'CREATE', 'Elevator', elevator._id, {
-      brojUgovora: elevator.brojUgovora,
-      nazivStranke: elevator.nazivStranke
+    await logAction({
+      korisnikId: req.user._id,
+      akcija: 'CREATE',
+      entitet: 'Elevator',
+      entitetId: elevator._id,
+      entitetNaziv: `${elevator.nazivStranke} - ${elevator.brojDizala}`,
+      noveVrijednosti: elevator.toObject(),
+      ipAdresa: req.ip,
+      opis: 'Kreirano novo dizalo'
     });
 
     res.status(201).json({
@@ -134,16 +140,22 @@ router.put('/:id', authenticate, checkRole(['menadzer', 'admin']), async (req, r
     const elevator = await Elevator.findByIdAndUpdate(
       req.params.id,
       { 
-        ...req.body,
-        updatedBy: req.user.id 
+        ...req.body
       },
       { new: true, runValidators: true }
     );
 
     // Audit log
-    await logAction(req.user.id, 'UPDATE', 'Elevator', elevator._id, {
-      old: { nazivStranke: oldElevator.nazivStranke, status: oldElevator.status },
-      new: { nazivStranke: elevator.nazivStranke, status: elevator.status }
+    await logAction({
+      korisnikId: req.user._id,
+      akcija: 'UPDATE',
+      entitet: 'Elevator',
+      entitetId: elevator._id,
+      entitetNaziv: `${elevator.nazivStranke} - ${elevator.brojDizala}`,
+      stareVrijednosti: { nazivStranke: oldElevator.nazivStranke, status: oldElevator.status },
+      noveVrijednosti: { nazivStranke: elevator.nazivStranke, status: elevator.status },
+      ipAdresa: req.ip,
+      opis: 'Ažurirano dizalo'
     });
 
     res.json({
@@ -178,9 +190,15 @@ router.delete('/:id', authenticate, checkRole(['menadzer', 'admin']), async (req
     await elevator.deleteOne();
 
     // Audit log
-    await logAction(req.user.id, 'DELETE', 'Elevator', req.params.id, {
-      brojUgovora: elevator.brojUgovora,
-      nazivStranke: elevator.nazivStranke
+    await logAction({
+      korisnikId: req.user._id,
+      akcija: 'DELETE',
+      entitet: 'Elevator',
+      entitetId: req.params.id,
+      entitetNaziv: `${elevator.nazivStranke} - ${elevator.brojDizala}`,
+      stareVrijednosti: elevator.toObject(),
+      ipAdresa: req.ip,
+      opis: 'Obrisano dizalo'
     });
 
     res.json({

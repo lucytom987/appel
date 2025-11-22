@@ -137,11 +137,20 @@ router.put('/:id', authenticate, checkRole(['menadzer', 'admin']), async (req, r
       });
     }
 
+    const updateData = { ...req.body };
+    // Ako je zadnjiServis i/ili intervalServisa zadano, izračunaj sljedeći servis
+    const zadnjiServis = updateData.zadnjiServis ?? oldElevator.zadnjiServis;
+    const intervalServisa = updateData.intervalServisa ?? oldElevator.intervalServisa ?? 1;
+    if (zadnjiServis) {
+      const nextDate = new Date(zadnjiServis);
+      nextDate.setMonth(nextDate.getMonth() + Number(intervalServisa || 1));
+      updateData.sljedeciServis = nextDate;
+    }
+    updateData.azuriranDatum = new Date();
+
     const elevator = await Elevator.findByIdAndUpdate(
       req.params.id,
-      { 
-        ...req.body
-      },
+      updateData,
       { new: true, runValidators: true }
     );
 

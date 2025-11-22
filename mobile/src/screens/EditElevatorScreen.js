@@ -111,13 +111,21 @@ export default function EditElevatorScreen({ navigation, route }) {
         napomene: formData.napomene,
       };
 
+      // Odredi ispravan ID (lokalni 'id' ili server '_id')
+      const eid = elevator._id || elevator.id;
+      if (!eid) {
+        throw new Error('Nedostaje ID dizala (id/_id)');
+      }
+
       // Ažuriraj na backend
-      const response = await elevatorsAPI.update(elevator._id, elevatorData);
+      const response = await elevatorsAPI.update(eid, elevatorData);
 
       // Ažuriraj u lokalnoj bazi
-      elevatorDB.update(elevator._id, {
-        ...response.data,
-        synced: true,
+      const updated = response.data?.data || response.data;
+      elevatorDB.update(eid, {
+        ...updated,
+        id: eid,
+        synced: 1,
       });
 
       Alert.alert('Uspjeh', 'Dizalo uspješno ažurirano', [
@@ -129,7 +137,8 @@ export default function EditElevatorScreen({ navigation, route }) {
 
     } catch (error) {
       console.error('Greška pri ažuriranju dizala:', error);
-      Alert.alert('Greška', error.response?.data?.message || 'Nije moguće ažurirati dizalo');
+      const msg = error.response?.data?.message || error.message || 'Nije moguće ažurirati dizalo';
+      Alert.alert('Greška', msg);
     } finally {
       setLoading(false);
     }
@@ -164,13 +173,18 @@ export default function EditElevatorScreen({ navigation, route }) {
       const token = await SecureStore.getItemAsync('userToken');
       const isOfflineUser = token?.startsWith('offline_token_');
 
+      const eid = elevator._id || elevator.id;
+      if (!eid) {
+        throw new Error('Nedostaje ID dizala (id/_id)');
+      }
+
       // Ako je online i pravi korisnik - obriši s backenda
       if (online && !isOfflineUser) {
-        await elevatorsAPI.delete(elevator._id);
+        await elevatorsAPI.delete(eid);
       }
 
       // Obriši iz lokalne baze (uvijek, offline ili online)
-      elevatorDB.delete(elevator._id);
+      elevatorDB.delete(eid);
 
       Alert.alert('Uspjeh', 'Dizalo obrisano', [
         { 
@@ -191,7 +205,7 @@ export default function EditElevatorScreen({ navigation, route }) {
       } else {
         // Ako je offline - obriši lokalno kako je planirano
         try {
-          elevatorDB.delete(elevator._id);
+          elevatorDB.delete(eid);
           Alert.alert('Uspjeh', 'Dizalo obrisano lokalno (sync će se obaviti kada budete online)', [
             { 
               text: 'OK', 

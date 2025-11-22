@@ -90,7 +90,7 @@ export default function AddServiceScreen({ navigation, route }) {
 
     try {
       const serviceData = {
-        elevatorId: elevator._id,
+        elevatorId: elevator._id || elevator.id,
         serviserID: user._id,
         datum: formData.serviceDate.toISOString(),
         napomene: formData.napomene,
@@ -130,10 +130,21 @@ export default function AddServiceScreen({ navigation, route }) {
         try {
           const response = await servicesAPI.create(serviceData);
 
-          // Spremi u lokalnu bazu
+          // Spremi u lokalnu bazu (API vraća { success, message, data })
+          const created = response.data?.data || response.data;
           serviceDB.insert({
-            ...response.data,
-            synced: true,
+            id: created._id || created.id,
+            elevatorId: created.elevatorId || created.elevator || serviceData.elevatorId,
+            serviserID: created.serviserID || created.performedBy || serviceData.serviserID,
+            datum: created.datum || created.serviceDate || serviceData.datum,
+            checklist: created.checklist || serviceData.checklist,
+            imaNedostataka: created.imaNedostataka ?? serviceData.imaNedostataka,
+            nedostaci: created.nedostaci || serviceData.nedostaci,
+            napomene: created.napomene ?? created.notes ?? serviceData.napomene,
+            sljedeciServis: created.sljedeciServis || created.nextServiceDate || serviceData.sljedeciServis,
+            kreiranDatum: created.kreiranDatum || new Date().toISOString(),
+            azuriranDatum: created.azuriranDatum || new Date().toISOString(),
+            synced: 1,
           });
 
           // Lokalno osvježi dizalo (zadnji/sljedeći servis)

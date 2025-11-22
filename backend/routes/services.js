@@ -19,15 +19,15 @@ router.get('/', authenticate, async (req, res) => {
     if (technician) filter.performedBy = technician;
     
     if (startDate || endDate) {
-      filter.serviceDate = {};
-      if (startDate) filter.serviceDate.$gte = new Date(startDate);
-      if (endDate) filter.serviceDate.$lte = new Date(endDate);
+      filter.datum = {};
+      if (startDate) filter.datum.$gte = new Date(startDate);
+      if (endDate) filter.datum.$lte = new Date(endDate);
     }
 
     const services = await Service.find(filter)
-      .populate('elevator', 'address buildingCode location')
-      .populate('performedBy', 'name email')
-      .sort({ serviceDate: -1 })
+      .populate('elevatorId', 'brojUgovora nazivStranke ulica mjesto brojDizala')
+      .populate('serviserID', 'ime prezime email')
+      .sort({ datum: -1 })
       .lean();
 
     res.json({
@@ -57,22 +57,17 @@ router.get('/stats/monthly', authenticate, async (req, res) => {
     const startDate = new Date(currentYear, currentMonth - 1, 1);
     const endDate = new Date(currentYear, currentMonth, 0, 23, 59, 59);
 
-    const completed = await Service.countDocuments({
-      serviceDate: { $gte: startDate, $lte: endDate },
-      status: 'completed'
-    });
-
     const total = await Service.countDocuments({
-      serviceDate: { $gte: startDate, $lte: endDate }
+      datum: { $gte: startDate, $lte: endDate }
     });
-
-    const pending = total - completed;
 
     // Koliko dizala još treba servisirat ovaj mjesec
     const totalElevators = await Elevator.countDocuments();
-    const servicedElevatorIds = await Service.distinct('elevator', {
-      serviceDate: { $gte: startDate, $lte: endDate }
+    const servicedElevatorIds = await Service.distinct('elevatorId', {
+      datum: { $gte: startDate, $lte: endDate }
     });
+    const completed = total;
+    const pending = 0;
     const needsService = totalElevators - servicedElevatorIds.length;
 
     res.json({
@@ -101,8 +96,8 @@ router.get('/stats/monthly', authenticate, async (req, res) => {
 router.get('/:id', authenticate, async (req, res) => {
   try {
     const service = await Service.findById(req.params.id)
-      .populate('elevator', 'address buildingCode location manufacturer model')
-      .populate('performedBy', 'name email role')
+      .populate('elevatorId', 'brojUgovora nazivStranke ulica mjesto brojDizala')
+      .populate('serviserID', 'ime prezime email uloga')
       .lean();
 
     if (!service) {
@@ -131,7 +126,8 @@ router.get('/:id', authenticate, async (req, res) => {
 router.post('/', authenticate, async (req, res) => {
   try {
     // Provjeri da li dizalo postoji
-    const elevator = await Elevator.findById(req.body.elevator);
+    const elevatorId = req.body.elevatorId || req.body.elevator;
+    const elevator = await Elevator.findById(elevatorId);
     if (!elevator) {
       return res.status(404).json({
         success: false,
@@ -141,24 +137,34 @@ router.post('/', authenticate, async (req, res) => {
 
     const service = new Service({
       ...req.body,
-      performedBy: req.user.id
+      elevatorId: elevatorId,
+      serviserID: req.user._id
     });
 
     await service.save();
 
     // Ažuriraj zadnji servis na dizalu
-    elevator.lastServiceDate = service.serviceDate;
+    elevator.zadnjiServis = service.datum;
+    if (service.sljedeciServis) {
+      elevator.sljedeciServis = service.sljedeciServis;
+    }
     await elevator.save();
 
     // Audit log
-    await logAction(req.user.id, 'CREATE', 'Service', service._id, {
-      elevator: elevator.address,
-      serviceDate: service.serviceDate
+    await logAction({
+      korisnikId: req.user._id,
+      akcija: 'CREATE',
+      entitet: 'Service',
+      entitetId: service._id,
+      entitetNaziv: `${elevator.nazivStranke} - ${elevator.brojDizala}`,
+      noveVrijednosti: service.toObject(),
+      ipAdresa: req.ip,
+      opis: 'Kreiran novi servis'
     });
 
     // Populate prije slanja
-    await service.populate('elevator', 'address buildingCode');
-    await service.populate('performedBy', 'name email');
+    await service.populate('elevatorId', 'brojUgovora nazivStranke ulica mjesto brojDizala');
+    await service.populate('serviserID', 'ime prezime email');
 
     res.status(201).json({
       success: true,
@@ -194,12 +200,19 @@ router.put('/:id', authenticate, checkRole(['menadzer', 'admin']), async (req, r
       req.body,
       { new: true, runValidators: true }
     )
-      .populate('elevator', 'address buildingCode')
-      .populate('performedBy', 'name email');
+      .populate('elevatorId', 'brojUgovora nazivStranke brojDizala')
+      .populate('serviserID', 'ime prezime email');
 
     // Audit log
-    await logAction(req.user.id, 'UPDATE', 'Service', service._id, {
-      elevator: service.elevator.address
+    await logAction({
+      korisnikId: req.user._id,
+      akcija: 'UPDATE',
+      entitet: 'Service',
+      entitetId: service._id,
+      entitetNaziv: service.elevatorId ? `${service.elevatorId.nazivStranke} - ${service.elevatorId.brojDizala}` : 'Nepoznato dizalo',
+      noveVrijednosti: service.toObject(),
+      ipAdresa: req.ip,
+      opis: 'Ažuriran servis'
     });
 
     res.json({
@@ -234,7 +247,15 @@ router.delete('/:id', authenticate, checkRole(['serviser', 'menadzer', 'admin'])
     await service.deleteOne();
 
     // Audit log
-    await logAction(req.user.id, 'DELETE', 'Service', req.params.id);
+    await logAction({
+      korisnikId: req.user._id,
+      akcija: 'DELETE',
+      entitet: 'Service',
+      entitetId: req.params.id,
+      stareVrijednosti: service.toObject(),
+      ipAdresa: req.ip,
+      opis: 'Obrisan servis'
+    });
 
     res.json({
       success: true,

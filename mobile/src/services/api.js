@@ -22,6 +22,7 @@ api.interceptors.request.use(
       url: config.url,
       baseURL: config.baseURL,
       fullURL: `${config.baseURL}${config.url}`,
+      data: config.data, // LOG REQUEST BODY
     });
     
     try {

@@ -2,6 +2,7 @@ import NetInfo from '@react-native-community/netinfo';
 import * as SecureStore from 'expo-secure-store';
 import { elevatorsAPI, servicesAPI, repairsAPI, messagesAPI, usersAPI } from './api';
 import { elevatorDB, serviceDB, repairDB, messageDB, userDB, syncQueue } from '../database/db';
+import { mergeRecords } from './conflictResolver';
 
 let isOnline = false;
 let syncInterval = null;
@@ -42,24 +43,65 @@ export const syncElevatorsFromServer = async () => {
 
     console.log('🔄 Syncing elevators from server...');
     const response = await elevatorsAPI.getAll();
-    const serverElevators = response.data.data;
-    const serverIds = serverElevators.map(e => e._id);
+    const rawServerElevators = response.data.data;
+    
+    // Normaliziraj server records
+    const serverElevators = rawServerElevators.map(e => ({
+      id: e._id,
+      brojUgovora: e.brojUgovora,
+      nazivStranke: e.nazivStranke,
+      ulica: e.ulica,
+      mjesto: e.mjesto,
+      brojDizala: e.brojDizala,
+      kontaktOsoba: e.kontaktOsoba,
+      koordinate: e.koordinate || { latitude: 0, longitude: 0 },
+      status: e.status || 'aktivan',
+      intervalServisa: e.intervalServisa || 1,
+      zadnjiServis: e.zadnjiServis,
+      sljedeciServis: e.sljedeciServis,
+      napomene: e.napomene || '',
+      updated_at: new Date(e.updatedAt || e.azuriranDatum || Date.now()).getTime(),
+    }));
 
     // Dohvati lokalne elevatore
     const localElevators = elevatorDB.getAll();
-    const localIds = localElevators.map(e => e.id);
-
-    // Obriši lokalne koji više ne postoje na serveru
-    const deletedIds = localIds.filter(id => !serverIds.includes(id));
-    for (const id of deletedIds) {
-      elevatorDB.delete(id);
-      console.log(`🗑️ Obrisano lokalno dizalo ${id} (uklanjeno sa servera)`);
-    }
-
-    // Bulk insert nove/ažurirane elevatore
-    elevatorDB.bulkInsert(serverElevators);
     
-    console.log(`✅ Synced ${serverElevators.length} elevators (obrisano ${deletedIds.length})`);
+    // 🔧 CONFLICT RESOLUTION - koristi mergeRecords
+    const { toUpdate, toDelete, conflicts } = mergeRecords(localElevators, serverElevators, 'id');
+    
+    console.log(`🔍 Merge rezultat: ${toUpdate.length} za update, ${toDelete.length} za brisanje, ${conflicts.length} konflikti`);
+    
+    // Obriši lokalne zapise koji ne postoje na serveru
+    toDelete.forEach(id => {
+      elevatorDB.delete(id);
+      console.log(`🗑️ Obrisano lokalno dizalo ${id} (uklonjena sa servera)`);
+    });
+
+    // Ažuriraj/insert sa server verzijom
+    toUpdate.forEach(elevator => {
+      try {
+        const existing = elevatorDB.getById(elevator.id);
+        if (existing) {
+          elevatorDB.update(elevator.id, elevator);
+          console.log(`🔄 Updated elevator ${elevator.id} (server verzija novija)`);
+        } else {
+          elevatorDB.insert(elevator);
+          console.log(`➕ Inserted novi elevator ${elevator.id} sa servera`);
+        }
+      } catch (e) {
+        console.log(`⚠️ Greška pri update dizala ${elevator.id}:`, e.message);
+      }
+    });
+    
+    // Log konflikte
+    if (conflicts.length > 0) {
+      console.log(`⚠️ ${conflicts.length} konflikti pronađeni - koristim server verziju`);
+      conflicts.forEach(c => {
+        console.log(`  - Elevator ${c.local.id}: ${c.message}`);
+      });
+    }
+    
+    console.log(`✅ Synced ${toUpdate.length} elevators (obrisano ${toDelete.length}, konflikti ${conflicts.length})`);
     return true;
   } catch (error) {
     // Provjeri je li offline token
@@ -92,7 +134,8 @@ export const syncServicesFromServer = async () => {
     console.log('🔄 Syncing services from server...');
     const response = await servicesAPI.getAll();
     const rawServerServices = response.data.data || [];
-    // Normaliziraj prije inserta
+    
+    // Normaliziraj server records
     const serverServices = rawServerServices.map(s => {
       const serviserObj = s.serviserID;
       let serviserID = serviserObj;
@@ -118,39 +161,51 @@ export const syncServicesFromServer = async () => {
         sljedeciServis: s.sljedeciServis || s.nextServiceDate || null,
         kreiranDatum: s.kreiranDatum || s.createdAt || new Date().toISOString(),
         azuriranDatum: s.azuriranDatum || s.updatedAt || new Date().toISOString(),
+        updated_at: new Date(s.updatedAt || s.azuriranDatum || Date.now()).getTime(),
       };
     });
-    // serverServices objects use 'id' property (mapped from _id). Use it for comparison.
-    const serverIds = serverServices.map(s => s.id);
 
     // Dohvati lokalne servise
     const localServices = serviceDB.getAll();
     
-    // Obriši lokalne koji više ne postoje na serveru
-    // ALI ne briši one koji imaju synced=0 (čekaju upload) ili dummy_ prefix
-    const deletedIds = [];
-    for (const service of localServices) {
-      const id = service.id;
-      // SQLite vraća 0 ili 1, ne false ili true
-      if (!serverIds.includes(id) && !id.startsWith('dummy_') && service.synced !== 0) {
-        serviceDB.delete(id);
-        deletedIds.push(id);
-        console.log(`🗑️ Obrisana lokalna usluga ${id} (uklanjene sa servera)`);
-      }
-    }
+    // 🔧 CONFLICT RESOLUTION - koristi mergeRecords
+    const { toUpdate, toDelete, conflicts } = mergeRecords(localServices, serverServices, 'id');
+    
+    console.log(`🔍 Merge rezultat: ${toUpdate.length} za update, ${toDelete.length} za brisanje, ${conflicts.length} konflikti`);
+    
+    // Obriši lokalne zapise koji ne postoje na serveru
+    toDelete.forEach(id => {
+      serviceDB.delete(id);
+      console.log(`🗑️ Obrisana lokalna usluga ${id} (uklonjena sa servera)`);
+    });
 
-    // Bulk insert nove/ažurirane servise
-    serviceDB.bulkInsert(serverServices);
-    // Označi ih kao synced (inače će ostati synced=0 i ponovno se slati na server)
-    serverServices.forEach(s => {
+    // Ažuriraj/insert sa server verzijom (conflict resolution odlučio)
+    toUpdate.forEach(service => {
       try {
-        serviceDB.markSynced(s.id, s.id);
+        // Pokušaj update prvo, ako ne postoji onda insert
+        const existing = serviceDB.getById(service.id);
+        if (existing) {
+          serviceDB.update(service.id, service);
+          console.log(`🔄 Updated service ${service.id} (server verzija novija)`);
+        } else {
+          serviceDB.insert(service);
+          console.log(`➕ Inserted novi service ${service.id} sa servera`);
+        }
+        serviceDB.markSynced(service.id, service.id);
       } catch (e) {
-        // ignore
+        console.log(`⚠️ Greška pri update servisa ${service.id}:`, e.message);
       }
     });
     
-    console.log(`✅ Synced ${serverServices.length} services (obrisano ${deletedIds.length})`);
+    // Log konflikte (za sad ih nismo resolution-ali s UI dialogom, već smo odabrali server verziju)
+    if (conflicts.length > 0) {
+      console.log(`⚠️ ${conflicts.length} konflikti pronađeni - koristim server verziju`);
+      conflicts.forEach(c => {
+        console.log(`  - Service ${c.local.id}: ${c.message}`);
+      });
+    }
+    
+    console.log(`✅ Synced ${toUpdate.length} services (obrisano ${toDelete.length}, konflikti ${conflicts.length})`);
     return true;
   } catch (error) {
     // Provjeri je li offline token
@@ -322,40 +377,66 @@ export const syncRepairsFromServer = async () => {
 
     console.log('🔄 Syncing repairs from server...');
     const response = await repairsAPI.getAll();
-    const serverRepairs = response.data.data || [];
-    const serverIds = serverRepairs.map(r => r._id);
+    const rawServerRepairs = response.data.data || [];
+    
+    // Normaliziraj server records
+    const serverRepairs = rawServerRepairs.map(r => ({
+      id: r._id,
+      elevatorId: typeof r.elevatorId === 'object' ? (r.elevatorId._id || r.elevatorId.id) : r.elevatorId,
+      serviserID: typeof r.serviserID === 'object' ? (r.serviserID._id || r.serviserID.id) : r.serviserID,
+      datumPrijave: r.datumPrijave || r.reportDate,
+      datumPopravka: r.datumPopravka || r.repairDate,
+      opisKvara: r.opisKvara || r.faultDescription,
+      opisPopravka: r.opisPopravka || r.repairDescription,
+      status: r.status || 'čekanje',
+      radniNalogPotpisan: r.radniNalogPotpisan || false,
+      popravkaUPotpunosti: r.popravkaUPotpunosti || false,
+      napomene: r.napomene || r.notes || '',
+      kreiranDatum: r.kreiranDatum || r.createdAt || new Date().toISOString(),
+      azuriranDatum: r.azuriranDatum || r.updatedAt || new Date().toISOString(),
+      updated_at: new Date(r.updatedAt || r.azuriranDatum || Date.now()).getTime(),
+    }));
 
     // Dohvati lokalne popravke
     const localRepairs = repairDB.getAll();
     
-    // Obriši lokalne koji više ne postoje na serveru
-    // ALI ne briši one koji imaju synced=0 (čekaju upload) ili dummy_ prefix
-    const deletedIds = [];
-    for (const repair of localRepairs) {
-      const id = repair.id;
-      // SQLite vraća 0 ili 1, ne false ili true
-      if (!serverIds.includes(id) && !id.startsWith('dummy_') && repair.synced !== 0) {
-        repairDB.delete(id);
-        deletedIds.push(id);
-        console.log(`🗑️ Obrisana lokalna popravka ${id} (uklanjene sa servera)`);
-      }
-    }
+    // 🔧 CONFLICT RESOLUTION - koristi mergeRecords
+    const { toUpdate, toDelete, conflicts } = mergeRecords(localRepairs, serverRepairs, 'id');
+    
+    console.log(`🔍 Merge rezultat: ${toUpdate.length} za update, ${toDelete.length} za brisanje, ${conflicts.length} konflikti`);
+    
+    // Obriši lokalne zapise koji ne postoje na serveru
+    toDelete.forEach(id => {
+      repairDB.delete(id);
+      console.log(`🗑️ Obrisana lokalna popravka ${id} (uklonjena sa servera)`);
+    });
 
-    // Bulk insert nove/ažurirane popravke
-    repairDB.bulkInsert(serverRepairs);
-    // Označi ih kao synced (inače će ostati synced=0)
-    serverRepairs.forEach(r => {
+    // Ažuriraj/insert sa server verzijom (conflict resolution odlučio)
+    toUpdate.forEach(repair => {
       try {
-        const idVal = r._id || r.id;
-        if (idVal) {
-          repairDB.markSynced(idVal, idVal);
+        const existing = repairDB.getById(repair.id);
+        if (existing) {
+          repairDB.update(repair.id, repair);
+          console.log(`🔄 Updated repair ${repair.id} (server verzija novija)`);
+        } else {
+          repairDB.insert(repair);
+          console.log(`➕ Inserted novi repair ${repair.id} sa servera`);
         }
+        repairDB.markSynced(repair.id, repair.id);
       } catch (e) {
-        // ignore
+        console.log(`⚠️ Greška pri update popravka ${repair.id}:`, e.message);
       }
     });
     
-    console.log(`✅ Synced ${serverRepairs.length} repairs (obrisano ${deletedIds.length})`);
+    // Log konflikte
+    if (conflicts.length > 0) {
+      console.log(`⚠️ ${conflicts.length} konflikti pronađeni - koristim server verziju`);
+      conflicts.forEach(c => {
+        console.log(`  - Repair ${c.local.id}: ${c.message}`);
+      });
+    }
+    
+    console.log(`✅ Synced ${toUpdate.length} repairs (obrisano ${toDelete.length}, konflikti ${conflicts.length})`);
     return true;
   } catch (error) {
     // Provjeri je li offline token

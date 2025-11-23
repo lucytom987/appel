@@ -113,7 +113,7 @@ APPEL je mobilna aplikacija za upravljanje dizalima, servisima i hitnim popravci
   - Filter: samo dizala koja imaju postavljene koordinate
 
 - ✅ **Google Maps API konfiguracija**
-  - API ključ: `AIzaSyD3KrrNQC0Nl_BqEjh-ifM0MMnlmdPSwIc`
+  - API ključ konfiguriran u `AndroidManifest.xml` i `app.json`
   - Dodano u `AndroidManifest.xml` kao `<meta-data>`
   - Konfiguracija u `app.json` za Expo
 
@@ -250,7 +250,7 @@ APPEL je mobilna aplikacija za upravljanje dizalima, servisima i hitnim popravci
 - **Auth**: JWT token authentication
 
 ### Google Services
-- **Maps API**: AIzaSyD3KrrNQC0Nl_BqEjh-ifM0MMnlmdPSwIc
+- **Maps API**: Konfiguriran u app.json (privatni ključ)
 - **Geocoding**: Location.geocodeAsync() za address → coordinates
 
 ---

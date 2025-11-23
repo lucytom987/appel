@@ -8,16 +8,23 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
+import * as Location from 'expo-location';
 import { useAuth } from '../context/AuthContext';
+import LocationPickerModal from '../components/LocationPickerModal';
 import { elevatorDB } from '../database/db';
 import { elevatorsAPI } from '../services/api';
 
 export default function AddElevatorScreen({ navigation }) {
   const { isOnline } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [geocoding, setGeocoding] = useState(false);
+  const [mapPickerVisible, setMapPickerVisible] = useState(false);
 
   // Konvertiraj isOnline u boolean
   const online = Boolean(isOnline);
@@ -56,6 +63,54 @@ export default function AddElevatorScreen({ navigation }) {
     setElevators([...elevators, { id: newId, brojDizala: '', intervalServisa: '1' }]);
   };
 
+  // Geocoding - pretvorba adrese u GPS koordinate
+  const geocodeAddress = async () => {
+    if (!formData.ulica.trim() || !formData.mjesto.trim()) {
+      Alert.alert('Greška', 'Molim prvo unesite ulicu i mjesto');
+      return;
+    }
+
+    setGeocoding(true);
+
+    try {
+      const address = `${formData.ulica}, ${formData.mjesto}, Croatia`;
+      
+      // Koristi Google Geocoding API preko expo-location
+      const results = await Location.geocodeAsync(address);
+      
+      if (results && results.length > 0) {
+        const { latitude, longitude } = results[0];
+        
+        setFormData(prev => ({
+          ...prev,
+          koordinate: { latitude, longitude }
+        }));
+        
+        Alert.alert(
+          'Uspjeh',
+          `Lokacija pronađena:\nŠirina: ${latitude.toFixed(6)}\nDužina: ${longitude.toFixed(6)}`
+        );
+      } else {
+        Alert.alert('Greška', 'Nije moguće pronaći koordinate za unesenu adresu. Pokušajte s drugačijom adresom ili odaberite lokaciju na karti.');
+      }
+    } catch (error) {
+      console.error('Geocoding greška:', error);
+      Alert.alert('Greška', 'Došlo je do greške pri traženju koordinata. Provjerite internet vezu ili odaberite lokaciju na karti.');
+    } finally {
+      setGeocoding(false);
+    }
+  };
+
+  const handleMapPickerSelect = (location) => {
+    setFormData(prev => ({
+      ...prev,
+      koordinate: {
+        latitude: location.latitude,
+        longitude: location.longitude
+      }
+    }));
+  };
+
   const removeElevator = (id) => {
     if (elevators.length > 1) {
       setElevators(elevators.filter(e => e.id !== id));
@@ -69,11 +124,7 @@ export default function AddElevatorScreen({ navigation }) {
   };
 
   const handleSubmit = async () => {
-    // Validacija
-    if (!formData.brojUgovora.trim()) {
-      Alert.alert('Greška', 'Molim unesite broj ugovora');
-      return;
-    }
+    // Validacija - broj ugovora više nije obavezan
     if (!formData.nazivStranke.trim()) {
       Alert.alert('Greška', 'Molim unesite naziv stranke');
       return;
@@ -106,7 +157,7 @@ export default function AddElevatorScreen({ navigation }) {
       // Dodaj svako dizalo
       for (const elevator of elevators) {
         const elevatorData = {
-          brojUgovora: formData.brojUgovora,
+          brojUgovora: formData.brojUgovora.trim() || undefined, // Opcionalno - može biti prazan
           nazivStranke: formData.nazivStranke,
           ulica: formData.ulica,
           mjesto: formData.mjesto,
@@ -184,7 +235,7 @@ export default function AddElevatorScreen({ navigation }) {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
@@ -194,7 +245,12 @@ export default function AddElevatorScreen({ navigation }) {
         <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView style={styles.content}>
+      <KeyboardAvoidingView 
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={100}
+      >
+        <ScrollView style={styles.content}>
         {/* Offline warning */}
         {!online && (
           <View style={styles.offlineWarning}>
@@ -209,12 +265,12 @@ export default function AddElevatorScreen({ navigation }) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Osnovno</Text>
           
-          <Text style={styles.label}>Broj ugovora *</Text>
+          <Text style={styles.label}>Broj ugovora</Text>
           <TextInput
             style={styles.input}
             value={formData.brojUgovora}
             onChangeText={(text) => setFormData(prev => ({ ...prev, brojUgovora: text }))}
-            placeholder="npr. UG-2025-001"
+            placeholder="npr. 001/2026"
           />
 
           <Text style={styles.label}>Naziv stranke *</Text>
@@ -222,7 +278,7 @@ export default function AddElevatorScreen({ navigation }) {
             style={styles.input}
             value={formData.nazivStranke}
             onChangeText={(text) => setFormData(prev => ({ ...prev, nazivStranke: text }))}
-            placeholder="npr. ABC d.o.o."
+            placeholder="npr. Firma d.o.o."
           />
 
           <Text style={styles.label}>Ulica i kućni broj *</Text>
@@ -230,7 +286,7 @@ export default function AddElevatorScreen({ navigation }) {
             style={styles.input}
             value={formData.ulica}
             onChangeText={(text) => setFormData(prev => ({ ...prev, ulica: text }))}
-            placeholder="npr. Ilica 123"
+            placeholder="npr. Zagrebacka 1"
           />
 
           <Text style={styles.label}>Mjesto *</Text>
@@ -238,7 +294,7 @@ export default function AddElevatorScreen({ navigation }) {
             style={styles.input}
             value={formData.mjesto}
             onChangeText={(text) => setFormData(prev => ({ ...prev, mjesto: text }))}
-            placeholder="npr. Zagreb"
+            placeholder="npr. Varaždin"
           />
         </View>
 
@@ -267,7 +323,7 @@ export default function AddElevatorScreen({ navigation }) {
                 style={styles.input}
                 value={elevator.brojDizala}
                 onChangeText={(text) => updateElevator(elevator.id, 'brojDizala', text)}
-                placeholder="npr. D1, D2..."
+                placeholder="npr. 40-1234"
               />
               
               <Text style={styles.label}>Interval servisa</Text>
@@ -347,33 +403,74 @@ export default function AddElevatorScreen({ navigation }) {
           />
         </View>
 
-        {/* Napomene */}
+        {/* Lokacija (GPS) */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Lokacija (GPS)</Text>
           
-          <Text style={styles.label}>Geografska širina (latitude)</Text>
-          <TextInput
-            style={styles.input}
-            value={formData.koordinate.latitude.toString()}
-            onChangeText={(text) => setFormData(prev => ({
-              ...prev,
-              koordinate: { ...prev.koordinate, latitude: parseFloat(text) || 0 }
-            }))}
-            placeholder="npr. 45.815"
-            keyboardType="decimal-pad"
-          />
+          {/* Akcijski gumbi */}
+          <View style={styles.locationActions}>
+            <TouchableOpacity
+              style={styles.locationButton}
+              onPress={geocodeAddress}
+              disabled={geocoding}
+            >
+              {geocoding ? (
+                <ActivityIndicator size="small" color="#2563eb" />
+              ) : (
+                <Ionicons name="search" size={20} color="#2563eb" />
+              )}
+              <Text style={styles.locationButtonText}>
+                {geocoding ? 'Tražim...' : 'Nađi iz adrese'}
+              </Text>
+            </TouchableOpacity>
 
-          <Text style={styles.label}>Geografska dužina (longitude)</Text>
-          <TextInput
-            style={styles.input}
-            value={formData.koordinate.longitude.toString()}
-            onChangeText={(text) => setFormData(prev => ({
-              ...prev,
-              koordinate: { ...prev.koordinate, longitude: parseFloat(text) || 0 }
-            }))}
-            placeholder="npr. 15.982"
-            keyboardType="decimal-pad"
-          />
+            <TouchableOpacity
+              style={styles.locationButton}
+              onPress={() => setMapPickerVisible(true)}
+            >
+              <Ionicons name="map" size={20} color="#10b981" />
+              <Text style={styles.locationButtonText}>Odaberi na karti</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Koordinate prikaz */}
+          <View style={styles.coordinatesDisplay}>
+            <View style={styles.coordinateItem}>
+              <Text style={styles.coordinateLabel}>Širina (lat):</Text>
+              <TextInput
+                style={styles.coordinateInput}
+                value={formData.koordinate.latitude.toString()}
+                onChangeText={(text) => setFormData(prev => ({
+                  ...prev,
+                  koordinate: { ...prev.koordinate, latitude: parseFloat(text) || 0 }
+                }))}
+                placeholder="45.815"
+                keyboardType="decimal-pad"
+              />
+            </View>
+            <View style={styles.coordinateItem}>
+              <Text style={styles.coordinateLabel}>Dužina (lng):</Text>
+              <TextInput
+                style={styles.coordinateInput}
+                value={formData.koordinate.longitude.toString()}
+                onChangeText={(text) => setFormData(prev => ({
+                  ...prev,
+                  koordinate: { ...prev.koordinate, longitude: parseFloat(text) || 0 }
+                }))}
+                placeholder="15.982"
+                keyboardType="decimal-pad"
+              />
+            </View>
+          </View>
+
+          {formData.koordinate.latitude !== 0 && formData.koordinate.longitude !== 0 && (
+            <View style={styles.locationSet}>
+              <Ionicons name="checkmark-circle" size={16} color="#10b981" />
+              <Text style={styles.locationSetText}>
+                Lokacija postavljena
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* Napomene */}
@@ -411,7 +508,16 @@ export default function AddElevatorScreen({ navigation }) {
 
         <View style={{ height: 40 }} />
       </ScrollView>
-    </View>
+      </KeyboardAvoidingView>
+
+      {/* Location Picker Modal */}
+      <LocationPickerModal
+        visible={mapPickerVisible}
+        onClose={() => setMapPickerVisible(false)}
+        onSelectLocation={handleMapPickerSelect}
+        initialLocation={formData.koordinate.latitude && formData.koordinate.longitude ? formData.koordinate : null}
+      />
+    </SafeAreaView>
   );
 }
 
@@ -616,5 +722,66 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#1f2937',
+  },
+  locationActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 15,
+  },
+  locationButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  locationButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1f2937',
+  },
+  coordinatesDisplay: {
+    gap: 10,
+  },
+  coordinateItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  coordinateLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6b7280',
+    width: 100,
+  },
+  coordinateInput: {
+    flex: 1,
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 8,
+    padding: 10,
+    fontSize: 14,
+    color: '#1f2937',
+  },
+  locationSet: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 10,
+    padding: 8,
+    backgroundColor: '#f0fdf4',
+    borderRadius: 6,
+  },
+  locationSetText: {
+    fontSize: 12,
+    color: '#10b981',
+    fontWeight: '600',
   },
 });

@@ -7,6 +7,7 @@ const auth = async (req, res, next) => {
     const token = req.header('Authorization')?.replace('Bearer ', '');
 
     if (!token) {
+      console.log('❌ Auth: Nema tokena');
       return res.status(401).json({ message: 'Nema tokena, pristup odbijen' });
     }
 
@@ -14,9 +15,11 @@ const auth = async (req, res, next) => {
     const user = await User.findById(decoded.userId);
 
     if (!user || !user.aktivan) {
+      console.log('❌ Auth: Korisnik nije pronađen ili nije aktivan');
       return res.status(401).json({ message: 'Korisnik nije pronađen ili nije aktivan' });
     }
 
+    console.log('✅ Auth: Uspješna autentifikacija korisnika:', user.email, '(ID:', user._id, ')');
     req.user = user;
     next();
   } catch (error) {

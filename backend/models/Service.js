@@ -11,14 +11,13 @@ const serviceSchema = new mongoose.Schema({
     stavka: {
       type: String,
       enum: [
-        'engine_check',
-        'cable_inspection',
-        'door_system',
-        'emergency_brake',
-        'control_panel',
-        'safety_devices',
         'lubrication',
-        'lighting'
+        'ups_check',
+        'voice_comm',
+        'shaft_cleaning',
+        'drive_check',
+        'brake_check',
+        'cable_inspection'
       ],
       required: true
     },

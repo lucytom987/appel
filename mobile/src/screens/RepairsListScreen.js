@@ -33,8 +33,21 @@ export default function RepairsListScreen({ navigation }) {
   const loadRepairs = () => {
     try {
       const allRepairs = repairDB.getAll() || [];
+      
+      // Dodatna provjera - filtriraj popravke koji nemaju dizalo
+      const validRepairs = allRepairs.filter(r => {
+        const elevatorId = (typeof r.elevatorId === 'object' && r.elevatorId !== null)
+          ? (r.elevatorId._id || r.elevatorId.id)
+          : r.elevatorId;
+        
+        if (!elevatorId) return false;
+        
+        const elevator = elevatorDB.getById(elevatorId);
+        return !!elevator;
+      });
+      
       // Sortiraj po datumu - najnoviji prvo
-      const sorted = allRepairs.sort((a, b) => 
+      const sorted = validRepairs.sort((a, b) => 
         new Date(b.datumPrijave) - new Date(a.datumPrijave)
       );
       setRepairs(sorted);

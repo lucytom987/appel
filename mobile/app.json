@@ -16,11 +16,17 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.appel.elevators", 
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyD3KrrNQC0Nl_BqEjh-ifM0MMnlmdPSwIc"
+        }
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"

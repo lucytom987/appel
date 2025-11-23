@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   RefreshControl,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import * as SecureStore from 'expo-secure-store';
@@ -41,8 +42,34 @@ export default function HomeScreen({ navigation }) {
   const loadStats = () => {
     try {
       const elevators = elevatorDB.getAll() || [];
-      const services = serviceDB.getAll() || [];
+      const servicesAll = serviceDB.getAll() || [];
       const repairs = repairDB.getAll() || [];
+
+      // Broji samo aktivna dizala
+      const activeElevators = elevators.filter(e => e.status === 'aktivan');
+
+      // Izgradi skup postojećih ID-eva dizala (lokalni id ili _id)
+      const existingElevatorIds = new Set(
+        elevators.map(e => e.id || e._id).filter(Boolean)
+      );
+
+      // Normaliziraj i filtriraj servise koji pripadaju postojećim dizalima
+      const validServicesRaw = servicesAll.filter(s => {
+        const elevatorId = typeof s.elevatorId === 'object' && s.elevatorId !== null
+          ? (s.elevatorId._id || s.elevatorId.id)
+          : s.elevatorId;
+        return elevatorId && existingElevatorIds.has(elevatorId);
+      });
+
+      // Ukloni eventualne duplikate (po id/_id) – ponekad sync može privremeno duplicirati
+      const uniqueServicesMap = new Map();
+      validServicesRaw.forEach(s => {
+        const sid = s.id || s._id;
+        if (sid && !uniqueServicesMap.has(sid)) {
+          uniqueServicesMap.set(sid, s);
+        }
+      });
+      const services = Array.from(uniqueServicesMap.values());
 
       // Servisi ovaj mjesec
       const now = new Date();
@@ -62,7 +89,7 @@ export default function HomeScreen({ navigation }) {
       );
 
       setStats({
-        totalElevators: elevators.length,
+        totalElevators: activeElevators.length,
         servicesThisMonth: thisMonth.length,
         repairsPending: pending.length,
         repairsUrgent: 0, // U novoj shemi nema priority polja
@@ -86,7 +113,7 @@ export default function HomeScreen({ navigation }) {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Header */}
       <View style={styles.header}>
         <View>
@@ -98,9 +125,17 @@ export default function HomeScreen({ navigation }) {
             </Text>
           </View>
         </View>
-        <TouchableOpacity onPress={logout}>
-          <Ionicons name="log-out-outline" size={28} color="#666" />
-        </TouchableOpacity>
+        <View style={styles.headerButtons}>
+          <TouchableOpacity 
+            onPress={() => navigation.navigate('About')}
+            style={styles.headerButton}
+          >
+            <Ionicons name="information-circle-outline" size={28} color="#666" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={logout}>
+            <Ionicons name="log-out-outline" size={28} color="#666" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
@@ -122,6 +157,15 @@ export default function HomeScreen({ navigation }) {
 
           <TouchableOpacity 
             style={styles.statCard}
+            onPress={() => navigation.navigate('Map')}
+          >
+            <Ionicons name="map" size={32} color="#8b5cf6" />
+            <Text style={styles.statNumber}>📍</Text>
+            <Text style={styles.statLabel}>Karta</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.statCard}
             onPress={() => navigation.navigate('Services')}
           >
             <Ionicons name="checkmark-circle" size={32} color="#10b981" />
@@ -137,59 +181,35 @@ export default function HomeScreen({ navigation }) {
             <Text style={styles.statNumber}>{stats.repairsPending}</Text>
             <Text style={styles.statLabel}>Popravci na čekanju</Text>
           </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={[styles.statCard, stats.repairsUrgent > 0 && styles.statCardUrgent]}
-            onPress={() => navigation.navigate('Repairs')}
-          >
-            <Ionicons name="warning" size={32} color="#ef4444" />
-            <Text style={styles.statNumber}>{stats.repairsUrgent}</Text>
-            <Text style={styles.statLabel}>Hitni popravci</Text>
-          </TouchableOpacity>
         </View>
 
-        {/* Quick Actions */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Brze akcije</Text>
-          
-          <TouchableOpacity 
-            style={styles.actionButton}
-            onPress={() => navigation.navigate('Elevators')}
-          >
-            <Ionicons name="list" size={24} color="#2563eb" />
-            <Text style={styles.actionText}>Sva dizala</Text>
-            <Ionicons name="chevron-forward" size={20} color="#999" />
-          </TouchableOpacity>
+        {/* Admin sekcija - samo za administratore */}
+        {user?.uloga === 'admin' && !offlineDemo && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Administracija</Text>
+            
+            <TouchableOpacity 
+              style={[styles.actionButton, styles.adminButton]}
+              onPress={() => navigation.navigate('UserManagement')}
+            >
+              <Ionicons name="people" size={24} color="#FF6B6B" />
+              <Text style={styles.actionText}>Upravljanje korisnicima</Text>
+              <Ionicons name="chevron-forward" size={20} color="#999" />
+            </TouchableOpacity>
+          </View>
+        )}
 
-          {/* Admin sekcija - samo za administratore */}
-          {user?.uloga === 'admin' && !offlineDemo && (
-            <>
-              <View style={{ height: 1, backgroundColor: '#e5e5e5', marginVertical: 15 }} />
-              <Text style={[styles.sectionTitle, { marginTop: 0 }]}>Administracija</Text>
-                        {user?.uloga === 'admin' && offlineDemo && (
-                          <View style={{ marginTop: 20 }}>
-                            <View style={{ height: 1, backgroundColor: '#e5e5e5', marginVertical: 15 }} />
-                            <Text style={[styles.sectionTitle, { marginTop: 0 }]}>Administracija</Text>
-                            <View style={styles.offlineAdminBox}>
-                              <Ionicons name="lock-closed" size={20} color="#ef4444" />
-                              <Text style={styles.offlineAdminText}>Offline demo korisnik – upravljanje korisnicima nedostupno dok se ne prijaviš online.</Text>
-                            </View>
-                          </View>
-                        )}
-              
-              <TouchableOpacity 
-                style={[styles.actionButton, styles.adminButton]}
-                onPress={() => navigation.navigate('UserManagement')}
-              >
-                <Ionicons name="people" size={24} color="#FF6B6B" />
-                <Text style={styles.actionText}>Upravljanje korisnicima</Text>
-                <Ionicons name="chevron-forward" size={20} color="#999" />
-              </TouchableOpacity>
-            </>
-          )}
-        </View>
+        {user?.uloga === 'admin' && offlineDemo && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Administracija</Text>
+            <View style={styles.offlineAdminBox}>
+              <Ionicons name="lock-closed" size={20} color="#ef4444" />
+              <Text style={styles.offlineAdminText}>Offline demo korisnik – upravljanje korisnicima nedostupno dok se ne prijaviš online.</Text>
+            </View>
+          </View>
+        )}
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -207,6 +227,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderBottomWidth: 1,
     borderBottomColor: '#e5e5e5',
+  },
+  headerButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  headerButton: {
+    padding: 4,
   },
   greeting: {
     fontSize: 24,

@@ -8,7 +8,10 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as SecureStore from 'expo-secure-store';
@@ -17,7 +20,23 @@ import { repairDB } from '../database/db';
 import { repairsAPI } from '../services/api';
 
 export default function AddRepairScreen({ navigation, route }) {
-  const { elevator } = route.params;
+  const { elevator } = route.params || {};
+  if (!elevator) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <Ionicons name="arrow-back" size={24} color="#1f2937" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Novi popravak</Text>
+          <View style={{ width: 24 }} />
+        </View>
+        <View style={{ padding:20 }}>
+          <Text style={{ fontSize:16, color:'#6b7280' }}>Dizalo je obrisano ili nedostupno. Vratite se i odaberite drugo.</Text>
+        </View>
+      </View>
+    );
+  }
   const { user, isOnline } = useAuth();
   const [isOfflineDemo, setIsOfflineDemo] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -133,22 +152,27 @@ export default function AddRepairScreen({ navigation, route }) {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color="#1f2937" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Novi popravak</Text>
+        <Text style={styles.headerTitle}>Novi hitni popravak</Text>
         <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView style={styles.content}>
+      <KeyboardAvoidingView 
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={100}
+      >
+        <ScrollView style={styles.content}>
         {/* Informacije o dizalu */}
         <View style={styles.elevatorInfo}>
-          <Text style={styles.elevatorName}>{elevator.brojDizala} - {elevator.nazivStranke}</Text>
+          <Text style={styles.elevatorName}>{elevator?.brojDizala || '?'} - {elevator?.nazivStranke || 'Nepoznato'}</Text>
           <Text style={styles.elevatorDetail}>
-            {elevator.ulica} • {elevator.mjesto}
+            {(elevator?.ulica || '')} • {(elevator?.mjesto || '')}
           </Text>
         </View>
 
@@ -231,7 +255,8 @@ export default function AddRepairScreen({ navigation, route }) {
 
         <View style={{ height: 40 }} />
       </ScrollView>
-    </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 

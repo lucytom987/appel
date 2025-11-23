@@ -5,6 +5,7 @@ import { elevatorDB, serviceDB, repairDB, messageDB, userDB, syncQueue } from '.
 
 let isOnline = false;
 let syncInterval = null;
+let syncInProgress = false; // sprječava paralelne syncAll pozive
 
 // Provjeri network status
 export const checkOnlineStatus = async () => {
@@ -90,22 +91,64 @@ export const syncServicesFromServer = async () => {
 
     console.log('🔄 Syncing services from server...');
     const response = await servicesAPI.getAll();
-    const serverServices = response.data.data || [];
-    const serverIds = serverServices.map(s => s._id);
+    const rawServerServices = response.data.data || [];
+    // Normaliziraj prije inserta
+    const serverServices = rawServerServices.map(s => {
+      const serviserObj = s.serviserID;
+      let serviserID = serviserObj;
+      if (serviserObj && typeof serviserObj === 'object') {
+        const ime = serviserObj.ime || serviserObj.firstName || '';
+        const prezime = serviserObj.prezime || serviserObj.lastName || '';
+        const full = `${ime} ${prezime}`.trim();
+        serviserID = full || (serviserObj._id || '');
+      }
+      let elevatorId = s.elevatorId;
+      if (elevatorId && typeof elevatorId === 'object') {
+        elevatorId = elevatorId._id || elevatorId.id || '';
+      }
+      return {
+        id: s._id,
+        elevatorId,
+        serviserID,
+        datum: s.datum || s.serviceDate,
+        checklist: s.checklist || [],
+        imaNedostataka: s.imaNedostataka || false,
+        nedostaci: s.nedostaci || [],
+        napomene: s.napomene || s.notes || '',
+        sljedeciServis: s.sljedeciServis || s.nextServiceDate || null,
+        kreiranDatum: s.kreiranDatum || s.createdAt || new Date().toISOString(),
+        azuriranDatum: s.azuriranDatum || s.updatedAt || new Date().toISOString(),
+      };
+    });
+    // serverServices objects use 'id' property (mapped from _id). Use it for comparison.
+    const serverIds = serverServices.map(s => s.id);
 
     // Dohvati lokalne servise
     const localServices = serviceDB.getAll();
-    const localIds = localServices.map(s => s.id);
-
-    // Obriši lokalne koji više ne postoje na serveru (osim dummy-ja)
-    const deletedIds = localIds.filter(id => !serverIds.includes(id) && !id.startsWith('dummy_'));
-    for (const id of deletedIds) {
-      serviceDB.delete(id);
-      console.log(`🗑️ Obrisana lokalna usluga ${id} (uklanjene sa servera)`);
+    
+    // Obriši lokalne koji više ne postoje na serveru
+    // ALI ne briši one koji imaju synced=0 (čekaju upload) ili dummy_ prefix
+    const deletedIds = [];
+    for (const service of localServices) {
+      const id = service.id;
+      // SQLite vraća 0 ili 1, ne false ili true
+      if (!serverIds.includes(id) && !id.startsWith('dummy_') && service.synced !== 0) {
+        serviceDB.delete(id);
+        deletedIds.push(id);
+        console.log(`🗑️ Obrisana lokalna usluga ${id} (uklanjene sa servera)`);
+      }
     }
 
     // Bulk insert nove/ažurirane servise
     serviceDB.bulkInsert(serverServices);
+    // Označi ih kao synced (inače će ostati synced=0 i ponovno se slati na server)
+    serverServices.forEach(s => {
+      try {
+        serviceDB.markSynced(s.id, s.id);
+      } catch (e) {
+        // ignore
+      }
+    });
     
     console.log(`✅ Synced ${serverServices.length} services (obrisano ${deletedIds.length})`);
     return true;
@@ -156,17 +199,14 @@ export const syncServicesToServer = async () => {
         // Ako počinje sa "local_", to je novi servis - POST
         if (service.id.startsWith('local_')) {
           const response = await servicesAPI.create({
-            elevator: service.elevatorId,
-            serviceDate: service.serviceDate,
-            status: service.status,
-            checklistUPS: Boolean(service.checklistUPS),
-            checklistVoice: Boolean(service.checklistVoice),
-            checklistShaft: Boolean(service.checklistShaft),
-            checklistGuides: Boolean(service.checklistGuides),
-            defectsFound: Boolean(service.defectsFound),
-            defectsDescription: service.defectsDescription,
-            defectsPhotos: JSON.parse(service.defectsPhotos || '[]'),
-            notes: service.notes,
+            elevatorId: service.elevatorId,
+            datum: service.datum || service.serviceDate,
+            checklist: service.checklist || [],
+            imaNedostataka: Boolean(service.imaNedostataka || service.defectsFound),
+            nedostaci: service.nedostaci || [],
+            napomene: service.napomene || service.notes,
+            sljedeciServis: service.sljedeciServis || service.nextServiceDate,
+            serviserID: service.serviserID,
           });
           
           // Označi kao synced i ažuriraj sa server ID-om
@@ -176,16 +216,12 @@ export const syncServicesToServer = async () => {
         } else {
           // Postojeći servis - PUT
           await servicesAPI.update(service.id, {
-            serviceDate: service.serviceDate,
-            status: service.status,
-            checklistUPS: Boolean(service.checklistUPS),
-            checklistVoice: Boolean(service.checklistVoice),
-            checklistShaft: Boolean(service.checklistShaft),
-            checklistGuides: Boolean(service.checklistGuides),
-            defectsFound: Boolean(service.defectsFound),
-            defectsDescription: service.defectsDescription,
-            defectsPhotos: JSON.parse(service.defectsPhotos || '[]'),
-            notes: service.notes,
+            datum: service.datum || service.serviceDate,
+            checklist: service.checklist || [],
+            imaNedostataka: Boolean(service.imaNedostataka || service.defectsFound),
+            nedostaci: service.nedostaci || [],
+            napomene: service.napomene || service.notes,
+            sljedeciServis: service.sljedeciServis || service.nextServiceDate,
           });
           
           serviceDB.markSynced(service.id, service.id);
@@ -291,17 +327,33 @@ export const syncRepairsFromServer = async () => {
 
     // Dohvati lokalne popravke
     const localRepairs = repairDB.getAll();
-    const localIds = localRepairs.map(r => r.id);
-
-    // Obriši lokalne koji više ne postoje na serveru (osim dummy-ja)
-    const deletedIds = localIds.filter(id => !serverIds.includes(id) && !id.startsWith('dummy_'));
-    for (const id of deletedIds) {
-      repairDB.delete(id);
-      console.log(`🗑️ Obrisana lokalna popravka ${id} (uklanjene sa servera)`);
+    
+    // Obriši lokalne koji više ne postoje na serveru
+    // ALI ne briši one koji imaju synced=0 (čekaju upload) ili dummy_ prefix
+    const deletedIds = [];
+    for (const repair of localRepairs) {
+      const id = repair.id;
+      // SQLite vraća 0 ili 1, ne false ili true
+      if (!serverIds.includes(id) && !id.startsWith('dummy_') && repair.synced !== 0) {
+        repairDB.delete(id);
+        deletedIds.push(id);
+        console.log(`🗑️ Obrisana lokalna popravka ${id} (uklanjene sa servera)`);
+      }
     }
 
     // Bulk insert nove/ažurirane popravke
     repairDB.bulkInsert(serverRepairs);
+    // Označi ih kao synced (inače će ostati synced=0)
+    serverRepairs.forEach(r => {
+      try {
+        const idVal = r._id || r.id;
+        if (idVal) {
+          repairDB.markSynced(idVal, idVal);
+        }
+      } catch (e) {
+        // ignore
+      }
+    });
     
     console.log(`✅ Synced ${serverRepairs.length} repairs (obrisano ${deletedIds.length})`);
     return true;
@@ -403,6 +455,11 @@ export const syncRepairsToServer = async () => {
 
 // Sync SVE (poziva se automatski svakih 30s ako si online)
 export const syncAll = async () => {
+  if (syncInProgress) {
+    console.log('⏳ Sync već u tijeku - preskačem novi poziv');
+    return false;
+  }
+  syncInProgress = true;
   const online = await checkOnlineStatus();
   
   if (!online) {
@@ -433,31 +490,49 @@ export const syncAll = async () => {
     return false;
   }
 
+  // Dijagnostika: broj unsynced prije sync-a
+  try {
+    const preUnsyncedServices = serviceDB.getUnsynced().length;
+    const preUnsyncedRepairs = repairDB.getUnsynced().length;
+    console.log(`🧪 Pre-sync status: services_unsynced=${preUnsyncedServices}, repairs_unsynced=${preUnsyncedRepairs}`);
+  } catch (e) {
+    console.log('⚠️ Pre-sync dijagnostika nije uspjela:', e.message);
+  }
+
   console.log('🔄 Starting full sync...');
   
   try {
-    // 1. Sync elevatori sa servera (GET) - uključujući brisanje
-    await syncElevatorsFromServer();
-    
-    // 2. Sync servici sa servera (GET) - uključujući brisanje
-    await syncServicesFromServer();
-    
-    // 3. Sync popravci sa servera (GET) - uključujući brisanje
-    await syncRepairsFromServer();
-
-    // 4. Sync korisnici sa servera (GET) - admin only
-    await syncUsersFromServer();
-    
-    // 5. Sync unsynced servici na server (POST/PUT)
+    // 1. Prvo uploadaj nove servise i popravke na server (POST/PUT)
     await syncServicesToServer();
-    
-    // 6. Sync unsynced popravci na server (POST/PUT)
     await syncRepairsToServer();
     
+    // 2. Sync elevatori sa servera (GET) - uključujući brisanje
+    await syncElevatorsFromServer();
+    
+    // 3. Sync servici sa servera (GET) - uključujući brisanje
+    await syncServicesFromServer();
+    
+    // 4. Sync popravci sa servera (GET) - uključujući brisanje
+    await syncRepairsFromServer();
+
+    // 5. Sync korisnici sa servera (GET) - admin only
+    await syncUsersFromServer();
+    
+    // Dijagnostika: broj unsynced nakon sync-a
+    try {
+      const postUnsyncedServices = serviceDB.getUnsynced().length;
+      const postUnsyncedRepairs = repairDB.getUnsynced().length;
+      console.log(`🧪 Post-sync status: services_unsynced=${postUnsyncedServices}, repairs_unsynced=${postUnsyncedRepairs}`);
+    } catch (e) {
+      console.log('⚠️ Post-sync dijagnostika nije uspjela:', e.message);
+    }
+
     console.log('✅ Full sync completed');
+    syncInProgress = false;
     return true;
   } catch (error) {
     console.error('❌ Greška pri full sync:', error.message);
+    syncInProgress = false;
     return false;
   }
 };

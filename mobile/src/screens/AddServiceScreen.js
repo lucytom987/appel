@@ -8,7 +8,10 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as SecureStore from 'expo-secure-store';
@@ -17,7 +20,23 @@ import { serviceDB, elevatorDB } from '../database/db';
 import { servicesAPI } from '../services/api';
 
 export default function AddServiceScreen({ navigation, route }) {
-  const { elevator } = route.params;
+  const { elevator } = route.params || {};
+  if (!elevator) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <Ionicons name="arrow-back" size={24} color="#1f2937" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Novi servis</Text>
+          <View style={{ width: 24 }} />
+        </View>
+        <View style={{ padding:20 }}>
+          <Text style={{ fontSize:16, color:'#6b7280' }}>Dizalo je obrisano ili nedostupno. Vratite se i odaberite drugo.</Text>
+        </View>
+      </View>
+    );
+  }
   const { user, isOnline } = useAuth();
   const [isOfflineDemo, setIsOfflineDemo] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -33,33 +52,39 @@ export default function AddServiceScreen({ navigation, route }) {
     })();
   }, []);
 
+  // Izračunaj interval servisa u mjesecima (default 1 ako nije postavljen)
+  const intervalMjeseci = typeof elevator.intervalServisa === 'number' && elevator.intervalServisa > 0
+    ? elevator.intervalServisa
+    : 1;
+
   const [formData, setFormData] = useState({
     serviceDate: new Date(),
-    opis: '',
     napomene: '',
-    nextServiceDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // +30 dana
+    nextServiceDate: (() => {
+      const d = new Date();
+      d.setMonth(d.getMonth() + intervalMjeseci);
+      return d;
+    })(),
   });
 
   const [checklist, setChecklist] = useState({
-    engineCheck: false,
-    cableInspection: false,
-    doorSystem: false,
-    emergencyBrake: false,
-    controlPanel: false,
-    safetyDevices: false,
     lubrication: false,
-    lighting: false,
+    upsCheck: false,
+    voiceComm: false,
+    shaftCleaning: false,
+    driveCheck: false,
+    brakeCheck: false,
+    cableInspection: false,
   });
 
   const checklistItems = [
-    { key: 'engineCheck', label: 'Provjera motora' },
-    { key: 'cableInspection', label: 'Inspekcija užeta' },
-    { key: 'doorSystem', label: 'Sustav vrata' },
-    { key: 'emergencyBrake', label: 'Sigurnosna kočnica' },
-    { key: 'controlPanel', label: 'Kontrolna ploča' },
-    { key: 'safetyDevices', label: 'Sigurnosne naprave' },
     { key: 'lubrication', label: 'Podmazivanje' },
-    { key: 'lighting', label: 'Rasvjeta' },
+    { key: 'upsCheck', label: 'Provjera UPS-a' },
+    { key: 'voiceComm', label: 'Govorna veza' },
+    { key: 'shaftCleaning', label: 'Čišćenje šahta' },
+    { key: 'driveCheck', label: 'Provjera pog. stroja' },
+    { key: 'brakeCheck', label: 'Provjera kočnice' },
+    { key: 'cableInspection', label: 'Inspekcija užeta' },
   ];
 
   const toggleChecklistItem = (key) => {
@@ -72,19 +97,26 @@ export default function AddServiceScreen({ navigation, route }) {
   const handleDateChange = (event, selectedDate, field) => {
     setShowDatePicker(false);
     if (selectedDate) {
-      setFormData(prev => ({
-        ...prev,
-        [field]: selectedDate
-      }));
+      if (field === 'serviceDate') {
+        // Automatski izračunaj sljedeći servis na temelju intervala
+        const next = new Date(selectedDate);
+        next.setMonth(next.getMonth() + intervalMjeseci);
+        setFormData(prev => ({
+          ...prev,
+          serviceDate: selectedDate,
+          nextServiceDate: next
+        }));
+      } else {
+        setFormData(prev => ({
+          ...prev,
+          [field]: selectedDate
+        }));
+      }
     }
   };
 
   const handleSubmit = async () => {
-    // Validacija
-    if (!formData.opis.trim()) {
-      Alert.alert('Greška', 'Molim unesite opis servisa');
-      return;
-    }
+    // Nema obaveznog opisa – redovni servis
 
     setLoading(true);
 
@@ -98,14 +130,13 @@ export default function AddServiceScreen({ navigation, route }) {
         nedostaci: [],
         sljedeciServis: formData.nextServiceDate.toISOString(),
         checklist: [
-          { stavka: 'engine_check', provjereno: checklist.engineCheck ? 1 : 0, napomena: '' },
-          { stavka: 'cable_inspection', provjereno: checklist.cableInspection ? 1 : 0, napomena: '' },
-          { stavka: 'door_system', provjereno: checklist.doorSystem ? 1 : 0, napomena: '' },
-          { stavka: 'emergency_brake', provjereno: checklist.emergencyBrake ? 1 : 0, napomena: '' },
-          { stavka: 'control_panel', provjereno: checklist.controlPanel ? 1 : 0, napomena: '' },
-          { stavka: 'safety_devices', provjereno: checklist.safetyDevices ? 1 : 0, napomena: '' },
           { stavka: 'lubrication', provjereno: checklist.lubrication ? 1 : 0, napomena: '' },
-          { stavka: 'lighting', provjereno: checklist.lighting ? 1 : 0, napomena: '' },
+          { stavka: 'ups_check', provjereno: checklist.upsCheck ? 1 : 0, napomena: '' },
+          { stavka: 'voice_comm', provjereno: checklist.voiceComm ? 1 : 0, napomena: '' },
+          { stavka: 'shaft_cleaning', provjereno: checklist.shaftCleaning ? 1 : 0, napomena: '' },
+          { stavka: 'drive_check', provjereno: checklist.driveCheck ? 1 : 0, napomena: '' },
+          { stavka: 'brake_check', provjereno: checklist.brakeCheck ? 1 : 0, napomena: '' },
+          { stavka: 'cable_inspection', provjereno: checklist.cableInspection ? 1 : 0, napomena: '' },
         ],
       };
 
@@ -123,7 +154,7 @@ export default function AddServiceScreen({ navigation, route }) {
         });
 
         Alert.alert('Uspjeh', 'Servis je dodan lokalno (bit će sinkronizovan kada budete online s pravim korisničkim računom)', [
-          { text: 'OK', onPress: () => navigation.goBack() }
+          { text: 'OK', onPress: () => navigation.navigate('Home') }
         ]);
       } else {
         // Online s pravim korisničkim tokenom - spremi na backend
@@ -160,7 +191,7 @@ export default function AddServiceScreen({ navigation, route }) {
           }
 
           Alert.alert('Uspjeh', 'Servis uspješno logiran', [
-            { text: 'OK', onPress: () => navigation.goBack() }
+            { text: 'OK', onPress: () => navigation.navigate('Home') }
           ]);
         } catch (error) {
           console.error('Greška pri slanju na backend:', error);
@@ -188,7 +219,7 @@ export default function AddServiceScreen({ navigation, route }) {
           }
 
           Alert.alert('Uspjeh', 'Servis je dodan lokalno (bit će sinkronizovan kada budete online)', [
-            { text: 'OK', onPress: () => navigation.goBack() }
+            { text: 'OK', onPress: () => navigation.navigate('Home') }
           ]);
         }
       }
@@ -202,7 +233,7 @@ export default function AddServiceScreen({ navigation, route }) {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
@@ -212,12 +243,17 @@ export default function AddServiceScreen({ navigation, route }) {
         <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView style={styles.content}>
+      <KeyboardAvoidingView 
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={100}
+      >
+        <ScrollView style={styles.content}>
         {/* Informacije o dizalu */}
         <View style={styles.elevatorInfo}>
-          <Text style={styles.elevatorName}>{elevator.brojDizala} - {elevator.nazivStranke}</Text>
+          <Text style={styles.elevatorName}>{elevator?.brojDizala || '?'} - {elevator?.nazivStranke || 'Nepoznato'}</Text>
           <Text style={styles.elevatorDetail}>
-            {elevator.ulica} • {elevator.mjesto}
+            {(elevator?.ulica || '')} • {(elevator?.mjesto || '')}
           </Text>
         </View>
 
@@ -254,19 +290,7 @@ export default function AddServiceScreen({ navigation, route }) {
           )}
         </View>
 
-        {/* Opis */}
-        <View style={styles.section}>
-          <Text style={styles.label}>Opis servisa *</Text>
-          <TextInput
-            style={[styles.input, styles.textArea]}
-            value={formData.opis}
-            onChangeText={(text) => setFormData(prev => ({ ...prev, opis: text }))}
-            placeholder="Opišite što je napravljeno..."
-            multiline
-            numberOfLines={4}
-            textAlignVertical="top"
-          />
-        </View>
+        {/* Opis servisa uklonjen - servis je uvijek redovni */}
 
         {/* Checklist */}
         <View style={styles.section}>
@@ -335,7 +359,8 @@ export default function AddServiceScreen({ navigation, route }) {
 
         <View style={{ height: 40 }} />
       </ScrollView>
-    </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 

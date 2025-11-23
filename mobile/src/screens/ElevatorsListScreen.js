@@ -20,7 +20,7 @@ export default function ElevatorsListScreen({ navigation }) {
   const [filteredElevators, setFilteredElevators] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
-  const [filter, setFilter] = useState('all'); // all, aktivan, u kvaru, u servisu, neaktivan
+  const [filter, setFilter] = useState('all'); // all, aktivan, neaktivan
 
   useEffect(() => {
     loadElevators();
@@ -40,6 +40,17 @@ export default function ElevatorsListScreen({ navigation }) {
     }
   };
 
+  // Normalizacija slova s kvačicama
+  const normalize = (str) => {
+    if (!str) return '';
+    return str
+      .toLowerCase()
+      .replace(/č|ć/g, 'c')
+      .replace(/š/g, 's')
+      .replace(/ž/g, 'z')
+      .replace(/đ/g, 'd');
+  };
+
   const filterElevators = () => {
     let filtered = elevators;
 
@@ -48,14 +59,22 @@ export default function ElevatorsListScreen({ navigation }) {
     }
 
     if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      filtered = filtered.filter(e =>
-        e.nazivStranke?.toLowerCase().includes(q) ||
-        e.ulica?.toLowerCase().includes(q) ||
-        e.mjesto?.toLowerCase().includes(q) ||
-        e.brojUgovora?.toLowerCase().includes(q) ||
-        e.brojDizala?.toLowerCase().includes(q)
-      );
+      const q = normalize(searchQuery);
+      filtered = filtered.filter(e => {
+        // Sva polja za pretragu
+        const fields = [
+          e.nazivStranke,
+          e.ulica,
+          e.mjesto,
+          e.brojUgovora,
+          e.brojDizala,
+          e.kontaktOsoba?.imePrezime,
+          e.kontaktOsoba?.mobitel,
+          e.kontaktOsoba?.email,
+          e.napomene
+        ];
+        return fields.some(f => normalize(f).includes(q));
+      });
     }
 
     setFilteredElevators(filtered);
@@ -76,8 +95,6 @@ export default function ElevatorsListScreen({ navigation }) {
   const getStatusColor = (status) => {
     switch (status) {
       case 'aktivan': return '#10b981';
-      case 'u kvaru': return '#ef4444';
-      case 'u servisu': return '#f59e0b';
       case 'neaktivan': return '#6b7280';
       default: return '#6b7280';
     }
@@ -86,8 +103,6 @@ export default function ElevatorsListScreen({ navigation }) {
   const getStatusLabel = (status) => {
     switch (status) {
       case 'aktivan': return 'Aktivno';
-      case 'u kvaru': return 'U kvaru';
-      case 'u servisu': return 'U servisu';
       case 'neaktivan': return 'Neaktivno';
       default: return status;
     }
@@ -126,13 +141,16 @@ export default function ElevatorsListScreen({ navigation }) {
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.title}>Dizala</Text>
-        <View style={styles.headerRight}>
-          <View style={[styles.onlineIndicator, { backgroundColor: isOnline ? '#10b981' : '#ef4444' }]} />
-          <Text style={styles.count}>{filteredElevators.length}</Text>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.navigate('Home')} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color="#111827" />
+          </TouchableOpacity>
+          <Text style={styles.title}>Dizala</Text>
+          <View style={styles.headerRight}>
+            <View style={[styles.onlineIndicator, { backgroundColor: isOnline ? '#10b981' : '#ef4444' }]} />
+            <Text style={styles.count}>{filteredElevators.length}</Text>
+          </View>
         </View>
-      </View>
 
       {/* Search */}
       <View style={styles.searchContainer}>
@@ -154,10 +172,8 @@ export default function ElevatorsListScreen({ navigation }) {
       {/* Filters */}
       <View style={styles.filterContainer}>
         {[
-          { key: 'all', label: 'Sva' },
+          { key: 'all', label: 'Sva dizala' },
           { key: 'aktivan', label: 'Aktivna' },
-          { key: 'u kvaru', label: 'U kvaru' },
-          { key: 'u servisu', label: 'U servisu' },
           { key: 'neaktivan', label: 'Neaktivna' },
         ].map(opt => (
           <TouchableOpacity
@@ -218,6 +234,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
+  },
+  backButton: {
+    marginRight: 12,
+    padding: 4,
   },
   title: {
     fontSize: 28,

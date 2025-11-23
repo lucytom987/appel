@@ -19,6 +19,8 @@ import AddRepairScreen from '../screens/AddRepairScreen';
 import RepairDetailsScreen from '../screens/RepairDetailsScreen';
 import UserManagementScreen from '../screens/UserManagementScreen';
 import AddUserScreen from '../screens/AddUserScreen';
+import MapScreen from '../screens/MapScreen';
+import AboutScreen from '../screens/AboutScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -52,6 +54,8 @@ export default function Navigation() {
             <Stack.Screen name="AddRepair" component={AddRepairScreen} />
             <Stack.Screen name="UserManagement" component={UserManagementScreen} />
             <Stack.Screen name="AddUser" component={AddUserScreen} />
+            <Stack.Screen name="Map" component={MapScreen} />
+            <Stack.Screen name="About" component={AboutScreen} />
           </>
         ) : (
           <Stack.Screen name="Login" component={LoginScreen} />

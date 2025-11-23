@@ -8,16 +8,38 @@ import {
   Alert,
   Linking,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { serviceDB, repairDB } from '../database/db';
+import { serviceDB, repairDB, elevatorDB } from '../database/db';
 import { useAuth } from '../context/AuthContext';
 
 export default function ElevatorDetailsScreen({ route, navigation }) {
-  const { elevator: rawElevator } = route.params;
+  const { elevator: rawElevator } = route.params || {};
+  // Ako je dizalo obrisano ili ne postoji u parametrima, prikaži fallback umjesto rušenja
+  if (!rawElevator) {
+    return (
+      <SafeAreaView style={styles.container} edges={['bottom']}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color="#111827" />
+          </TouchableOpacity>
+          <View style={styles.headerInfo}>
+            <Text style={styles.headerTitle}>Dizalo nedostupno</Text>
+            <Text style={styles.headerSubtitle}>Ovo dizalo je obrisano.</Text>
+          </View>
+        </View>
+        <View style={{ padding:16 }}>
+          <Text style={{ fontSize:16, color:'#6b7280' }}>Dizalo više ne postoji u bazi. Vratite se nazad i odaberite drugo ili dodajte novo.</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
   const { user, isOnline } = useAuth();
   const [activeTab, setActiveTab] = useState('info'); // info, services, repairs
   const [services, setServices] = useState([]);
   const [repairs, setRepairs] = useState([]);
+  const [checklistHistory, setChecklistHistory] = useState({});
+  const [groupElevators, setGroupElevators] = useState([]); // sva dizala na adresi
 
   // Osiguraj da je elevator pravilno strukturiran
   const elevator = {
@@ -40,19 +62,61 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
       const repairsData = repairDB.getAll(elevator.id) || [];
       setServices(servicesData);
       setRepairs(repairsData);
+      computeChecklistHistory(servicesData);
+
+      // Grupiraj dizala na istoj adresi (isti brojUgovora + nazivStranke + ulica + mjesto)
+      const all = elevatorDB.getAll();
+      const grouped = Array.isArray(all) ? all.filter(e =>
+        e &&
+        e.brojUgovora === elevator.brojUgovora &&
+        e.nazivStranke === elevator.nazivStranke &&
+        e.ulica === elevator.ulica &&
+        e.mjesto === elevator.mjesto
+      ).sort((a,b) => (a?.brojDizala || '').localeCompare(b?.brojDizala || '')) : [];
+      setGroupElevators(grouped);
     } catch (error) {
       console.error('Greška pri učitavanju podataka:', error);
     }
+  };
+
+  const checklistLabels = {
+    lubrication: 'Podmazivanje',
+    ups_check: 'Provjera UPS-a',
+    voice_comm: 'Govorna veza',
+    shaft_cleaning: 'Čišćenje šahta',
+    drive_check: 'Provjera pog. stroja',
+    brake_check: 'Provjera kočnice',
+    cable_inspection: 'Inspekcija užeta'
+  };
+
+  const computeChecklistHistory = (servicesData) => {
+    const latest = {};
+    servicesData.forEach(svc => {
+      const serviceDateStr = svc.datum || svc.serviceDate;
+      if (!serviceDateStr) return;
+      const serviceDate = new Date(serviceDateStr);
+      (svc.checklist || []).forEach(item => {
+        if (item.provjereno === 1 || item.provjereno === true) {
+          const key = item.stavka;
+          if (!latest[key] || serviceDate > latest[key]) {
+            latest[key] = serviceDate;
+          }
+        }
+      });
+    });
+    setChecklistHistory(latest);
+  };
+
+  const daysAgo = (date) => {
+    if (!date) return null;
+    const diffMs = Date.now() - date.getTime();
+    return Math.floor(diffMs / (1000 * 60 * 60 * 24));
   };
 
   const getStatusColor = (status) => {
     switch (status) {
       case 'aktivan':
         return '#10b981';
-      case 'u kvaru':
-        return '#ef4444';
-      case 'u servisu':
-        return '#f59e0b';
       case 'neaktivan':
         return '#6b7280';
       default:
@@ -64,10 +128,6 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
     switch (status) {
       case 'aktivan':
         return 'Aktivno';
-      case 'u kvaru':
-        return 'U kvaru';
-      case 'u servisu':
-        return 'U servisu';
       case 'neaktivan':
         return 'Neaktivno';
       default:
@@ -97,13 +157,37 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
     <View style={styles.tabContent}>
       <View style={styles.infoSection}>
         <Text style={styles.sectionTitle}>Osnovno</Text>
-        
         <InfoRow icon="document-text" label="Broj ugovora" value={String(elevator.brojUgovora || '')} />
         <InfoRow icon="briefcase" label="Naziv stranke" value={String(elevator.nazivStranke || '')} />
         <InfoRow icon="location" label="Ulica" value={String(elevator.ulica || '')} />
         <InfoRow icon="business-outline" label="Mjesto" value={String(elevator.mjesto || '')} />
-        <InfoRow icon="barcode" label="Broj dizala" value={String(elevator.brojDizala || '')} />
       </View>
+
+      {groupElevators.length > 0 && (
+        <View style={styles.infoSection}>
+          <Text style={styles.sectionTitle}>Dizala na adresi ({groupElevators.length})</Text>
+          <View style={styles.elevatorsInline}>
+            {groupElevators.map(e => {
+              const active = e.id === elevator.id || e._id === elevator.id;
+              return (
+                <TouchableOpacity
+                  key={e.id}
+                  disabled={active}
+                  style={[styles.elevatorBadge, active && styles.elevatorBadgeActive]}
+                  onPress={() => {
+                    if (!active) {
+                      navigation.replace('ElevatorDetails', { elevator: e });
+                    }
+                  }}
+                >
+                  <Text style={[styles.elevatorBadgeText, active && styles.elevatorBadgeTextActive]}>{e.brojDizala || '?'}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+      )}
+
 
       <View style={styles.infoSection}>
         <Text style={styles.sectionTitle}>Kontakt osoba</Text>
@@ -135,7 +219,7 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
         {elevator.sljedeciServis && (
           <InfoRow
             icon="time-outline"
-            label="Sljede\u0107i servis"
+            label="Sljedeći servis"
             value={new Date(elevator.sljedeciServis).toLocaleDateString('hr-HR')}
           />
         )}
@@ -150,6 +234,36 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
           <Text style={styles.notesText}>{elevator.napomene}</Text>
         </View>
       )}
+
+      <View style={styles.infoSection}>
+        <Text style={styles.sectionTitle}>Checklist povijest</Text>
+        {Object.keys(checklistLabels).map(key => {
+          const lastDate = checklistHistory[key];
+          const ago = lastDate ? daysAgo(lastDate) : null;
+          // Boja prema starosti i intervalServisa (ako postoji)
+          let badgeColor = '#6b7280';
+          if (ago === null) {
+            badgeColor = '#9ca3af';
+          } else if (ago <= 60) {
+            badgeColor = '#10b981';
+          } else if (ago <= 180) {
+            badgeColor = '#f59e0b';
+          } else {
+            badgeColor = '#ef4444';
+          }
+          return (
+            <View key={key} style={styles.checkHistoryRow}>
+              <Text style={styles.checkHistoryLabel}>{checklistLabels[key]}</Text>
+              <View style={[styles.checkHistoryBadge, { backgroundColor: badgeColor }]}> 
+                <Text style={styles.checkHistoryBadgeText}>
+                  {lastDate ? `${ago} d` : 'nikad'}
+                </Text>
+              </View>
+            </View>
+          );
+        })}
+        <Text style={styles.checkHistoryHint}>Prikazuje koliko dana je prošlo od zadnje provjere svake stavke.</Text>
+      </View>
 
       <View style={styles.actionButtons}>
         {elevator.kontaktOsoba && typeof elevator.kontaktOsoba === 'object' && 
@@ -263,7 +377,7 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
   );
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
@@ -324,13 +438,13 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
       {/* Floating Action Buttons */}
       <View style={styles.fabContainer}>
         <TouchableOpacity style={[styles.fab, styles.fabSecondary]} onPress={handleReportFault}>
-          <Ionicons name="warning" size={24} color="#fff" />
+          <Ionicons name="construct" size={24} color="#fff" />
         </TouchableOpacity>
         <TouchableOpacity style={styles.fab} onPress={handleAddService}>
-          <Ionicons name="add" size={28} color="#fff" />
+          <Ionicons name="briefcase" size={24} color="#fff" />
         </TouchableOpacity>
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -471,6 +585,58 @@ const styles = StyleSheet.create({
     color: '#4b5563',
     lineHeight: 20,
   },
+  elevatorsInline: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  elevatorBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#f3f4f6',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  elevatorBadgeActive: {
+    backgroundColor: '#2563eb',
+    borderColor: '#2563eb',
+  },
+  elevatorBadgeText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  elevatorBadgeTextActive: {
+    color: '#fff',
+  },
+  checkHistoryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6'
+  },
+  checkHistoryLabel: {
+    fontSize: 14,
+    color: '#374151'
+  },
+  checkHistoryBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12
+  },
+  checkHistoryBadgeText: {
+    fontSize: 12,
+    color: '#fff',
+    fontWeight: '600'
+  },
+  checkHistoryHint: {
+    marginTop: 10,
+    fontSize: 12,
+    color: '#6b7280'
+  },
   actionButtons: {
     flexDirection: 'row',
     gap: 12,
@@ -562,7 +728,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#2563eb',
+    backgroundColor: '#10b981',
     alignItems: 'center',
     justifyContent: 'center',
     elevation: 6,
@@ -572,7 +738,7 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
   },
   fabSecondary: {
-    backgroundColor: '#f59e0b',
+    backgroundColor: '#ef4444',
     width: 48,
     height: 48,
     borderRadius: 24,

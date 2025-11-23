@@ -32,9 +32,7 @@ export default function ServicesListScreen({ navigation }) {
     try {
       const allServices = serviceDB.getAll() || [];
       // Sortiraj po datumu - najnoviji prvo
-      const sorted = allServices.sort((a, b) => 
-        new Date(b.datum) - new Date(a.datum)
-      );
+      const sorted = allServices.sort((a, b) => new Date(b.datum) - new Date(a.datum));
       setServices(sorted);
     } catch (error) {
       console.error('Greška pri učitavanju servisa:', error);
@@ -106,13 +104,48 @@ export default function ServicesListScreen({ navigation }) {
   };
 
   const renderServiceItem = ({ item }) => {
-    const serviceDate = new Date(item.datum);
+    const rawDate = item.datum || item.serviceDate;
+    const serviceDate = rawDate ? new Date(rawDate) : new Date();
     const sljedeciServisDate = item.sljedeciServis ? new Date(item.sljedeciServis) : null;
     const daysUntilNext = sljedeciServisDate ? 
       Math.ceil((sljedeciServisDate - new Date()) / (1000 * 60 * 60 * 24)) : null;
-    
-    // Pronađi dizalo po ID-u
-    const elevator = elevatorDB.getById(item.elevatorId);
+    // Normaliziraj elevatorId (može biti objekt ako je došlo direktno iz API-ja)
+    const elevatorId = (typeof item.elevatorId === 'object' && item.elevatorId !== null)
+      ? (item.elevatorId._id || item.elevatorId.id)
+      : item.elevatorId;
+    let elevator = elevatorId ? elevatorDB.getById(elevatorId) : null;
+    // Ako nije pronađeno u lokalnoj bazi, ali imamo objekt, koristi taj objekt
+    if (!elevator && typeof item.elevatorId === 'object' && item.elevatorId) {
+      elevator = {
+        brojDizala: item.elevatorId.brojDizala || undefined,
+        nazivStranke: item.elevatorId.nazivStranke || 'Nepoznato dizalo',
+        ulica: item.elevatorId.ulica || '',
+        mjesto: item.elevatorId.mjesto || ''
+      };
+    }
+    // Fallback ako elevatorId uopće ne postoji
+    if (!elevator) {
+      elevator = {
+        brojDizala: undefined,
+        nazivStranke: 'Obrisano dizalo',
+        ulica: '',
+        mjesto: ''
+      };
+    }
+
+    // Formatiraj ime servisera
+    let serviserName = 'Nepoznat serviser';
+    if (item.serviserID) {
+      if (typeof item.serviserID === 'object') {
+        const ime = item.serviserID.ime || item.serviserID.firstName || '';
+        const prezime = item.serviserID.prezime || item.serviserID.lastName || '';
+        const full = `${ime} ${prezime}`.trim();
+        if (full) serviserName = full;
+      } else if (typeof item.serviserID === 'string') {
+        // ID string – prikaži skraćeno
+        serviserName = item.serviserID.substring(0, 6) + '…';
+      }
+    }
 
     return (
       <View style={styles.serviceCard}>
@@ -123,7 +156,10 @@ export default function ServicesListScreen({ navigation }) {
           <View style={styles.serviceHeader}>
             <View style={styles.serviceInfo}>
               <Text style={styles.elevatorName}>
-                {elevator?.nazivStranke || 'N/A'} - {elevator?.ulica || ''} ({elevator?.brojDizala || 'N/A'})
+                {elevator?.nazivStranke || 'Obrisano dizalo'} {elevator?.brojDizala ? `• ${elevator.brojDizala}` : ''}
+              </Text>
+              <Text style={styles.elevatorAddress}>
+                {elevator ? `${elevator.ulica || ''}${elevator.mjesto ? `, ${elevator.mjesto}` : ''}` : ''}
               </Text>
               <Text style={styles.serviceDate}>
                 {serviceDate.toLocaleDateString('hr-HR')}
@@ -142,15 +178,17 @@ export default function ServicesListScreen({ navigation }) {
             )}
           </View>
 
-          <Text style={styles.serviceDescription} numberOfLines={2}>
-            {item.napomene || 'Bez napomena'}
-          </Text>
+          {!!item.napomene && (
+            <Text style={styles.serviceDescription} numberOfLines={2}>
+              {item.napomene}
+            </Text>
+          )}
 
           <View style={styles.serviceFooter}>
             <View style={styles.technicianInfo}>
               <Ionicons name="person-outline" size={16} color="#666" />
               <Text style={styles.technicianName}>
-                {item.serviserID || 'Nepoznat serviser'}
+                {serviserName}
               </Text>
             </View>
             {item.synced && (

@@ -10,6 +10,7 @@ import {
   Platform,
   Alert,
 } from 'react-native';
+import { version } from '../../package.json';
 import { useAuth } from '../context/AuthContext';
 import * as SecureStore from 'expo-secure-store';
 
@@ -17,6 +18,7 @@ export default function LoginScreen() {
   const { login, loading, setUser } = useAuth();
   const [email, setEmail] = useState('');
   const [lozinka, setLozinka] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = async () => {
     if (!email || !lozinka) {
@@ -56,15 +58,26 @@ export default function LoginScreen() {
             editable={!loading}
           />
 
-          <TextInput
-            style={styles.input}
-            placeholder="Lozinka"
-            placeholderTextColor="#999"
-            value={lozinka}
-            onChangeText={setLozinka}
-            secureTextEntry={true}
-            editable={!loading}
-          />
+          <View style={styles.passwordContainer}>
+            <TextInput
+              style={styles.passwordInput}
+              placeholder="Lozinka"
+              placeholderTextColor="#999"
+              value={lozinka}
+              onChangeText={setLozinka}
+              secureTextEntry={!showPassword}
+              autoComplete="password"
+              textContentType="password"
+              importantForAutofill="yes"
+              editable={!loading}
+            />
+            <TouchableOpacity
+              style={styles.eyeButton}
+              onPress={() => setShowPassword(!showPassword)}
+            >
+              <Text style={styles.eyeIcon}>{showPassword ? '👁️' : '👁️‍🗨️'}</Text>
+            </TouchableOpacity>
+          </View>
 
           <TouchableOpacity
             style={[styles.button, loading && styles.buttonDisabled]}
@@ -81,7 +94,7 @@ export default function LoginScreen() {
 
         {/* Footer */}
         <Text style={styles.footer}>
-          APPEL v2.0 • Offline-First
+          APPEL v{version} • Build 9 • Offline-First
         </Text>
       </View>
     </KeyboardAvoidingView>
@@ -123,6 +136,27 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     borderWidth: 1,
     borderColor: '#e0e0e0',
+  },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    marginBottom: 15,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  passwordInput: {
+    flex: 1,
+    padding: 15,
+    fontSize: 16,
+    fontFamily: Platform.select({ android: 'monospace', ios: 'Courier' }),
+  },
+  eyeButton: {
+    padding: 15,
+  },
+  eyeIcon: {
+    fontSize: 20,
   },
   button: {
     backgroundColor: '#2563eb',

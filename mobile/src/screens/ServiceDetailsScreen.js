@@ -46,12 +46,31 @@ export default function ServiceDetailsScreen({ route, navigation }) {
         {checklistItems.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Checklist</Text>
-            {checklistItems.map((item, idx) => (
-              <View key={idx} style={styles.checkItem}>
-                <Ionicons name={item.provjereno ? 'checkmark-circle' : 'ellipse-outline'} size={20} color={item.provjereno ? '#10b981' : '#9ca3af'} />
-                <Text style={styles.checkLabel}>{item.stavka.replace(/_/g, ' ')}</Text>
-              </View>
-            ))}
+            {checklistItems.map((item, idx) => {
+              const labelMap = {
+                lubrication: 'Podmazivanje',
+                ups_check: 'Provjera UPS-a',
+                voice_comm: 'Govorna veza',
+                shaft_cleaning: 'Čišćenje šahta',
+                drive_check: 'Provjera pog. stroja',
+                brake_check: 'Provjera kočnice',
+                cable_inspection: 'Inspekcija užeta',
+                // Legacy fallback
+                engine_check: 'Provjera motora',
+                door_system: 'Sustav vrata',
+                emergency_brake: 'Sigurnosna kočnica',
+                control_panel: 'Kontrolna ploča',
+                safety_devices: 'Sigurnosne naprave',
+                lighting: 'Rasvjeta'
+              };
+              const label = labelMap[item.stavka] || item.stavka.replace(/_/g, ' ');
+              return (
+                <View key={idx} style={styles.checkItem}>
+                  <Ionicons name={item.provjereno ? 'checkmark-circle' : 'ellipse-outline'} size={20} color={item.provjereno ? '#10b981' : '#9ca3af'} />
+                  <Text style={styles.checkLabel}>{label}</Text>
+                </View>
+              );
+            })}
           </View>
         )}
 

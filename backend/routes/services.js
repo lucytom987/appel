@@ -10,13 +10,20 @@ const { logAction } = require('../services/auditService');
 // @access  Private
 router.get('/', authenticate, async (req, res) => {
   try {
-    const { elevatorId, status, startDate, endDate, technician } = req.query;
+    const { elevatorId, status, startDate, endDate, technician, updatedAfter } = req.query;
     
     let filter = {};
     
-    if (elevatorId) filter.elevator = elevatorId;
+    if (elevatorId) filter.elevatorId = elevatorId;
     if (status) filter.status = status;
-    if (technician) filter.performedBy = technician;
+    if (technician) filter.serviserID = technician;
+    
+    // Delta sync support: dohvati samo servise ažurirane nakon određenog vremena
+    if (updatedAfter) {
+      const afterDate = new Date(updatedAfter);
+      console.log('📍 Delta sync: dohvataing services updated after', afterDate.toISOString());
+      filter.azuriranDatum = { $gte: afterDate };
+    }
     
     if (startDate || endDate) {
       filter.datum = {};
@@ -29,6 +36,10 @@ router.get('/', authenticate, async (req, res) => {
       .populate('serviserID', 'ime prezime email')
       .sort({ datum: -1 })
       .lean();
+
+    if (updatedAfter) {
+      console.log('✨ Delta sync result:Found', services.length, 'updated services');
+    }
 
     res.json({
       success: true,
@@ -125,23 +136,42 @@ router.get('/:id', authenticate, async (req, res) => {
 // @access  Private (Technician, Manager, Admin)
 router.post('/', authenticate, async (req, res) => {
   try {
+    console.log('📨 POST /services request body:', JSON.stringify(req.body, null, 2));
+    
     // Provjeri da li dizalo postoji
     const elevatorId = req.body.elevatorId || req.body.elevator;
-    const elevator = await Elevator.findById(elevatorId);
-    if (!elevator) {
-      return res.status(404).json({
+    console.log('🔍 Tražim dizalo sa ID:', elevatorId, '(type:', typeof elevatorId, ')');
+    
+    if (!elevatorId) {
+      console.log('❌ elevatorId nedostaje!');
+      return res.status(400).json({
         success: false,
-        message: 'Dizalo nije pronađeno'
+        message: 'elevatorId je obavezan'
       });
     }
 
+    const elevator = await Elevator.findById(elevatorId);
+    console.log('✅ Dizalo pronađeno:', elevator ? 'DA' : 'NE');
+    
+    if (!elevator) {
+      console.log('❌ Dizalo sa ID', elevatorId, 'nije pronađeno');
+      return res.status(404).json({
+        success: false,
+        message: 'Dizalo nije pronađeno',
+        elevatorId: elevatorId
+      });
+    }
+
+    console.log('📝 Kreiravam novi Service...');
     const service = new Service({
       ...req.body,
       elevatorId: elevatorId,
       serviserID: req.user._id
     });
 
+    console.log('💾 Spašavam service u bazu...');
     await service.save();
+    console.log('✅ Service uspješno spasen:', service._id);
 
     // Ažuriraj zadnji servis na dizalu
     elevator.zadnjiServis = service.datum;
@@ -163,20 +193,40 @@ router.post('/', authenticate, async (req, res) => {
     });
 
     // Populate prije slanja
+    console.log('📥 Populatiram elevatorId...');
     await service.populate('elevatorId', 'brojUgovora nazivStranke ulica mjesto brojDizala');
+    console.log('📥 Populatiram serviserID...');
     await service.populate('serviserID', 'ime prezime email');
 
+    console.log('✅ Service uspješno kreiran i populiran:', service._id);
     res.status(201).json({
       success: true,
       message: 'Servis uspješno kreiran',
       data: service
     });
   } catch (error) {
-    console.error('❌ Greška pri kreiranju servisa:', error);
+    console.error('❌ GREŠKA pri kreiranju servisa:', error);
+    console.error('📋 Error stack:', error.stack);
+    console.error('📋 Error message:', error.message);
+    console.error('📋 Error name:', error.name);
+    
+    // Posebna obrada za validation errors
+    if (error.name === 'ValidationError') {
+      console.error('📋 Validation error details:', error.errors);
+      const messages = Object.keys(error.errors).map(key => `${key}: ${error.errors[key].message}`).join('; ');
+      return res.status(400).json({
+        success: false,
+        message: 'Validacijska greška pri kreiranju servisa',
+        errors: error.errors,
+        errorMessages: messages
+      });
+    }
+    
     res.status(500).json({
       success: false,
       message: 'Greška pri kreiranju servisa',
-      error: error.message
+      error: error.message,
+      errorName: error.name
     });
   }
 });

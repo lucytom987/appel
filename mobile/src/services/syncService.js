@@ -3,6 +3,42 @@ import * as SecureStore from 'expo-secure-store';
 import { elevatorsAPI, servicesAPI, repairsAPI, usersAPI } from './api';
 import { elevatorDB, serviceDB, repairDB, userDB } from '../database/db';
 
+// Normalizira payload prije slanja da spriječi validation/cast greške na backendu
+const normalizeServicePayload = (s) => {
+  const checklist = Array.isArray(s.checklist)
+    ? s.checklist
+        .map((item) => ({
+          stavka: item?.stavka,
+          provjereno: typeof item?.provjereno === 'number' ? item.provjereno : 0,
+          napomena: item?.napomena,
+        }))
+        .filter((i) => !!i.stavka)
+    : [];
+
+  const nedostaci = Array.isArray(s.nedostaci)
+    ? s.nedostaci.map((n) => ({
+        opis: n?.opis,
+        fotografija: n?.fotografija,
+        datumPrijave: n?.datumPrijave || undefined,
+        repairId: n?.repairId || undefined,
+      }))
+    : [];
+
+  const payload = {
+    elevatorId: s.elevatorId,
+    datum: s.datum,
+    checklist,
+    imaNedostataka: Boolean(s.imaNedostataka),
+    nedostaci,
+    napomene: s.napomene || '',
+    sljedeciServis: s.sljedeciServis || undefined,
+  };
+
+  // Izbaci undefined polja da ne šaljemo prazne vrijednosti
+  Object.keys(payload).forEach((k) => payload[k] === undefined && delete payload[k]);
+  return payload;
+};
+
 const explainError = (err) => {
   const status = err?.response?.status;
   const data = err?.response?.data;
@@ -216,26 +252,12 @@ export const syncServicesToServer = async () => {
   for (const s of unsynced) {
     try {
       if (s.id.startsWith('local_')) {
-        const res = await servicesAPI.create({
-          elevatorId: s.elevatorId,
-          datum: s.datum,
-          checklist: s.checklist || [],
-          imaNedostataka: Boolean(s.imaNedostataka),
-          nedostaci: s.nedostaci || [],
-          napomene: s.napomene,
-          sljedeciServis: s.sljedeciServis,
-          serviserID: s.serviserID,
-        });
+        const res = await servicesAPI.create(normalizeServicePayload(s));
         serviceDB.markSynced(s.id, res.data.data._id);
       } else {
-        await servicesAPI.update(s.id, {
-          datum: s.datum,
-          checklist: s.checklist || [],
-          imaNedostataka: Boolean(s.imaNedostataka),
-          nedostaci: s.nedostaci || [],
-          napomene: s.napomene,
-          sljedeciServis: s.sljedeciServis,
-        });
+        const payload = normalizeServicePayload(s);
+        delete payload.elevatorId; // backend čuva originalni elevatorId
+        await servicesAPI.update(s.id, payload);
         serviceDB.markSynced(s.id, s.id);
       }
     } catch (err) {

@@ -194,7 +194,13 @@ router.put('/:id', authenticate, async (req, res) => {
 
     res.json({ success: true, message: 'Servis ažuriran', data: service });
   } catch (error) {
-    console.error('Greška pri ažuriranju servisa:', error);
+    console.error('Greška pri ažuriranju servisa:', {
+      message: error.message,
+      name: error.name,
+      errors: error.errors,
+      body: req.body,
+      params: req.params,
+    });
 
     if (error.name === 'ValidationError') {
       const messages = Object.keys(error.errors).map(key => `${key}: ${error.errors[key].message}`).join('; ');

@@ -3,6 +3,15 @@ import * as SecureStore from 'expo-secure-store';
 import { elevatorsAPI, servicesAPI, repairsAPI, usersAPI } from './api';
 import { elevatorDB, serviceDB, repairDB, userDB } from '../database/db';
 
+const explainError = (err) => {
+  const data = err?.response?.data;
+  if (!data) return err?.message;
+  if (data.errorMessages) return data.errorMessages;
+  if (data.errors) return JSON.stringify(data.errors);
+  if (data.message) return data.message;
+  return err?.message;
+};
+
 // Brzi, pouzdani sync s delta (updatedAfter) i push za lokalne promjene.
 
 let isOnline = false;
@@ -227,7 +236,7 @@ export const syncServicesToServer = async () => {
         serviceDB.markSynced(s.id, s.id);
       }
     } catch (err) {
-      console.log('Greška push service', s.id, err.message);
+      console.log('Greška push service', s.id, explainError(err));
     }
   }
   return true;
@@ -266,7 +275,7 @@ export const syncRepairsToServer = async () => {
         repairDB.markSynced(r.id, r.id);
       }
     } catch (err) {
-      console.log('Greška push repair', r.id, err.message);
+      console.log('Greška push repair', r.id, explainError(err));
     }
   }
   return true;

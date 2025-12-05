@@ -7,10 +7,12 @@ const explainError = (err) => {
   const status = err?.response?.status;
   const data = err?.response?.data;
   if (!data) return `${err?.message || 'Unknown error'}${status ? ` (status ${status})` : ''}`;
+  // Prefer detailed payload
+  const payload = JSON.stringify(data);
   if (data.errorMessages) return `${data.errorMessages}${status ? ` (status ${status})` : ''}`;
   if (data.errors) return `${JSON.stringify(data.errors)}${status ? ` (status ${status})` : ''}`;
-  if (data.message) return `${data.message}${status ? ` (status ${status})` : ''}`;
-  return `${err?.message || 'Unknown error'}${status ? ` (status ${status})` : ''}`;
+  if (data.message) return `${data.message}${status ? ` (status ${status})` : ''} | payload: ${payload}`;
+  return `${payload}${status ? ` (status ${status})` : ''}`;
 };
 
 // Brzi, pouzdani sync s delta (updatedAfter) i push za lokalne promjene.
@@ -238,6 +240,9 @@ export const syncServicesToServer = async () => {
       }
     } catch (err) {
       console.log('Greška push service', s.id, explainError(err));
+      if (err?.response?.data) {
+        console.log('Detalji greške:', err.response.data);
+      }
     }
   }
   return true;
@@ -277,6 +282,9 @@ export const syncRepairsToServer = async () => {
       }
     } catch (err) {
       console.log('Greška push repair', r.id, explainError(err));
+      if (err?.response?.data) {
+        console.log('Detalji greške:', err.response.data);
+      }
     }
   }
   return true;

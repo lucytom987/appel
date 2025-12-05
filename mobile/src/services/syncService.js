@@ -4,12 +4,13 @@ import { elevatorsAPI, servicesAPI, repairsAPI, usersAPI } from './api';
 import { elevatorDB, serviceDB, repairDB, userDB } from '../database/db';
 
 const explainError = (err) => {
+  const status = err?.response?.status;
   const data = err?.response?.data;
-  if (!data) return err?.message;
-  if (data.errorMessages) return data.errorMessages;
-  if (data.errors) return JSON.stringify(data.errors);
-  if (data.message) return data.message;
-  return err?.message;
+  if (!data) return `${err?.message || 'Unknown error'}${status ? ` (status ${status})` : ''}`;
+  if (data.errorMessages) return `${data.errorMessages}${status ? ` (status ${status})` : ''}`;
+  if (data.errors) return `${JSON.stringify(data.errors)}${status ? ` (status ${status})` : ''}`;
+  if (data.message) return `${data.message}${status ? ` (status ${status})` : ''}`;
+  return `${err?.message || 'Unknown error'}${status ? ` (status ${status})` : ''}`;
 };
 
 // Brzi, pouzdani sync s delta (updatedAfter) i push za lokalne promjene.

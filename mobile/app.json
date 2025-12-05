@@ -16,7 +16,7 @@
       "supportsTablet": true
     },
     "android": {
-      "package": "com.appel.elevators", 
+      "package": "com.appel.elevators",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -24,12 +24,17 @@
       "edgeToEdgeEnabled": true,
       "config": {
         "googleMaps": {
-          "apiKey": "AIzaSyD3KrrNQC0Nl_BqEjh-ifM0MMnlmdPSwIc"
+          "apiKey": "AIzaSyA1NV3mL53rtWiAZ64G81mgqhCrI9cDZdE"
         }
       }
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "0d60b61b-9b5e-4b73-96b1-c9199484a26b"
+      }
     }
   }
 }

@@ -133,7 +133,7 @@ export const initDatabase = () => {
         datumPopravka TEXT,
         opisKvara TEXT,
         opisPopravka TEXT,
-        status TEXT DEFAULT 'čekanje',
+        status TEXT DEFAULT 'pending',
         radniNalogPotpisan INTEGER DEFAULT 0,
         popravkaUPotpunosti INTEGER DEFAULT 0,
         napomene TEXT,
@@ -161,10 +161,10 @@ export const initDatabase = () => {
         chatroomId TEXT,
         sender TEXT,
         senderName TEXT,
-        content TEXT,
-        imageUrl TEXT,
-        readBy TEXT,
-        createdAt TEXT,
+        tekst TEXT,
+        slika TEXT,
+        isRead TEXT,
+        kreiranDatum TEXT,
         synced INTEGER DEFAULT 0,
         updated_at INTEGER,
         FOREIGN KEY (chatroomId) REFERENCES chatrooms(id)
@@ -462,7 +462,7 @@ export const repairDB = {
         repair.datumPopravka,
         repair.opisKvara,
         repair.opisPopravka,
-        repair.status || 'čekanje',
+        repair.status || 'pending',
         repair.radniNalogPotpisan ? 1 : 0,
         repair.popravkaUPotpunosti ? 1 : 0,
         repair.napomene,
@@ -592,23 +592,23 @@ export const userDB = {
 // Messages DB
 export const messageDB = {
   getByRoom: (roomId) => {
-    return db.getAllSync('SELECT * FROM messages WHERE chatroomId = ? ORDER BY createdAt', [roomId]);
+    return db.getAllSync('SELECT * FROM messages WHERE chatroomId = ? ORDER BY kreiranDatum', [roomId]);
   },
   
   insert: (message) => {
     const id = message.id || message._id || `local_${Date.now()}`;
     return db.runSync(
-      `INSERT INTO messages (id, chatroomId, sender, senderName, content, imageUrl, 
-       readBy, createdAt, synced, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO messages (id, chatroomId, sender, senderName, tekst, slika, 
+       isRead, kreiranDatum, synced, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         message.chatRoom || message.chatroomId,
-        message.sender?._id || message.sender,
+        message.senderId?._id || message.senderId || message.sender,
         message.sender?.name || message.senderName,
-        message.content,
-        message.imageUrl,
-        JSON.stringify(message.readBy || []),
-        message.createdAt || new Date().toISOString(),
+        message.tekst || message.content,
+        message.slika || message.imageUrl,
+        JSON.stringify(message.isRead || message.readBy || []),
+        message.kreiranDatum || message.createdAt || new Date().toISOString(),
         0,
         Date.now()
       ]
@@ -705,3 +705,6 @@ export const cleanupOrphans = () => {
 };
 
 export default db;
+
+
+

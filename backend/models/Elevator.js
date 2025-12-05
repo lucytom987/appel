@@ -70,5 +70,6 @@ elevatorSchema.index({ ulica: 1 });
 elevatorSchema.index({ mjesto: 1 });
 elevatorSchema.index({ brojDizala: 1 });
 elevatorSchema.index({ status: 1 });
+elevatorSchema.index({ azuriranDatum: -1 });
 
 module.exports = mongoose.model('Elevator', elevatorSchema);

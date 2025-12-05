@@ -9,33 +9,21 @@ const router = express.Router();
 // POST /api/auth/login - Prijava korisnika
 router.post('/login', async (req, res) => {
   try {
-    console.log('📥 Login request body:', req.body);
     const { email, lozinka } = req.body;
 
-    console.log('📧 Email:', email, '(length:', email?.length, 'type:', typeof email, ')');
-    console.log('🔑 Lozinka primljena:', lozinka ? 'DA' : 'NE', '(length:', lozinka?.length, 'type:', typeof lozinka, ')');
-    console.log('🔍 Lozinka bytes:', lozinka ? Buffer.from(lozinka).toString('hex') : 'N/A');
-
     if (!email || !lozinka) {
-      console.log('❌ Email ili lozinka nedostaju!');
       return res.status(400).json({ message: 'Email i lozinka su obavezni' });
     }
 
-    console.log('🔍 Tražim korisnika:', email);
     const user = await User.findOne({ email });
-    console.log('👤 Korisnik pronađen:', user ? 'DA' : 'NE');
     
     if (!user || !user.aktivan) {
-      console.log('❌ Korisnik ne postoji ili nije aktivan');
       return res.status(401).json({ message: 'Nevaljani email ili lozinka' });
     }
 
-    console.log('🔐 Provjeravam lozinku...');
     const validnaLozinka = await user.provjeriLozinku(lozinka);
-    console.log('✅ Lozinka validna:', validnaLozinka ? 'DA' : 'NE');
     
     if (!validnaLozinka) {
-      console.log('❌ Pogrešna lozinka');
       return res.status(401).json({ message: 'Nevaljani email ili lozinka' });
     }
 
@@ -46,15 +34,13 @@ router.post('/login', async (req, res) => {
       { expiresIn: process.env.JWT_EXPIRE || '24h' }
     );
 
-    console.log(`✅ Korisnik prijavljen: ${user.email} (${user.uloga})`);
-
     res.json({
       token,
       korisnik: user.toJSON()
     });
   } catch (error) {
-    console.error('❌ Login greška:', error);
-    res.status(500).json({ message: 'Greška pri prijavi' });
+    console.error('ƒ?O Login gre­ka:', error);
+    res.status(500).json({ message: 'Gre­ka pri prijavi' });
   }
 });
 
@@ -63,14 +49,14 @@ router.post('/register', authenticate, async (req, res) => {
   try {
     const { ime, prezime, email, lozinka, uloga, telefon } = req.body;
 
-    // Samo admin može registrirati
+    // Samo admin moóe registrirati
     if (req.user.uloga !== 'admin') {
-      return res.status(403).json({ message: 'Samo admin može registrirati nove korisnike' });
+      return res.status(403).json({ message: 'Samo admin moóe registrirati nove korisnike' });
     }
 
     const postojeciKorisnik = await User.findOne({ email });
     if (postojeciKorisnik) {
-      return res.status(400).json({ message: 'Korisnik sa tim emailom već postoji' });
+      return res.status(400).json({ message: 'Korisnik sa tim emailom veŽÎ postoji' });
     }
 
     const noviKorisnik = new User({
@@ -96,15 +82,13 @@ router.post('/register', authenticate, async (req, res) => {
       opis: `Kreiran novi korisnik: ${email}`
     });
 
-    console.log(`✅ Novi korisnik registriran: ${email}`);
-
     res.status(201).json({
-      message: 'Korisnik uspješno registriran',
+      message: 'Korisnik uspje­no registriran',
       user: noviKorisnik.toJSON()
     });
   } catch (error) {
-    console.error('❌ Register greška:', error);
-    res.status(500).json({ message: 'Greška pri registraciji' });
+    console.error('ƒ?O Register gre­ka:', error);
+    res.status(500).json({ message: 'Gre­ka pri registraciji' });
   }
 });
 

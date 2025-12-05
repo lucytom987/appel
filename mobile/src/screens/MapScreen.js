@@ -296,13 +296,14 @@ export default function MapScreen({ navigation }) {
         provider={PROVIDER_GOOGLE}
         style={styles.map}
         initialRegion={initialRegion}
+        googleMapsApiKey={process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY}
         showsUserLocation={true}
         showsMyLocationButton={false}
       >
         {/* Elevator markers */}
         {elevators.map((elevator) => (
           <Marker
-            key={elevator.id}
+            key={elevator.id || elevator._id}
             coordinate={{
               latitude: elevator.koordinate.latitude,
               longitude: elevator.koordinate.longitude,
@@ -624,3 +625,4 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
 });
+

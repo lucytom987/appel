@@ -152,6 +152,7 @@ export default function LocationPickerModal({ visible, onClose, onSelectLocation
             style={styles.map}
             provider={PROVIDER_GOOGLE}
             initialRegion={region}
+            googleMapsApiKey={process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY}
             onPress={handleMapPress}
             showsUserLocation={true}
             showsMyLocationButton={false}

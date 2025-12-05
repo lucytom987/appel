@@ -9,13 +9,28 @@ const { logAction } = require('../services/auditService');
 // @access  Private
 router.get('/', authenticate, async (req, res) => {
   try {
-    const elevators = await Elevator.find()
+    const { updatedAfter, limit = 200, skip = 0 } = req.query;
+    const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 0, 1), 500);
+    const parsedSkip = Math.max(parseInt(skip, 10) || 0, 0);
+    const filter = {};
+    if (updatedAfter) {
+      const afterDate = new Date(updatedAfter);
+      filter.azuriranDatum = { $gte: afterDate };
+      console.log('Delta sync elevators, updatedAfter:', afterDate.toISOString());
+    }
+
+    const elevators = await Elevator.find(filter)
       .sort({ nazivStranke: 1 })
+      .skip(parsedSkip)
+      .limit(parsedLimit)
       .lean();
+
+    const total = await Elevator.countDocuments(filter);
 
     res.json({
       success: true,
       count: elevators.length,
+      total,
       data: elevators
     });
   } catch (error) {

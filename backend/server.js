@@ -4,6 +4,8 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const http = require('http');
 const { Server } = require('socket.io');
+const jwt = require('jsonwebtoken');
+const User = require('./models/User');
 
 dotenv.config();
 
@@ -45,24 +47,44 @@ app.use('/api/audit-logs', require('./routes/auditLogs'));
 // Socket.io setup
 const activeUsers = new Map();
 
-io.on('connection', (socket) => {
+io.on('connection', async (socket) => {
   console.log(`🔌 Korisnik spojen: ${socket.id}`);
 
-  // Autentifikacija
-  socket.on('authenticate', (userId) => {
-    socket.userId = userId;
-    activeUsers.set(userId, socket.id);
-    console.log(`✅ Autentificiran: ${userId}`);
-  });
+  // JWT autentifikacija u handshakeu
+  try {
+    const token = socket.handshake.auth?.token || socket.handshake.query?.token;
+    if (!token) {
+      socket.emit('auth-error', 'Nedostaje token');
+      return socket.disconnect(true);
+    }
+
+    const decoded = jwt.verify(token.replace('Bearer ', ''), process.env.JWT_SECRET);
+    const user = await User.findById(decoded.userId);
+
+    if (!user || !user.aktivan) {
+      socket.emit('auth-error', 'Korisnik nije aktivan');
+      return socket.disconnect(true);
+    }
+
+    socket.userId = String(user._id);
+    activeUsers.set(socket.userId, socket.id);
+    console.log(`✅ Auth socket: ${user.email} (${socket.userId})`);
+  } catch (err) {
+    console.log('❌ Socket auth fail:', err.message);
+    socket.emit('auth-error', 'Nevažeći token');
+    return socket.disconnect(true);
+  }
 
   // Join chat room
   socket.on('join-room', (roomId) => {
+    if (!socket.userId) return;
     socket.join(`room-${roomId}`);
     console.log(`📍 Korisnik ${socket.userId} pridružen room-${roomId}`);
   });
 
   // Send message
   socket.on('send-message', (data) => {
+    if (!socket.userId) return;
     const { roomId, message } = data;
     io.to(`room-${roomId}`).emit('new-message', {
       senderId: socket.userId,

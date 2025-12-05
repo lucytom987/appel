@@ -1,8 +1,19 @@
 const AuditLog = require('../models/AuditLog');
 
-// Logiranje akcija
-const logAction = async (data) => {
+// Logiranje akcija (podržava object ili positional potpis)
+const logAction = async (...args) => {
   try {
+    let payload = {};
+
+    // Novi potpis: logAction({ korisnikId, akcija, ... })
+    if (args.length === 1 && typeof args[0] === 'object' && !Array.isArray(args[0])) {
+      payload = args[0];
+    } else {
+      // Stari potpis: logAction(korisnikId, akcija, entitet, entitetId, noveVrijednosti)
+      const [korisnikId, akcija, entitet, entitetId, noveVrijednosti] = args;
+      payload = { korisnikId, akcija, entitet, entitetId, noveVrijednosti };
+    }
+
     const {
       korisnikId,
       akcija,
@@ -13,7 +24,7 @@ const logAction = async (data) => {
       noveVrijednosti,
       ipAdresa,
       opis
-    } = data;
+    } = payload;
 
     const auditLog = new AuditLog({
       korisnikId,
@@ -28,9 +39,9 @@ const logAction = async (data) => {
     });
 
     await auditLog.save();
-    console.log(`📝 Audit log: ${akcija} ${entitet} od korisnika ${korisnikId}`);
+    console.log(`ÐY"? Audit log: ${akcija} ${entitet} od korisnika ${korisnikId}`);
   } catch (error) {
-    console.error('❌ Greška pri logiiranju:', error);
+    console.error('ƒ?O Gre­ka pri logiiranju:', error);
     // Ne prekidaj glavnu akciju ako audit logs failne
   }
 };

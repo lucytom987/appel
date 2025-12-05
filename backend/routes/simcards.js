@@ -5,267 +5,194 @@ const Elevator = require('../models/Elevator');
 const { authenticate, checkRole } = require('../middleware/auth');
 const { logAction } = require('../services/auditService');
 
-// @route   GET /api/simcards
-// @desc    Dohvati sve SIM kartice
-// @access  Private
+// GET /api/simcards - lista kartica (filtri)
 router.get('/', authenticate, async (req, res) => {
   try {
-    const { status, provider } = req.query;
-    
-    let filter = {};
-    if (status) filter.status = status;
-    if (provider) filter.provider = provider;
+    const { aktivna, elevatorId, limit = 100, skip = 0 } = req.query;
+    const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 0, 1), 200);
+    const parsedSkip = Math.max(parseInt(skip, 10) || 0, 0);
+    const filter = {};
+    if (typeof aktivna !== 'undefined') filter.aktivna = aktivna === 'true' || aktivna === true;
+    if (elevatorId) filter.elevatorId = elevatorId;
 
     const simcards = await SimCard.find(filter)
-      .populate('assignedTo', 'address buildingCode')
-      .sort({ expiryDate: 1 })
+      .populate('elevatorId', 'nazivStranke ulica brojDizala')
+      .sort({ datumIsteka: 1 })
+      .skip(parsedSkip)
+      .limit(parsedLimit)
       .lean();
 
-    res.json({
-      success: true,
-      count: simcards.length,
-      data: simcards
-    });
+    const total = await SimCard.countDocuments(filter);
+
+    res.json({ success: true, count: simcards.length, total, data: simcards });
   } catch (error) {
-    console.error('❌ Greška pri dohvaćanju SIM kartica:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Greška pri dohvaćanju SIM kartica'
-    });
+    console.error('Greška pri dohvaćanju SIM kartica:', error);
+    res.status(500).json({ success: false, message: 'Greška pri dohvaćanju SIM kartica' });
   }
 });
 
-// @route   GET /api/simcards/expiring/soon
-// @desc    SIM kartice koje ističu uskoro (7 dana)
-// @access  Private
+// GET /api/simcards/expiring/soon - istječu uskoro
 router.get('/expiring/soon', authenticate, async (req, res) => {
   try {
-    const daysAhead = parseInt(req.query.days) || 7;
+    const daysAhead = parseInt(req.query.days, 10) || 7;
     const today = new Date();
     const futureDate = new Date();
     futureDate.setDate(today.getDate() + daysAhead);
 
     const simcards = await SimCard.find({
-      expiryDate: { $gte: today, $lte: futureDate },
-      status: 'active'
+      datumIsteka: { $gte: today, $lte: futureDate },
+      aktivna: true
     })
-      .populate('assignedTo', 'address buildingCode')
-      .sort({ expiryDate: 1 })
+      .populate('elevatorId', 'nazivStranke ulica brojDizala')
+      .sort({ datumIsteka: 1 })
       .lean();
 
-    res.json({
-      success: true,
-      count: simcards.length,
-      data: simcards
-    });
+    res.json({ success: true, count: simcards.length, data: simcards });
   } catch (error) {
-    console.error('❌ Greška pri dohvaćanju SIM kartica koje ističu:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Greška pri dohvaćanju SIM kartica koje ističu'
-    });
+    console.error('Greška pri dohvaćanju SIM kartica koje istječu:', error);
+    res.status(500).json({ success: false, message: 'Greška pri dohvaćanju SIM kartica koje istječu' });
   }
 });
 
-// @route   GET /api/simcards/stats/overview
-// @desc    Statistika SIM kartica
-// @access  Private
+// GET /api/simcards/stats/overview - statistika
 router.get('/stats/overview', authenticate, async (req, res) => {
   try {
     const total = await SimCard.countDocuments();
-    const active = await SimCard.countDocuments({ status: 'active' });
-    const expired = await SimCard.countDocuments({ status: 'expired' });
-    const inactive = await SimCard.countDocuments({ status: 'inactive' });
+    const active = await SimCard.countDocuments({ aktivna: true });
+    const inactive = await SimCard.countDocuments({ aktivna: false });
 
-    // Kartice koje ističu u sljedećih 7 dana
     const today = new Date();
     const futureDate = new Date();
     futureDate.setDate(today.getDate() + 7);
 
     const expiringSoon = await SimCard.countDocuments({
-      expiryDate: { $gte: today, $lte: futureDate },
-      status: 'active'
+      datumIsteka: { $gte: today, $lte: futureDate },
+      aktivna: true
     });
 
-    res.json({
-      success: true,
-      data: {
-        total,
-        active,
-        expired,
-        inactive,
-        expiringSoon
-      }
-    });
+    res.json({ success: true, data: { total, active, inactive, expiringSoon } });
   } catch (error) {
-    console.error('❌ Greška pri dohvaćanju statistike:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Greška pri dohvaćanju statistike'
-    });
+    console.error('Greška pri dohvaćanju statistike SIM kartica:', error);
+    res.status(500).json({ success: false, message: 'Greška pri dohvaćanju statistike' });
   }
 });
 
-// @route   GET /api/simcards/:id
-// @desc    Dohvati jednu SIM karticu
-// @access  Private
+// GET /api/simcards/:id - detalj
 router.get('/:id', authenticate, async (req, res) => {
   try {
     const simcard = await SimCard.findById(req.params.id)
-      .populate('assignedTo', 'address buildingCode location')
+      .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala')
       .lean();
 
     if (!simcard) {
-      return res.status(404).json({
-        success: false,
-        message: 'SIM kartica nije pronađena'
-      });
+      return res.status(404).json({ success: false, message: 'SIM kartica nije pronađena' });
     }
 
-    res.json({
-      success: true,
-      data: simcard
-    });
+    res.json({ success: true, data: simcard });
   } catch (error) {
-    console.error('❌ Greška pri dohvaćanju SIM kartice:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Greška pri dohvaćanju SIM kartice'
-    });
+    console.error('Greška pri dohvaćanju SIM kartice:', error);
+    res.status(500).json({ success: false, message: 'Greška pri dohvaćanju SIM kartice' });
   }
 });
 
-// @route   POST /api/simcards
-// @desc    Kreiraj novu SIM karticu
-// @access  Private (Admin, Manager)
+// POST /api/simcards - kreiraj
 router.post('/', authenticate, checkRole(['admin', 'menadzer']), async (req, res) => {
   try {
     const simcard = new SimCard(req.body);
     await simcard.save();
 
-    // Ako je kartica dodijeljena dizalu, ažuriraj dizalo
-    if (simcard.assignedTo) {
-      await Elevator.findByIdAndUpdate(simcard.assignedTo, {
-        simCard: simcard._id
-      });
+    if (simcard.elevatorId) {
+      await Elevator.findByIdAndUpdate(simcard.elevatorId, { simCard: simcard._id });
     }
 
-    // Audit log
-    await logAction(req.user.id, 'CREATE', 'SimCard', simcard._id, {
-      phoneNumber: simcard.phoneNumber,
-      provider: simcard.provider
+    await logAction({
+      korisnikId: req.user._id,
+      akcija: 'CREATE',
+      entitet: 'SimCard',
+      entitetId: simcard._id,
+      entitetNaziv: simcard.serijaSimKartice,
+      noveVrijednosti: simcard.toObject(),
+      ipAdresa: req.ip,
+      opis: 'Kreirana SIM kartica'
     });
 
-    await simcard.populate('assignedTo', 'address buildingCode');
+    await simcard.populate('elevatorId', 'nazivStranke ulica brojDizala');
 
-    res.status(201).json({
-      success: true,
-      message: 'SIM kartica uspješno kreirana',
-      data: simcard
-    });
+    res.status(201).json({ success: true, message: 'SIM kartica kreirana', data: simcard });
   } catch (error) {
-    console.error('❌ Greška pri kreiranju SIM kartice:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Greška pri kreiranju SIM kartice',
-      error: error.message
-    });
+    console.error('Greška pri kreiranju SIM kartice:', error);
+    res.status(500).json({ success: false, message: 'Greška pri kreiranju SIM kartice', error: error.message });
   }
 });
 
-// @route   PUT /api/simcards/:id
-// @desc    Ažuriraj SIM karticu
-// @access  Private (Admin, Manager)
+// PUT /api/simcards/:id - ažuriraj
 router.put('/:id', authenticate, checkRole(['admin', 'menadzer']), async (req, res) => {
   try {
     const oldSimCard = await SimCard.findById(req.params.id).lean();
-
     if (!oldSimCard) {
-      return res.status(404).json({
-        success: false,
-        message: 'SIM kartica nije pronađena'
-      });
+      return res.status(404).json({ success: false, message: 'SIM kartica nije pronađena' });
     }
 
     const simcard = await SimCard.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      { ...req.body, azuriranDatum: new Date() },
       { new: true, runValidators: true }
-    ).populate('assignedTo', 'address buildingCode');
+    ).populate('elevatorId', 'nazivStranke ulica brojDizala');
 
-    // Ako se promijenilo dizalo, ažuriraj oba dizala
-    if (oldSimCard.assignedTo && oldSimCard.assignedTo.toString() !== simcard.assignedTo?.toString()) {
-      // Ukloni iz starog dizala
-      await Elevator.findByIdAndUpdate(oldSimCard.assignedTo, {
-        $unset: { simCard: 1 }
-      });
+    if (oldSimCard.elevatorId && String(oldSimCard.elevatorId) !== String(simcard.elevatorId || '')) {
+      await Elevator.findByIdAndUpdate(oldSimCard.elevatorId, { $unset: { simCard: 1 } });
+    }
+    if (simcard.elevatorId) {
+      await Elevator.findByIdAndUpdate(simcard.elevatorId, { simCard: simcard._id });
     }
 
-    if (simcard.assignedTo) {
-      // Dodaj na novo dizalo
-      await Elevator.findByIdAndUpdate(simcard.assignedTo, {
-        simCard: simcard._id
-      });
-    }
-
-    // Audit log
-    await logAction(req.user.id, 'UPDATE', 'SimCard', simcard._id, {
-      phoneNumber: simcard.phoneNumber
+    await logAction({
+      korisnikId: req.user._id,
+      akcija: 'UPDATE',
+      entitet: 'SimCard',
+      entitetId: simcard._id,
+      entitetNaziv: simcard.serijaSimKartice,
+      noveVrijednosti: simcard.toObject(),
+      ipAdresa: req.ip,
+      opis: 'Ažurirana SIM kartica'
     });
 
-    res.json({
-      success: true,
-      message: 'SIM kartica uspješno ažurirana',
-      data: simcard
-    });
+    res.json({ success: true, message: 'SIM kartica ažurirana', data: simcard });
   } catch (error) {
-    console.error('❌ Greška pri ažuriranju SIM kartice:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Greška pri ažuriranju SIM kartice',
-      error: error.message
-    });
+    console.error('Greška pri ažuriranju SIM kartice:', error);
+    res.status(500).json({ success: false, message: 'Greška pri ažuriranju SIM kartice', error: error.message });
   }
 });
 
-// @route   DELETE /api/simcards/:id
-// @desc    Obriši SIM karticu
-// @access  Private (Admin only)
+// DELETE /api/simcards/:id - brisanje
 router.delete('/:id', authenticate, checkRole(['admin']), async (req, res) => {
   try {
     const simcard = await SimCard.findById(req.params.id);
-
     if (!simcard) {
-      return res.status(404).json({
-        success: false,
-        message: 'SIM kartica nije pronađena'
-      });
+      return res.status(404).json({ success: false, message: 'SIM kartica nije pronađena' });
     }
 
-    // Ukloni referencu iz dizala ako postoji
-    if (simcard.assignedTo) {
-      await Elevator.findByIdAndUpdate(simcard.assignedTo, {
-        $unset: { simCard: 1 }
-      });
+    if (simcard.elevatorId) {
+      await Elevator.findByIdAndUpdate(simcard.elevatorId, { $unset: { simCard: 1 } });
     }
 
     await simcard.deleteOne();
 
-    // Audit log
-    await logAction(req.user.id, 'DELETE', 'SimCard', req.params.id, {
-      phoneNumber: simcard.phoneNumber
+    await logAction({
+      korisnikId: req.user._id,
+      akcija: 'DELETE',
+      entitet: 'SimCard',
+      entitetId: req.params.id,
+      entitetNaziv: simcard.serijaSimKartice,
+      stareVrijednosti: simcard.toObject(),
+      ipAdresa: req.ip,
+      opis: 'Obrisana SIM kartica'
     });
 
-    res.json({
-      success: true,
-      message: 'SIM kartica uspješno obrisana'
-    });
+    res.json({ success: true, message: 'SIM kartica obrisana' });
   } catch (error) {
-    console.error('❌ Greška pri brisanju SIM kartice:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Greška pri brisanju SIM kartice'
-    });
+    console.error('Greška pri brisanju SIM kartice:', error);
+    res.status(500).json({ success: false, message: 'Greška pri brisanju SIM kartice' });
   }
 });
 

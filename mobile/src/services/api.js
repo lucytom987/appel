@@ -14,68 +14,42 @@ const api = axios.create({
   },
 });
 
-// Request interceptor - dodaj JWT token
+// Request interceptor - dodaj JWT token (bez logiranja osjetljivih podataka)
 api.interceptors.request.use(
   async (config) => {
+    // Minimalni trace radi debug-a bez osjetljivih podataka
     console.log('🚀 Axios Request:', {
       method: config.method,
       url: config.url,
-      baseURL: config.baseURL,
-      fullURL: `${config.baseURL}${config.url}`,
-      data: config.data, // LOG REQUEST BODY
     });
-    
+
     try {
       const token = await SecureStore.getItemAsync('userToken');
-      console.log('🔑 Token fetch attempt:', {
-        tokenExists: !!token,
-        tokenType: token ? (token.startsWith('offline_token_') ? 'OFFLINE' : 'ONLINE') : 'NONE',
-        tokenPreview: token ? token.substring(0, 30) + '...' : 'NE',
-      });
-      
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
-        console.log('✅ Token dodan u Authorization header');
-      } else {
-        console.warn('⚠️ Token nije pronađen u SecureStore!');
       }
     } catch (err) {
-      console.error('❌ Greška pri čitanju tokena iz SecureStore:', err);
+      console.error('❌ Greška pri čitanju tokena iz SecureStore:', err.message);
     }
-    
+
     return config;
   },
   (error) => {
-    console.error('❌ Request interceptor error:', error);
+    console.error('❌ Request interceptor error:', error.message);
     return Promise.reject(error);
   }
 );
 
 // Response interceptor - handle errors
 api.interceptors.response.use(
-  (response) => {
-    console.log('✅ Axios Response:', {
-      status: response.status,
-      statusText: response.statusText,
-      dataType: typeof response.data,
-    });
-    return response;
-  },
+  (response) => response,
   async (error) => {
     const isNetwork = !error.response;
     const status = error.response?.status;
     const method = error.config?.method?.toUpperCase();
     const endpoint = error.config?.url;
 
-    console.error('❌ Axios Response Error:', {
-      network: isNetwork,
-      message: error.message,
-      status,
-      endpoint,
-      method,
-    });
-
-    // Standardiziraj error objekt
+    // Standardiziraj error objekt (bez logiranja payload-a)
     const normalized = {
       status: status || 0,
       network: isNetwork,
@@ -88,12 +62,9 @@ api.interceptors.response.use(
     // 401: token istekao (osim offline demo)
     if (status === 401) {
       const token = await SecureStore.getItemAsync('userToken');
-      if (token && token.startsWith('offline_token_')) {
-        console.log('⚠️ Offline token (demo) - ne brišem');
-      } else {
+      if (!(token && token.startsWith('offline_token_'))) {
         await SecureStore.deleteItemAsync('userToken');
         await SecureStore.deleteItemAsync('userData');
-        console.log('🔓 Token uklonjen (401)');
       }
     }
 
@@ -106,7 +77,6 @@ api.interceptors.response.use(
     if ((isNetwork || (status && status >= 500)) && ['POST','PUT','DELETE'].includes(method)) {
       try {
         syncQueue.add(method, endpoint, error.config?.data || '{}');
-        console.log('🗂️ Zahtjev dodan u offline queue:', { method, endpoint });
         return Promise.reject({ ...normalized, queued: true });
       } catch (qErr) {
         console.log('⚠️ Neuspješno spremanje u queue:', qErr.message);
@@ -172,8 +142,27 @@ export const usersAPI = {
 export const repairsAPI = {
   getAll: (params) => api.get('/repairs', { params }),
   getOne: (id) => api.get(`/repairs/${id}`),
-  create: (data) => api.post('/repairs', data),
-  update: (id, data) => api.put(`/repairs/${id}`, data),
+  create: (data) =>
+    api.post('/repairs', {
+      elevatorId: data.elevatorId || data.elevator,
+      status: data.status || 'pending',
+      datumPrijave: data.datumPrijave || data.reportedDate,
+      datumPopravka: data.datumPopravka || data.repairedDate,
+      opisKvara: data.opisKvara || data.faultDescription,
+      opisPopravka: data.opisPopravka || data.repairDescription,
+      radniNalogPotpisan: data.radniNalogPotpisan || data.workOrderSigned,
+      popravkaUPotpunosti: data.popravkaUPotpunosti || data.repairCompleted,
+      napomene: data.napomene || data.notes,
+    }),
+  update: (id, data) =>
+    api.put(`/repairs/${id}`, {
+      status: data.status,
+      opisPopravka: data.opisPopravka || data.repairDescription,
+      datumPopravka: data.datumPopravka || data.repairedDate,
+      radniNalogPotpisan: data.radniNalogPotpisan || data.workOrderSigned,
+      popravkaUPotpunosti: data.popravkaUPotpunosti || data.repairCompleted,
+      napomene: data.napomene || data.notes,
+    }),
   delete: (id) => api.delete(`/repairs/${id}`),
   getStats: () => api.get('/repairs/stats/overview'),
   getMonthlyStats: (year, month) => api.get('/repairs/stats/monthly', { params: { year, month } }),
@@ -193,7 +182,12 @@ export const chatroomsAPI = {
 // Messages API
 export const messagesAPI = {
   getByRoom: (roomId, params) => api.get(`/messages/room/${roomId}`, { params }),
-  send: (data) => api.post('/messages', data),
+  send: (data) =>
+    api.post('/messages', {
+      chatRoomId: data.chatRoomId || data.chatRoom,
+      tekst: data.tekst || data.content,
+      slika: data.slika || data.imageUrl,
+    }),
   markAsRead: (id) => api.put(`/messages/${id}/read`),
   delete: (id) => api.delete(`/messages/${id}`),
   getUnreadCount: () => api.get('/messages/unread/count'),
@@ -203,8 +197,26 @@ export const messagesAPI = {
 export const simcardsAPI = {
   getAll: (params) => api.get('/simcards', { params }),
   getOne: (id) => api.get(`/simcards/${id}`),
-  create: (data) => api.post('/simcards', data),
-  update: (id, data) => api.put(`/simcards/${id}`, data),
+  create: (data) =>
+    api.post('/simcards', {
+      serijaSimKartice: data.serijaSimKartice || data.serial || data.series,
+      brojTelefona: data.brojTelefona || data.phoneNumber,
+      vrstaUredaja: data.vrstaUredaja || data.deviceType,
+      datumIsteka: data.datumIsteka || data.expiryDate,
+      aktivna: typeof data.aktivna === 'boolean' ? data.aktivna : data.status !== 'inactive',
+      elevatorId: data.elevatorId || data.assignedTo,
+      napomene: data.napomene || data.notes,
+    }),
+  update: (id, data) =>
+    api.put(`/simcards/${id}`, {
+      serijaSimKartice: data.serijaSimKartice || data.serial || data.series,
+      brojTelefona: data.brojTelefona || data.phoneNumber,
+      vrstaUredaja: data.vrstaUredaja || data.deviceType,
+      datumIsteka: data.datumIsteka || data.expiryDate,
+      aktivna: typeof data.aktivna === 'boolean' ? data.aktivna : data.status !== 'inactive',
+      elevatorId: data.elevatorId || data.assignedTo,
+      napomene: data.napomene || data.notes,
+    }),
   delete: (id) => api.delete(`/simcards/${id}`),
   getExpiringSoon: (days) => api.get('/simcards/expiring/soon', { params: { days } }),
   getStats: () => api.get('/simcards/stats/overview'),

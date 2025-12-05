@@ -205,7 +205,7 @@ async function run() {
         extracted.forEach(obj => {
           if (obj.code) current.elevators.push(obj.code);
           else if (obj.range && rangeExpand) {
-            expandRange(obj.range[1], obj.range[2]).forEach(c => current.elevators.push(c));
+            expandRange(obj.range[0], obj.range[1]).forEach(c => current.elevators.push(c));
           } else if (obj.range) {
             current.elevators.push(obj.range[0], obj.range[1]);
           }

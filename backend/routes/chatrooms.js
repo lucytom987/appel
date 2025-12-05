@@ -4,258 +4,196 @@ const ChatRoom = require('../models/ChatRoom');
 const { authenticate, checkRole } = require('../middleware/auth');
 const { logAction } = require('../services/auditService');
 
-// @route   GET /api/chatrooms
-// @desc    Dohvati sve chat sobe
-// @access  Private
+// GET /api/chatrooms - sve sobe
 router.get('/', authenticate, async (req, res) => {
   try {
+    const { limit = 100, skip = 0 } = req.query;
+    const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 0, 1), 200);
+    const parsedSkip = Math.max(parseInt(skip, 10) || 0, 0);
+
     const chatrooms = await ChatRoom.find()
-      .populate('createdBy', 'name email')
-      .populate('members', 'name email role')
-      .sort({ createdAt: -1 })
+      .populate('kreiraoId', 'ime prezime email uloga')
+      .populate('clanovi', 'ime prezime email uloga')
+      .sort({ kreiranDatum: -1 })
+      .skip(parsedSkip)
+      .limit(parsedLimit)
       .lean();
 
-    res.json({
-      success: true,
-      count: chatrooms.length,
-      data: chatrooms
-    });
+    const total = await ChatRoom.countDocuments();
+
+    res.json({ success: true, count: chatrooms.length, total, data: chatrooms });
   } catch (error) {
-    console.error('❌ Greška pri dohvaćanju chat soba:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Greška pri dohvaćanju chat soba'
-    });
+    console.error('Greška pri dohvaćanju chat soba:', error);
+    res.status(500).json({ success: false, message: 'Greška pri dohvaćanju chat soba' });
   }
 });
 
-// @route   GET /api/chatrooms/:id
-// @desc    Dohvati jednu chat sobu
-// @access  Private
+// GET /api/chatrooms/:id - jedna soba
 router.get('/:id', authenticate, async (req, res) => {
   try {
     const chatroom = await ChatRoom.findById(req.params.id)
-      .populate('createdBy', 'name email role')
-      .populate('members', 'name email role')
+      .populate('kreiraoId', 'ime prezime email uloga')
+      .populate('clanovi', 'ime prezime email uloga')
       .lean();
 
     if (!chatroom) {
-      return res.status(404).json({
-        success: false,
-        message: 'Chat soba nije pronađena'
-      });
+      return res.status(404).json({ success: false, message: 'Chat soba nije pronađena' });
     }
 
-    res.json({
-      success: true,
-      data: chatroom
-    });
+    res.json({ success: true, data: chatroom });
   } catch (error) {
-    console.error('❌ Greška pri dohvaćanju chat sobe:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Greška pri dohvaćanju chat sobe'
-    });
+    console.error('Greška pri dohvaćanju chat sobe:', error);
+    res.status(500).json({ success: false, message: 'Greška pri dohvaćanju chat sobe' });
   }
 });
 
-// @route   POST /api/chatrooms
-// @desc    Kreiraj novu chat sobu
-// @access  Private (Manager, Admin)
+// POST /api/chatrooms - kreiraj novu sobu
 router.post('/', authenticate, checkRole(['admin', 'menadzer']), async (req, res) => {
   try {
-    const { name, description, members } = req.body;
+    const naziv = req.body.naziv || req.body.name;
+    const opis = req.body.opis || req.body.description;
+    const clanovi = req.body.clanovi || req.body.members || [];
 
-    // Dodaj kreatora u članove ako nije već dodan
-    const memberIds = members || [];
-    if (!memberIds.includes(req.user.id)) {
-      memberIds.push(req.user.id);
+    // Dodaj kreatora ako nije već u listi
+    const memberIds = [...clanovi.map(String)];
+    if (!memberIds.includes(String(req.user._id))) {
+      memberIds.push(String(req.user._id));
     }
 
     const chatroom = new ChatRoom({
-      name,
-      description,
-      members: memberIds,
-      createdBy: req.user.id
+      naziv,
+      opis,
+      clanovi: memberIds,
+      kreiraoId: req.user._id
     });
 
     await chatroom.save();
+    await chatroom.populate('kreiraoId', 'ime prezime email uloga');
+    await chatroom.populate('clanovi', 'ime prezime email uloga');
 
-    // Audit log
-    await logAction(req.user.id, 'CREATE', 'ChatRoom', chatroom._id, {
-      name: chatroom.name
+    await logAction({
+      korisnikId: req.user._id,
+      akcija: 'CREATE',
+      entitet: 'ChatRoom',
+      entitetId: chatroom._id,
+      entitetNaziv: chatroom.naziv,
+      noveVrijednosti: chatroom.toObject(),
+      ipAdresa: req.ip,
+      opis: 'Kreirana chat soba'
     });
 
-    // Populate prije slanja
-    await chatroom.populate('createdBy', 'name email');
-    await chatroom.populate('members', 'name email role');
-
-    res.status(201).json({
-      success: true,
-      message: 'Chat soba uspješno kreirana',
-      data: chatroom
-    });
+    res.status(201).json({ success: true, message: 'Chat soba uspješno kreirana', data: chatroom });
   } catch (error) {
-    console.error('❌ Greška pri kreiranju chat sobe:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Greška pri kreiranju chat sobe',
-      error: error.message
-    });
+    console.error('Greška pri kreiranju chat sobe:', error);
+    res.status(500).json({ success: false, message: 'Greška pri kreiranju chat sobe', error: error.message });
   }
 });
 
-// @route   PUT /api/chatrooms/:id
-// @desc    Ažuriraj chat sobu (ime, članove)
-// @access  Private (Manager, Admin)
+// PUT /api/chatrooms/:id - ažuriranje
 router.put('/:id', authenticate, checkRole(['admin', 'menadzer']), async (req, res) => {
   try {
-    const existingRoom = await ChatRoom.findById(req.params.id);
-
-    if (!existingRoom) {
-      return res.status(404).json({
-        success: false,
-        message: 'Chat soba nije pronađena'
-      });
+    const chatroom = await ChatRoom.findById(req.params.id);
+    if (!chatroom) {
+      return res.status(404).json({ success: false, message: 'Chat soba nije pronađena' });
     }
 
-    const chatroom = await ChatRoom.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true, runValidators: true }
-    )
-      .populate('createdBy', 'name email')
-      .populate('members', 'name email role');
+    if (req.body.naziv || req.body.name) chatroom.naziv = req.body.naziv || req.body.name;
+    if (req.body.opis || req.body.description) chatroom.opis = req.body.opis || req.body.description;
+    if (req.body.clanovi || req.body.members) chatroom.clanovi = req.body.clanovi || req.body.members;
+    chatroom.azuriranDatum = new Date();
+    await chatroom.save();
 
-    // Audit log
-    await logAction(req.user.id, 'UPDATE', 'ChatRoom', chatroom._id, {
-      name: chatroom.name
+    await chatroom.populate('kreiraoId', 'ime prezime email uloga');
+    await chatroom.populate('clanovi', 'ime prezime email uloga');
+
+    await logAction({
+      korisnikId: req.user._id,
+      akcija: 'UPDATE',
+      entitet: 'ChatRoom',
+      entitetId: chatroom._id,
+      entitetNaziv: chatroom.naziv,
+      noveVrijednosti: chatroom.toObject(),
+      ipAdresa: req.ip,
+      opis: 'Ažurirana chat soba'
     });
 
-    res.json({
-      success: true,
-      message: 'Chat soba uspješno ažurirana',
-      data: chatroom
-    });
+    res.json({ success: true, message: 'Chat soba ažurirana', data: chatroom });
   } catch (error) {
-    console.error('❌ Greška pri ažuriranju chat sobe:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Greška pri ažuriranju chat sobe',
-      error: error.message
-    });
+    console.error('Greška pri ažuriranju chat sobe:', error);
+    res.status(500).json({ success: false, message: 'Greška pri ažuriranju chat sobe', error: error.message });
   }
 });
 
-// @route   DELETE /api/chatrooms/:id
-// @desc    Obriši chat sobu
-// @access  Private (Admin only)
+// DELETE /api/chatrooms/:id - brisanje
 router.delete('/:id', authenticate, checkRole(['admin']), async (req, res) => {
   try {
     const chatroom = await ChatRoom.findById(req.params.id);
-
     if (!chatroom) {
-      return res.status(404).json({
-        success: false,
-        message: 'Chat soba nije pronađena'
-      });
+      return res.status(404).json({ success: false, message: 'Chat soba nije pronađena' });
     }
 
     await chatroom.deleteOne();
 
-    // Audit log
-    await logAction(req.user.id, 'DELETE', 'ChatRoom', req.params.id, {
-      name: chatroom.name
+    await logAction({
+      korisnikId: req.user._id,
+      akcija: 'DELETE',
+      entitet: 'ChatRoom',
+      entitetId: req.params.id,
+      entitetNaziv: chatroom.naziv,
+      stareVrijednosti: chatroom.toObject(),
+      ipAdresa: req.ip,
+      opis: 'Obrisana chat soba'
     });
 
-    res.json({
-      success: true,
-      message: 'Chat soba uspješno obrisana'
-    });
+    res.json({ success: true, message: 'Chat soba obrisana' });
   } catch (error) {
-    console.error('❌ Greška pri brisanju chat sobe:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Greška pri brisanju chat sobe'
-    });
+    console.error('Greška pri brisanju chat sobe:', error);
+    res.status(500).json({ success: false, message: 'Greška pri brisanju chat sobe' });
   }
 });
 
-// @route   POST /api/chatrooms/:id/members
-// @desc    Dodaj člana u chat sobu
-// @access  Private (Manager, Admin)
+// POST /api/chatrooms/:id/members - dodaj člana
 router.post('/:id/members', authenticate, checkRole(['admin', 'menadzer']), async (req, res) => {
   try {
     const { userId } = req.body;
-
     const chatroom = await ChatRoom.findById(req.params.id);
-    
     if (!chatroom) {
-      return res.status(404).json({
-        success: false,
-        message: 'Chat soba nije pronađena'
-      });
+      return res.status(404).json({ success: false, message: 'Chat soba nije pronađena' });
     }
 
-    // Provjeri da li korisnik već postoji u sobi
-    if (chatroom.members.includes(userId)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Korisnik je već član ove sobe'
-      });
+    if (chatroom.clanovi.map(String).includes(String(userId))) {
+      return res.status(400).json({ success: false, message: 'Korisnik je već član ove sobe' });
     }
 
-    chatroom.members.push(userId);
+    chatroom.clanovi.push(userId);
     await chatroom.save();
+    await chatroom.populate('clanovi', 'ime prezime email uloga');
 
-    await chatroom.populate('members', 'name email role');
-
-    res.json({
-      success: true,
-      message: 'Član uspješno dodan',
-      data: chatroom
-    });
+    res.json({ success: true, message: 'Član dodan', data: chatroom });
   } catch (error) {
-    console.error('❌ Greška pri dodavanju člana:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Greška pri dodavanju člana'
-    });
+    console.error('Greška pri dodavanju člana:', error);
+    res.status(500).json({ success: false, message: 'Greška pri dodavanju člana' });
   }
 });
 
-// @route   DELETE /api/chatrooms/:id/members/:userId
-// @desc    Ukloni člana iz chat sobe
-// @access  Private (Manager, Admin)
+// DELETE /api/chatrooms/:id/members/:userId - ukloni člana
 router.delete('/:id/members/:userId', authenticate, checkRole(['admin', 'menadzer']), async (req, res) => {
   try {
     const chatroom = await ChatRoom.findById(req.params.id);
-    
     if (!chatroom) {
-      return res.status(404).json({
-        success: false,
-        message: 'Chat soba nije pronađena'
-      });
+      return res.status(404).json({ success: false, message: 'Chat soba nije pronađena' });
     }
 
-    chatroom.members = chatroom.members.filter(
-      memberId => memberId.toString() !== req.params.userId
+    chatroom.clanovi = chatroom.clanovi.filter(
+      memberId => String(memberId) !== String(req.params.userId)
     );
-    
     await chatroom.save();
-    await chatroom.populate('members', 'name email role');
+    await chatroom.populate('clanovi', 'ime prezime email uloga');
 
-    res.json({
-      success: true,
-      message: 'Član uspješno uklonjen',
-      data: chatroom
-    });
+    res.json({ success: true, message: 'Član uklonjen', data: chatroom });
   } catch (error) {
-    console.error('❌ Greška pri uklanjanju člana:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Greška pri uklanjanju člana'
-    });
+    console.error('Greška pri uklanjanju člana:', error);
+    res.status(500).json({ success: false, message: 'Greška pri uklanjanju člana' });
   }
 });
 

@@ -1,13 +1,13 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import * as SecureStore from 'expo-secure-store';
-import { authAPI, usersAPI } from '../services/api';
-import { initDatabase, elevatorDB, serviceDB, repairDB, userDB, resetDatabase } from '../database/db';
-import { 
-  syncAll, 
-  startAutoSync, 
+import { authAPI } from '../services/api';
+import { initDatabase, resetDatabase } from '../database/db';
+import {
+  syncAll,
+  startAutoSync,
   stopAutoSync,
   subscribeToNetworkChanges,
-  checkOnlineStatus 
+  checkOnlineStatus,
 } from '../services/syncService';
 
 const AuthContext = createContext({});
@@ -18,13 +18,11 @@ export const AuthProvider = ({ children }) => {
   const [isOnline, setIsOnline] = useState(false);
 
   useEffect(() => {
-    // Inicijaliziraj bazu i provjeri auto-login
     initializeApp();
 
-    // Subscribe na network changes
     const unsubscribe = subscribeToNetworkChanges((online) => {
       setIsOnline(online);
-      console.log(online ? '🟢 Online' : '🔴 Offline');
+      console.log(online ? 'Online' : 'Offline');
     });
 
     return () => {
@@ -35,19 +33,16 @@ export const AuthProvider = ({ children }) => {
 
   const initializeApp = async () => {
     try {
-      // 1. Inicijaliziraj SQLite bazu
-      console.log('🔄 Inicijaliziram bazu...');
+      console.log('Inicijaliziram bazu...');
       initDatabase();
-      
-      // 3. Provjeri online status
+
       const online = await checkOnlineStatus();
       setIsOnline(online);
 
-      // 4. Provjeri da li postoji token (auto-login)
       const token = await SecureStore.getItemAsync('userToken');
       const userData = await SecureStore.getItemAsync('userData');
-      
-      console.log('🔍 Provjera auto-login:', {
+
+      console.log('Provjera auto-login:', {
         tokenExists: !!token,
         tokenPreview: token ? token.substring(0, 20) + '...' : 'NE',
         userDataExists: !!userData,
@@ -55,26 +50,19 @@ export const AuthProvider = ({ children }) => {
 
       if (token && userData) {
         setUser(JSON.parse(userData));
-        
-        // Ako je offline token - NE pokreći sync
-        const isOfflineUser = token.startsWith('offline_token_');
-        
-        // Ako si online I imaš token I token je pravi JWT - pokreni sync odmah
-        if (online && !isOfflineUser) {
-          console.log('🔄 Auto-login - pokrećem inicijalni sync...');
-          await syncAll().catch(err => console.log('⚠️ Sync error:', err));
+
+        if (online) {
+          console.log('Auto-login - pokrecem inicijalni sync...');
+          await syncAll().catch((err) => console.log('Sync error:', err));
           startAutoSync();
-        } else if (isOfflineUser) {
-          console.log('⚠️ Offline korisnik (demo) - NE pokrećem sync');
         }
       } else {
-        // Ako nemaš token, login je obavezan
-        console.log('⚠️ Nema tokena - login je obavezan');
+        console.log('Nema tokena - login je obavezan');
       }
-      
+
       setLoading(false);
     } catch (error) {
-      console.error('❌ Greška pri inicijalizaciji:', error);
+      console.error('Greska pri inicijalizaciji:', error);
       setLoading(false);
     }
   };
@@ -82,100 +70,43 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, lozinka) => {
     try {
       setLoading(true);
-      console.log('🔑 Pokušavam login...', email);
-      
-      // Offline login podršku - dummy korisnik za testiranje
-      const offlineAdminUser = {
-        _id: 'offline_admin',
-        email: 'vidacek@appel.com',
-        ime: 'Tomislav',
-        prezime: 'Vidacek',
-        uloga: 'admin',
-        aktivan: true,
-        telefon: '0987654321'
-      };
-      // NOVO: Uvijek pokušaj online login prvo, čak i ako NetInfo kaže da si offline.
-      // Fallback na offline demo SAMO ako je network greška (nema response) ili 502/503.
+      console.log('Pokusavam login...', email);
+
       let response;
-      let onlineAttemptFailed = false;
       try {
         response = await authAPI.login(email, lozinka);
       } catch (err) {
         const status = err.response?.status;
         const networkProblem = !err.response || status === 502 || status === 503;
-        onlineAttemptFailed = true;
-        console.log('⚠️ Online login nije uspio. Status:', status, 'networkProblem:', networkProblem);
-        if (networkProblem && email === 'vidacek@appel.com' && lozinka === 'vidacek123') {
-          console.log('⚠️ Network problem - aktiviram OFFLINE DEMO fallback');
-          await SecureStore.setItemAsync('userToken', 'offline_token_' + Date.now());
-          await SecureStore.setItemAsync('userData', JSON.stringify(offlineAdminUser));
-          setUser(offlineAdminUser);
+        if (networkProblem) {
           setLoading(false);
-          return { success: true, offlineDemo: true };
+          return { success: false, message: 'Potrebna je online veza za login' };
         }
-        // Ako nije network problem, propagiraj grešku dalje (401, 400 ...)
         throw err;
       }
 
-      if (onlineAttemptFailed && !response) {
-        // Ovo ne bi smjelo ostati bez response ako je fallback aktiviran
-        throw new Error('Login nije uspio i fallback nije aktiviran');
-      }
-
-      console.log('✅ Login response:', response.data);
-      console.log('✅ Login response:', response.data);
-      console.log('🔍 Response keys:', Object.keys(response.data));
-      
       const { token, korisnik } = response.data;
-      
-      if (!token) {
-        console.error('❌ Token nije u odgovoru!', response.data);
-        throw new Error('Greška pri prijavi - nema tokena u odgovoru');
-      }
-      
-      if (!korisnik) {
-        console.error('❌ Korisnik nije u odgovoru!', response.data);
-        throw new Error('Greška pri prijavi - nema korisnika u odgovoru');
+      if (!token || !korisnik) {
+        throw new Error('Nevaljan login odgovor (nema tokena/korisnika)');
       }
 
-      // Spremi token i user podatke
-      console.log('💾 Spreminjem token u SecureStore:', token.substring(0, 20) + '...');
       await SecureStore.setItemAsync('userToken', token);
       await SecureStore.setItemAsync('userData', JSON.stringify(korisnik));
-      
-      // Provjeri da li je token sačuvan
-      const savedToken = await SecureStore.getItemAsync('userToken');
-      console.log('✅ Token sačuvan:', savedToken ? 'DA' : 'NE');
-      
+
       setUser(korisnik);
-      setLoading(false); // Odmah postavi loading na false
+      setLoading(false);
 
-      // Čekaj da se token pravilno sačuva prije nego što pokreneš sync
-      console.log('⏳ Čekam 500ms da se token sačuva u SecureStore...');
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      // Provjeri token prije nego što pokreneš sync
-      const tokenBeforeSync = await SecureStore.getItemAsync('userToken');
-      if (!tokenBeforeSync) {
-        console.error('❌ KRITIČNO: Token nije dostupan nakon čekanja!');
-        throw new Error('Token nije sačuvan pravilno - sync ne može da se pokrene');
-      }
-      console.log('✅ Token je dostupan - pokrećem sync');
-
-      // Pokreni prvi sync u pozadini (ne blokiraj UI)
-      console.log('🔄 Pokrećem sync nakon login-a...');
-      syncAll().catch(err => console.log('⚠️ Background sync error:', err));
+      console.log('Pokrecem sync nakon logina...');
+      syncAll().catch((err) => console.log('Background sync error:', err));
       startAutoSync();
 
       return { success: true };
     } catch (error) {
-      console.error('❌ Login greška:', error);
-      console.error('❌ Error response:', error.response?.data);
-      console.error('❌ Error message:', error.message);
+      console.error('Login greska:', error);
       setLoading(false);
-      return { 
-        success: false, 
-        message: error.response?.data?.message || 'Greška pri prijavi' 
+      return {
+        success: false,
+        message: error.response?.data?.message || 'Greska pri prijavi',
       };
     }
   };
@@ -183,20 +114,13 @@ export const AuthProvider = ({ children }) => {
   const logout = async () => {
     try {
       setLoading(true);
-      
-      // Zaustavi auto-sync
       stopAutoSync();
-
-      // Obriši token i user podatke
       await SecureStore.deleteItemAsync('userToken');
       await SecureStore.deleteItemAsync('userData');
-      
-      // Obriši sve lokalne podatke iz baze
       resetDatabase();
-      
       setUser(null);
     } catch (error) {
-      console.error('❌ Logout greška:', error);
+      console.error('Logout greska:', error);
     } finally {
       setLoading(false);
     }

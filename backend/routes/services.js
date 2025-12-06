@@ -5,6 +5,16 @@ const Elevator = require('../models/Elevator');
 const { authenticate } = require('../middleware/auth');
 const { logAction } = require('../services/auditService');
 
+const ALLOWED_CHECKLIST = [
+  'lubrication',
+  'ups_check',
+  'voice_comm',
+  'shaft_cleaning',
+  'drive_check',
+  'brake_check',
+  'cable_inspection'
+];
+
 // GET /api/services - lista servisa (filtri + delta)
 router.get('/', authenticate, async (req, res) => {
   try {
@@ -165,8 +175,20 @@ router.put('/:id', authenticate, async (req, res) => {
       return res.status(403).json({ success: false, message: 'Nedovoljna prava za ažuriranje ovog servisa' });
     }
 
+    let checklist = Array.isArray(req.body.checklist) ? req.body.checklist : undefined;
+    if (checklist) {
+      checklist = checklist
+        .filter((item) => ALLOWED_CHECKLIST.includes(item?.stavka))
+        .map((item) => ({
+          stavka: item.stavka,
+          provjereno: typeof item.provjereno === 'number' ? item.provjereno : 0,
+          napomena: item.napomena,
+        }));
+    }
+
     const updateData = {
       ...req.body,
+      checklist,
       // ne dozvoli promjenu vlasništva kroz body
       serviserID: existingService.serviserID,
       elevatorId: existingService.elevatorId,

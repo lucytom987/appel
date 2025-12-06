@@ -41,6 +41,7 @@ export default function AddServiceScreen({ navigation, route }) {
   const [isOfflineDemo, setIsOfflineDemo] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [applyToAll, setApplyToAll] = useState(false);
 
   // Konvertiraj isOnline u boolean
   const online = Boolean(isOnline);
@@ -51,6 +52,16 @@ export default function AddServiceScreen({ navigation, route }) {
       setIsOfflineDemo(Boolean(token && token.startsWith('offline_token_')));
     })();
   }, []);
+
+  const elevatorsOnAddress = React.useMemo(() => {
+    const all = elevatorDB.getAll() || [];
+    const street = (elevator?.ulica || '').trim().toLowerCase();
+    const city = (elevator?.mjesto || '').trim().toLowerCase();
+    return all.filter((e) =>
+      (e.ulica || '').trim().toLowerCase() === street &&
+      (e.mjesto || '').trim().toLowerCase() === city
+    );
+  }, [elevator]);
 
   // Izračunaj interval servisa u mjesecima (default 1 ako nije postavljen)
   const intervalMjeseci = typeof elevator.intervalServisa === 'number' && elevator.intervalServisa > 0
@@ -121,8 +132,11 @@ export default function AddServiceScreen({ navigation, route }) {
     setLoading(true);
 
     try {
+      const targets = applyToAll && elevatorsOnAddress.length > 1 ? elevatorsOnAddress : [elevator];
+      let successCount = 0;
+      let failCount = 0;
+
       const serviceData = {
-        elevatorId: elevator._id || elevator.id,
         serviserID: user._id,
         datum: formData.serviceDate.toISOString(),
         napomene: formData.napomene,
@@ -145,83 +159,76 @@ export default function AddServiceScreen({ navigation, route }) {
       const isOfflineUser = token && token.startsWith('offline_token_');
 
       if (isOfflineUser || !online) {
-        // Offline korisnik - spremi samo lokalno
-        console.log('📱 Demo/offline korisnik - dodajem servis lokalno bez API poziva');
-        serviceDB.insert({
-          id: 'local_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-          ...serviceData,
-          synced: 0, // Bit će syncirano kada se prijavi s pravim korisnicima
+        console.log('📱 Demo/offline korisnik - dodajem servise lokalno bez API poziva');
+        targets.forEach((target, idx) => {
+          const localId = 'local_' + Date.now() + '_' + idx + '_' + Math.random().toString(36).substr(2, 9);
+          const payload = { ...serviceData, elevatorId: target._id || target.id };
+          serviceDB.insert({ id: localId, ...payload, synced: 0 });
+          try {
+            const elev = elevatorDB.getById(target._id || target.id);
+            if (elev) {
+              elevatorDB.update(elev.id, { ...elev, zadnjiServis: payload.datum, sljedeciServis: payload.sljedeciServis });
+            }
+          } catch {}
+          successCount++;
         });
 
-        Alert.alert('Uspjeh', 'Servis je dodan lokalno (bit će sinkronizovan kada budete online s pravim korisničkim računom)', [
+        Alert.alert('Uspjeh', `Servisi dodani lokalno za ${successCount}/${targets.length} dizala (sinkronizacija kad budete online)`, [
           { text: 'OK', onPress: () => navigation.navigate('Home') }
         ]);
       } else {
-        // Online s pravim korisničkim tokenom - spremi na backend
-        try {
-          const response = await servicesAPI.create(serviceData);
-
-          // Spremi u lokalnu bazu (API vraća { success, message, data })
-          const created = response.data?.data || response.data;
-          serviceDB.insert({
-            id: created._id || created.id,
-            elevatorId: created.elevatorId || created.elevator || serviceData.elevatorId,
-            serviserID: created.serviserID || created.performedBy || serviceData.serviserID,
-            datum: created.datum || created.serviceDate || serviceData.datum,
-            checklist: created.checklist || serviceData.checklist,
-            imaNedostataka: created.imaNedostataka ?? serviceData.imaNedostataka,
-            nedostaci: created.nedostaci || serviceData.nedostaci,
-            napomene: created.napomene ?? created.notes ?? serviceData.napomene,
-            sljedeciServis: created.sljedeciServis || created.nextServiceDate || serviceData.sljedeciServis,
-            kreiranDatum: created.kreiranDatum || new Date().toISOString(),
-            azuriranDatum: created.azuriranDatum || new Date().toISOString(),
-            synced: 1,
-          });
-
-          // Lokalno osvježi dizalo (zadnji/sljedeći servis)
+        for (const target of targets) {
+          const payload = { ...serviceData, elevatorId: target._id || target.id };
           try {
-            const elev = elevatorDB.getById(elevator._id || elevator.id);
-            if (elev) {
-              const zadnji = serviceData.datum;
-              const next = serviceData.sljedeciServis;
-              elevatorDB.update(elev.id, { ...elev, zadnjiServis: zadnji, sljedeciServis: next });
-            }
-          } catch (e) {
-            console.log('⚠️ Ne mogu lokalno osvježiti dizalo servis datume:', e.message);
-          }
+            const response = await servicesAPI.create(payload);
+            const created = response.data?.data || response.data;
+            serviceDB.insert({
+              id: created._id || created.id,
+              elevatorId: created.elevatorId || created.elevator || payload.elevatorId,
+              serviserID: created.serviserID || created.performedBy || payload.serviserID,
+              datum: created.datum || created.serviceDate || payload.datum,
+              checklist: created.checklist || payload.checklist,
+              imaNedostataka: created.imaNedostataka ?? payload.imaNedostataka,
+              nedostaci: created.nedostaci || payload.nedostaci,
+              napomene: created.napomene ?? created.notes ?? payload.napomene,
+              sljedeciServis: created.sljedeciServis || created.nextServiceDate || payload.sljedeciServis,
+              kreiranDatum: created.kreiranDatum || new Date().toISOString(),
+              azuriranDatum: created.azuriranDatum || new Date().toISOString(),
+              synced: 1,
+            });
 
-          Alert.alert('Uspjeh', 'Servis uspješno logiran', [
-            { text: 'OK', onPress: () => navigation.navigate('Home') }
-          ]);
-        } catch (error) {
-          console.error('Greška pri slanju na backend:', error);
-          if (error.response?.status === 401) {
-            throw new Error('Vaša prijava je istekla. Molim prijavite se ponovno.');
-          }
-          // Fallback na lokalnu bazu
-          console.log('⚠️ Backend greška - fallback na lokalnu bazu');
-          const localId = 'local_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-          serviceDB.insert({
-            id: localId,
-            ...serviceData,
-            synced: 0,
-          });
-          // Lokalno osvježi dizalo (zadnji/sljedeći servis)
-          try {
-            const elev = elevatorDB.getById(elevator._id || elevator.id);
-            if (elev) {
-              const zadnji = serviceData.datum;
-              const next = serviceData.sljedeciServis;
-              elevatorDB.update(elev.id, { ...elev, zadnjiServis: zadnji, sljedeciServis: next });
-            }
-          } catch (e) {
-            console.log('⚠️ Ne mogu lokalno osvježiti dizalo servis datume (offline fallback):', e.message);
-          }
+            try {
+              const elev = elevatorDB.getById(payload.elevatorId);
+              if (elev) {
+                elevatorDB.update(elev.id, { ...elev, zadnjiServis: payload.datum, sljedeciServis: payload.sljedeciServis });
+              }
+            } catch {}
 
-          Alert.alert('Uspjeh', 'Servis je dodan lokalno (bit će sinkronizovan kada budete online)', [
-            { text: 'OK', onPress: () => navigation.navigate('Home') }
-          ]);
+            successCount++;
+          } catch (error) {
+            console.error('Greška pri slanju na backend:', error);
+            if (error.response?.status === 401) {
+              throw new Error('Vaša prijava je istekla. Molim prijavite se ponovno.');
+            }
+            const localId = 'local_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+            serviceDB.insert({ id: localId, ...payload, synced: 0 });
+            try {
+              const elev = elevatorDB.getById(payload.elevatorId);
+              if (elev) {
+                elevatorDB.update(elev.id, { ...elev, zadnjiServis: payload.datum, sljedeciServis: payload.sljedeciServis });
+              }
+            } catch {}
+            failCount++;
+          }
         }
+
+        Alert.alert(
+          failCount === 0 ? 'Uspjeh' : 'Djelomični uspjeh',
+          failCount === 0
+            ? `Servisi logirani za ${successCount}/${targets.length} dizala.`
+            : `Logirano ${successCount}/${targets.length}, ${failCount} spremljeno lokalno (sync kasnije).`,
+          [{ text: 'OK', onPress: () => navigation.navigate('Home') }]
+        );
       }
 
     } catch (error) {
@@ -312,6 +319,18 @@ export default function AddServiceScreen({ navigation, route }) {
             ))}
           </View>
         </View>
+
+        {elevatorsOnAddress.length > 1 && (
+          <View style={styles.section}>
+            <TouchableOpacity style={styles.multiToggle} onPress={() => setApplyToAll(!applyToAll)}>
+              <Ionicons name={applyToAll ? 'checkbox' : 'square-outline'} size={22} color={applyToAll ? '#2563eb' : '#6b7280'} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.label}>Dodaj za sva dizala na adresi</Text>
+                <Text style={styles.helperText}>{elevatorsOnAddress.length} dizala na {elevator.ulica}, {elevator.mjesto}</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Napomene */}
         <View style={styles.section}>

@@ -3,16 +3,26 @@ import * as SecureStore from 'expo-secure-store';
 import { elevatorsAPI, servicesAPI, repairsAPI, usersAPI } from './api';
 import { elevatorDB, serviceDB, repairDB, userDB } from '../database/db';
 
+const ALLOWED_CHECKLIST = [
+  'lubrication',
+  'ups_check',
+  'voice_comm',
+  'shaft_cleaning',
+  'drive_check',
+  'brake_check',
+  'cable_inspection',
+];
+
 // Normalizira payload prije slanja da spriječi validation/cast greške na backendu
 const normalizeServicePayload = (s) => {
   const checklist = Array.isArray(s.checklist)
     ? s.checklist
+        .filter((item) => ALLOWED_CHECKLIST.includes(item?.stavka))
         .map((item) => ({
           stavka: item?.stavka,
           provjereno: typeof item?.provjereno === 'number' ? item.provjereno : 0,
           napomena: item?.napomena,
         }))
-        .filter((i) => !!i.stavka)
     : [];
 
   const nedostaci = Array.isArray(s.nedostaci)

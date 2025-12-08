@@ -156,8 +156,8 @@ router.post('/', authenticate, async (req, res) => {
   }
 });
 
-// PUT /api/repairs/:id - ažuriraj popravak
-router.put('/:id', authenticate, checkRole(['menadzer', 'admin']), async (req, res) => {
+// PUT /api/repairs/:id - ažuriraj popravak (serviser može ažurirati svoj rad)
+router.put('/:id', authenticate, checkRole(['serviser', 'menadzer', 'admin']), async (req, res) => {
   try {
     const existing = await Repair.findById(req.params.id);
     if (!existing) {

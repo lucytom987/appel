@@ -21,7 +21,7 @@ router.get('/', authenticate, async (req, res) => {
     const { elevatorId, startDate, endDate, technician, updatedAfter, limit = 100, skip = 0, includeDeleted } = req.query;
     const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 0, 1), 200);
     const parsedSkip = Math.max(parseInt(skip, 10) || 0, 0);
-    const includeDeletedBool = includeDeleted === 'true' || includeDeleted === true;
+    const includeDeletedBool = String(includeDeleted).toLowerCase() === 'true';
     const filter = {};
     if (!includeDeletedBool) filter.is_deleted = { $ne: true };
 
@@ -29,7 +29,10 @@ router.get('/', authenticate, async (req, res) => {
     if (technician) filter.serviserID = technician;
     if (updatedAfter) {
       const afterDate = new Date(updatedAfter);
-      filter.updated_at = { $gte: afterDate };
+      filter.$or = [
+        { updated_at: { $gte: afterDate } },
+        { updated_at: { $exists: false } }, // stari zapisi bez updated_at ostaju vidljivi
+      ];
     }
     if (startDate || endDate) {
       filter.datum = {};

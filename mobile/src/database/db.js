@@ -507,7 +507,8 @@ export const repairDB = {
   },
   
   update: (id, repair) => {
-    const syncedFlag = repair.synced === undefined ? (String(id).startsWith('local_') ? 0 : 1) : (repair.synced ? 1 : 0);
+    // Svaka lokalna izmjena mora označiti zapis kao nesinkroniziran (osim ako je eksplicitno zadano)
+    const syncedFlag = repair.synced === undefined ? 0 : (repair.synced ? 1 : 0);
     let serviserID = repair.serviserID;
     if (serviserID && typeof serviserID === 'object') {
       serviserID = serviserID._id || serviserID.id || '';
@@ -569,10 +570,6 @@ export const repairDB = {
   },
   markSynced: (id, serverId) => {
     return db.runSync('UPDATE repairs SET synced = 1, id = ? WHERE id = ?', [serverId, id]);
-  },
-  
-  markSynced: (id, repairId) => {
-    return db.runSync('UPDATE repairs SET synced = 1, id = ? WHERE id = ?', [repairId, id]);
   },
 };
 

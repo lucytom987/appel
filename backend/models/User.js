@@ -9,7 +9,7 @@ const userSchema = new mongoose.Schema({
   privremenaLozinka: { type: String }, // Za admin reset - prikazuje se samo jednom
   uloga: {
     type: String,
-    enum: ['serviser', 'menadzer', 'admin'],
+    enum: ['serviser', 'menadzer', 'admin', 'technician', 'manager'], // include legacy role values for older zapise
     default: 'serviser'
   },
   telefon: String,

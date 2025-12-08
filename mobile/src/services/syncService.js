@@ -222,7 +222,8 @@ export const syncElevatorsFromServer = async () => {
 export const syncServicesFromServer = async () => {
   if (!isOnline) return false;
   try {
-    const shouldFullSync = await shouldForceFullSync('lastSyncServices', serviceDB.getAll);
+    const periodicFull = await shouldRunPeriodicFull('lastFullServices', 6);
+    const shouldFullSync = periodicFull || (await shouldForceFullSync('lastSyncServices', serviceDB.getAll));
     const last = shouldFullSync ? null : await getLastSync('lastSyncServices');
 
     const params = last ? { updatedAfter: last } : {};
@@ -278,6 +279,9 @@ export const syncServicesFromServer = async () => {
       }
     }
     await setLastSync('lastSyncServices');
+    if (shouldFullSync) {
+      await setLastFull('lastFullServices');
+    }
     console.log(`Services synced: ${serverServices.length}`);
     return true;
   } catch (err) {
@@ -290,7 +294,8 @@ export const syncServicesFromServer = async () => {
 export const syncRepairsFromServer = async () => {
   if (!isOnline) return false;
   try {
-    const shouldFullSync = (() => {
+    const periodicFull = await shouldRunPeriodicFull('lastFullRepairs', 6);
+    const shouldFullSync = periodicFull || (() => {
       try {
         const existing = repairDB.getAll();
         if (!existing.length) return true;
@@ -369,6 +374,9 @@ export const syncRepairsFromServer = async () => {
       }
     }
     await setLastSync('lastSyncRepairs');
+    if (shouldFullSync) {
+      await setLastFull('lastFullRepairs');
+    }
     console.log(`Repairs synced: ${serverRepairs.length}`);
     return true;
   } catch (err) {
@@ -412,6 +420,7 @@ export const syncRepairsToServer = async () => {
   console.log(`Push repairs: ${unsynced.length}`);
   for (const r of unsynced) {
     const elevatorId = (typeof r.elevatorId === 'object') ? (r.elevatorId._id || r.elevatorId.id) : r.elevatorId;
+    const serviserID = (typeof r.serviserID === 'object') ? (r.serviserID._id || r.serviserID.id) : r.serviserID;
     try {
       if (r.id.startsWith('local_')) {
         const res = await repairsAPI.create({
@@ -426,6 +435,8 @@ export const syncRepairsToServer = async () => {
           napomene: r.napomene,
           prijavio: r.prijavio,
           kontaktTelefon: r.kontaktTelefon,
+          primioPoziv: r.primioPoziv,
+          serviserID,
         });
         repairDB.markSynced(r.id, res.data.data._id);
       } else {
@@ -439,6 +450,8 @@ export const syncRepairsToServer = async () => {
           napomene: r.napomene,
           prijavio: r.prijavio,
           kontaktTelefon: r.kontaktTelefon,
+          primioPoziv: r.primioPoziv,
+          serviserID,
         });
         repairDB.markSynced(r.id, r.id);
       }

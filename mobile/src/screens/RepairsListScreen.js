@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,25 +12,61 @@ import { Ionicons } from '@expo/vector-icons';
 import { repairDB, elevatorDB, userDB } from '../database/db';
 import { syncAll } from '../services/syncService';
 import { repairsAPI } from '../services/api';
+import { useAuth } from '../context/AuthContext';
+
+const safeText = (value, fallback = '') => {
+  if (value === null || value === undefined) return fallback;
+  if (typeof value === 'string' || typeof value === 'number') return String(value);
+  try {
+    return String(value);
+  } catch {
+    return fallback;
+  }
+};
+
+// helper za datume
+const parseDate = (value) => {
+  if (!value) return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+};
 
 export default function RepairsListScreen({ navigation }) {
+  const { user } = useAuth();
+
   const [repairs, setRepairs] = useState([]);
   const [filteredRepairs, setFilteredRepairs] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState('all');
   const [deleting, setDeleting] = useState(null);
+  const [userMap, setUserMap] = useState({});
 
+  // Prebaci sve korisnike u mapu id -> ime radi brzog resolve-a
   useEffect(() => {
-    loadRepairs();
-    const unsubscribe = navigation.addListener('focus', loadRepairs);
-    return unsubscribe;
-  }, [navigation]);
+    try {
+      const all = userDB.getAll ? userDB.getAll() || [] : [];
+      const map = {};
+      all.forEach((u) => {
+        if (!u || typeof u !== 'object') return;
+        const uid = u.id || u._id;
+        if (!uid) return;
+        const full = `${u.ime || u.firstName || ''} ${u.prezime || u.lastName || ''}`.trim();
+        map[uid] = full || u.email || 'Serviser';
+      });
 
-  useEffect(() => {
-    applyFilter();
-  }, [repairs, filter]);
+      const authId = user?._id || user?.id;
+      const authName = `${user?.ime || user?.firstName || ''} ${user?.prezime || user?.lastName || ''}`.trim();
+      if (authId && authName) {
+        map[authId] = authName;
+      }
 
-  const loadRepairs = () => {
+      setUserMap(map);
+    } catch (e) {
+      console.warn('RepairsListScreen: ne mogu učitati korisnike', e?.message || e);
+    }
+  }, [user]);
+
+  const loadRepairs = useCallback(() => {
     try {
       const allRepairs = repairDB.getAll() || [];
 
@@ -43,7 +79,12 @@ export default function RepairsListScreen({ navigation }) {
       };
 
       const sorted = allRepairs
-        .map((r) => ({ ...r, status: normalizeStatus(r.status) }))
+        .filter((r) => r && typeof r === 'object') // safety: drop malformed entries
+        .map((r) => ({
+          ...r,
+          status: normalizeStatus(r.status),
+          synced: r.synced === 0 ? 0 : 1, // default missing synced flag to synced
+        }))
         .sort((a, b) => new Date(b.datumPrijave) - new Date(a.datumPrijave));
 
       setRepairs(sorted);
@@ -51,15 +92,25 @@ export default function RepairsListScreen({ navigation }) {
       console.error('Greška pri učitavanju popravaka:', error);
       setRepairs([]);
     }
-  };
+  }, []);
 
-  const applyFilter = () => {
+  useEffect(() => {
+    loadRepairs();
+    const unsubscribe = navigation.addListener('focus', loadRepairs);
+    return unsubscribe;
+  }, [navigation, loadRepairs]);
+
+  const applyFilter = useCallback(() => {
     let filtered = repairs;
     if (filter !== 'all') {
       filtered = repairs.filter(r => r.status === filter);
     }
     setFilteredRepairs(filtered);
-  };
+  }, [repairs, filter]);
+
+  useEffect(() => {
+    applyFilter();
+  }, [applyFilter]);
 
   const handleDeleteRepair = async (repair) => {
     Alert.alert(
@@ -111,42 +162,104 @@ export default function RepairsListScreen({ navigation }) {
     }
   };
 
-  const getServiserName = (serviser) => {
-    if (!serviser) return 'Nepoznat serviser';
-    if (typeof serviser === 'object') {
-      const ime = serviser.ime || serviser.firstName || '';
-      const prezime = serviser.prezime || serviser.lastName || '';
-      const full = `${ime} ${prezime}`.trim();
-      return full || 'Nepoznat serviser';
-    }
+  const resolvePersonName = useCallback((raw, fallbackUnknown = 'N/A') => {
+    if (!raw) return fallbackUnknown;
 
-    // Ako je serviserID string, probaj dohvatiti korisnika iz lokalne baze radi imena
-    const user = userDB.getById ? userDB.getById(serviser) : null;
-    if (user) {
-      const full = `${user.ime || ''} ${user.prezime || ''}`.trim();
+    if (typeof raw === 'object') {
+      const full = `${raw.ime || raw.firstName || raw.name || raw.fullName || ''} ${raw.prezime || raw.lastName || ''}`.trim();
       if (full) return full;
+      const refId = raw._id || raw.id;
+      if (refId && userMap[refId]) return userMap[refId];
+      if (refId) return refId.length > 14 ? `${refId.slice(0, 6)}…${refId.slice(-3)}` : String(refId);
+      if (raw.email) return raw.email;
+      return fallbackUnknown;
     }
 
-    // string ID fallback
-    return serviser.length > 10 ? `${serviser.slice(0, 6)}…` : serviser;
-  };
+    if (typeof raw === 'string') {
+      const maybe = userMap[raw];
+      if (maybe) return maybe;
+      return raw.length > 14 ? `${raw.slice(0, 6)}…${raw.slice(-3)}` : raw;
+    }
 
-  const onRefresh = async () => {
+    if (typeof raw === 'number') return String(raw);
+    return fallbackUnknown;
+  }, [userMap]);
+
+  const resolveServiserName = useCallback((item) => {
+    // Prefer explicit name fields if present on the record
+    const explicit = item?.serviserName || item?.serviser || item?.serviserFullName;
+    const explicitStr = safeText(explicit, '');
+    if (explicitStr) return explicitStr;
+
+    // Fallback to serviserID resolution
+    return resolvePersonName(item?.serviserID, 'Nepoznat serviser');
+  }, [resolvePersonName]);
+
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await syncAll();
-    loadRepairs();
-    setRefreshing(false);
-  };
+    try {
+      await syncAll();
+      loadRepairs();
+    } catch (e) {
+      console.error('Greška pri syncu popravaka:', e);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadRepairs]);
 
   const renderRepairItem = ({ item }) => {
-    const datumPrijave = new Date(item.datumPrijave);
-    const prijavaLabel = datumPrijave.toLocaleString('hr-HR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-    const serviserName = getServiserName(item.serviserID);
-    const prijavio = item.prijavio || '';
-    const kontakt = item.kontaktTelefon || '';
-    
-    // Pronađi dizalo po ID-u
-    const elevator = elevatorDB.getById(item.elevatorId);
+    if (!item || typeof item !== 'object') {
+      return (
+        <View style={styles.repairCard}>
+          <View style={styles.repairContent}>
+            <Text style={styles.repairDescription}>
+              {`Neispravan zapis popravka: ${safeText(item, '')}`}
+            </Text>
+          </View>
+        </View>
+      );
+    }
+
+    const datumPrijave = parseDate(item.datumPrijave);
+    const prijavaLabel = datumPrijave
+      ? datumPrijave.toLocaleString('hr-HR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+      : '-';
+
+    const serviserName = safeText(resolveServiserName(item), 'Nepoznat serviser');
+    const prijavio = safeText(resolvePersonName(item.prijavio, 'N/A'), 'N/A');
+    const primioPoziv = safeText(item.primioPoziv || item.receivedBy, '');
+    const kontakt = safeText(item.kontaktTelefon, '');
+
+    const elevatorId = typeof item.elevatorId === 'object' && item.elevatorId !== null
+      ? item.elevatorId._id || item.elevatorId.id
+      : item.elevatorId;
+
+    let elevator = elevatorId ? elevatorDB.getById(elevatorId) : null;
+
+    if (!elevator && typeof item.elevatorId === 'object' && item.elevatorId) {
+      elevator = {
+        brojDizala: item.elevatorId.brojDizala || undefined,
+        nazivStranke: item.elevatorId.nazivStranke || 'Obrisano dizalo',
+        ulica: item.elevatorId.ulica || '',
+        mjesto: item.elevatorId.mjesto || '',
+      };
+    }
+
+    if (!elevator) {
+      elevator = {
+        brojDizala: undefined,
+        nazivStranke: 'Obrisano dizalo',
+        ulica: '',
+        mjesto: '',
+      };
+    }
+
+    const elevatorLabel = `${safeText(elevator.nazivStranke || 'Obrisano dizalo')}${elevator.brojDizala ? ` - ${safeText(elevator.brojDizala)}` : ''}`;
+    const elevatorAddress = elevator.ulica || elevator.mjesto
+      ? `${safeText(elevator.ulica)}${elevator.mjesto ? `, ${safeText(elevator.mjesto)}` : ''}`
+      : '';
+
+    const opisKvara = safeText(item.opisKvara, 'Bez opisa');
 
     return (
       <View style={styles.repairCard}>
@@ -156,20 +269,21 @@ export default function RepairsListScreen({ navigation }) {
         >
           <View style={styles.repairHeader}>
             <View style={styles.repairInfo}>
-              <Text style={styles.elevatorName}>
-                {elevator?.ulica || ''}{elevator?.mjesto ? `, ${elevator.mjesto}` : ''} ({elevator?.brojDizala || 'N/A'})
-              </Text>
+              <Text style={styles.elevatorName}>{elevatorLabel}</Text>
+              {elevatorAddress ? (
+                <Text style={styles.repairDate}>{elevatorAddress}</Text>
+              ) : null}
               <Text style={styles.repairDate}>
                 {prijavaLabel}
               </Text>
             </View>
             <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
-              <Text style={styles.badgeText}>{getStatusLabel(item.status)}</Text>
+              <Text style={styles.badgeText}>{safeText(getStatusLabel(item.status), '-')}</Text>
             </View>
           </View>
 
           <Text style={styles.repairDescription} numberOfLines={2}>
-            {item.opisKvara || 'Bez opisa'}
+            {opisKvara}
           </Text>
 
           <View style={styles.repairFooter}>
@@ -177,9 +291,14 @@ export default function RepairsListScreen({ navigation }) {
               <Ionicons name="person-outline" size={16} color="#666" />
               <View>
                 <Text style={styles.technicianName}>{serviserName}</Text>
-                {(prijavio || kontakt) && (
+                {primioPoziv ? (
                   <Text style={styles.reporterText} numberOfLines={1}>
-                    Prijavio: {prijavio || 'N/A'}{kontakt ? ` • ${kontakt}` : ''}
+                    Primio poziv: {primioPoziv}
+                  </Text>
+                ) : null}
+                {(prijavio !== 'N/A' || kontakt) && (
+                  <Text style={styles.reporterText} numberOfLines={1}>
+                    Prijavio: {prijavio}{kontakt ? ` • ${kontakt}` : ''}
                   </Text>
                 )}
               </View>
@@ -259,7 +378,7 @@ export default function RepairsListScreen({ navigation }) {
       <FlatList
         data={filteredRepairs}
         renderItem={renderRepairItem}
-        keyExtractor={(item) => item._id || item.id}
+        keyExtractor={(item, index) => String(item?._id || item?.id || item?.key || index)}
         contentContainerStyle={styles.listContent}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />

@@ -1,6 +1,14 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
+// Legacy alias map radi kompatibilnosti sa starim korisnicima (npr. "technician")
+const ROLE_ALIASES = {
+  technician: 'serviser',
+  manager: 'menadzer',
+};
+
+const normalizeRole = (role) => ROLE_ALIASES[role] || role;
+
 // Middleware za JWT autentifikaciju
 const auth = async (req, res, next) => {
   try {
@@ -20,6 +28,8 @@ const auth = async (req, res, next) => {
     }
 
     console.log('✅ Auth: Uspješna autentifikacija korisnika:', user.email, '(ID:', user._id, ')');
+    user.uloga = normalizeRole(user.uloga); // ne sprema se u bazu, samo u request kontekstu
+    user.normalizedRole = user.uloga;
     req.user = user;
     next();
   } catch (error) {
@@ -35,10 +45,11 @@ const checkRole = (allowedRoles) => {
       return res.status(401).json({ message: 'Korisnik nije autentificiran' });
     }
 
-    // Ako je proslijeđen string, pretvori u array
     const rolesArray = Array.isArray(allowedRoles) ? allowedRoles : [allowedRoles];
-    
-    if (!rolesArray.includes(req.user.uloga)) {
+    const normalizedRequired = rolesArray.map((r) => normalizeRole(r));
+    const userRole = normalizeRole(req.user.uloga || req.user.normalizedRole);
+
+    if (!normalizedRequired.includes(userRole)) {
       return res.status(403).json({ message: 'Nemate dozvolu za ovu akciju' });
     }
 

@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal, Alert, Linking } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking, Modal, TextInput, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { elevatorDB, userDB, repairDB } from '../database/db';
 import { repairsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import ms from '../utils/scale';
 
 const statusLabel = (status) => {
   switch (status) {
@@ -51,7 +52,6 @@ export default function RepairDetailsScreen({ route, navigation }) {
     if (status === 'završen' || status === 'zavrsen') return 'completed';
     return 'pending';
   };
-  const initialStatus = normalizeStatus(repairData.status);
   const formatName = (person) => {
     if (!person) return '';
     const full = `${person.ime || person.firstName || person.name || person.fullName || ''} ${person.prezime || person.lastName || ''}`.trim();
@@ -75,11 +75,20 @@ export default function RepairDetailsScreen({ route, navigation }) {
   const [editValues, setEditValues] = useState({
     opisPopravka: repairData.opisPopravka || '',
     popravkaUPotpunosti: normalizeStatus(repairData.status) === 'completed' ? true : Boolean(repairData.popravkaUPotpunosti),
-    status: initialStatus,
+    status: normalizeStatus(repairData.status),
     radniNalogPotpisan: Boolean(repairData.radniNalogPotpisan),
   });
 
-  const handleUpdate = async () => {
+  const resetQuickEdit = () => {
+    setEditValues({
+      opisPopravka: (repairData.opisPopravka || '').trim(),
+      popravkaUPotpunosti: normalizeStatus(repairData.status) === 'completed' ? true : Boolean(repairData.popravkaUPotpunosti),
+      status: normalizeStatus(repairData.status),
+      radniNalogPotpisan: Boolean(repairData.radniNalogPotpisan),
+    });
+  };
+
+  const handleQuickUpdate = async () => {
     try {
       setSaving(true);
       const newStatus = editValues.status || (editValues.popravkaUPotpunosti ? 'completed' : 'in_progress');
@@ -94,18 +103,21 @@ export default function RepairDetailsScreen({ route, navigation }) {
       };
 
       const id = repairData._id || repairData.id;
+      const updatedLocal = { ...repairData, ...payload };
+
       try {
         const response = await repairsAPI.update(id, payload);
         const updated = response.data?.data || response.data;
-        repairDB.update(id, { ...repairData, ...updated, serviserID: serviserId, synced: 1 });
+        repairDB.update(id, { ...updatedLocal, ...updated, serviserID: serviserId, synced: 1 });
+        setRepairData((prev) => ({ ...prev, ...updated, serviserID: serviserId }));
       } catch (err) {
         console.log('⚠️ Backend nedostupan, spremam lokalno', err?.message);
-        repairDB.update(id, { ...repairData, ...payload, synced: 0 });
+        repairDB.update(id, { ...updatedLocal, serviserID: serviserId, synced: 0 });
+        setRepairData(updatedLocal);
       }
 
       setSaving(false);
       setEditVisible(false);
-      Alert.alert('Ažurirano', editValues.popravkaUPotpunosti ? 'Popravak označen kao završen' : 'Popravak je u tijeku');
       navigation.goBack();
     } catch (error) {
       setSaving(false);
@@ -186,53 +198,51 @@ export default function RepairDetailsScreen({ route, navigation }) {
           </View>
         )}
 
-        <TouchableOpacity style={styles.primaryButton} onPress={() => setEditVisible(true)}>
-          <Ionicons name="create-outline" size={18} color="#fff" />
-          <Text style={styles.primaryButtonText}>Ažuriraj popravak</Text>
+        <TouchableOpacity style={styles.primaryButton} onPress={() => { resetQuickEdit(); setEditVisible(true); }}>
+          <Ionicons name="construct" size={18} color="#fff" />
+          <Text style={styles.primaryButtonText}>Izvrši popravak</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.secondaryButton, { marginTop: 10 }]}
+          onPress={() => navigation.navigate('EditRepair', { repair: repairData })}
+        >
+          <Ionicons name="options-outline" size={18} color="#2563eb" />
+          <Text style={styles.secondaryText}>Više opcija</Text>
         </TouchableOpacity>
 
         <View style={{ height: 60 }} />
       </ScrollView>
-
       <Modal visible={editVisible} transparent animationType="fade" onRequestClose={() => setEditVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Ažuriraj popravak</Text>
+              <Text style={styles.modalTitle}>Izvrši popravak</Text>
               <TouchableOpacity onPress={() => setEditVisible(false)}>
                 <Ionicons name="close" size={22} color="#111827" />
               </TouchableOpacity>
             </View>
-            <ScrollView style={{ maxHeight: 360 }}>
-              <Text style={styles.label}>Opis popravka</Text>
-              <TextInput
-                style={[styles.input, styles.textArea]}
-                value={editValues.opisPopravka}
-                onChangeText={(text) => setEditValues((p) => ({ ...p, opisPopravka: text }))}
-                placeholder="Što je rađeno na popravku"
-                multiline
-              />
 
-              <Text style={[styles.label, { marginTop: 10 }]}>Status</Text>
+            <ScrollView style={{ maxHeight: 360 }}>
+              <Text style={styles.label}>Status</Text>
               <View style={styles.statusChoiceRow}>
                 {[
-                  { label: 'Prijavljen', value: 'pending' },
-                  { label: 'U tijeku', value: 'in_progress' },
-                  { label: 'Završeno', value: 'completed' },
+                  { label: 'Prijavljen', value: 'pending', color: '#ef4444' },
+                  { label: 'U tijeku', value: 'in_progress', color: '#f59e0b' },
+                  { label: 'Završeno', value: 'completed', color: '#10b981' },
                 ].map((opt) => {
                   const active = editValues.status === opt.value;
-                  const color = opt.value === 'pending' ? '#ef4444' : opt.value === 'in_progress' ? '#f59e0b' : '#10b981';
                   return (
                     <TouchableOpacity
                       key={opt.value}
-                      style={[styles.statusChip, active && styles.statusChipActive, active && { borderColor: color, backgroundColor: '#fff' }]}
+                      style={[styles.statusChip, active && styles.statusChipActive, active && { borderColor: opt.color, backgroundColor: '#fff' }]}
                       onPress={() => setEditValues((p) => ({
                         ...p,
                         status: opt.value,
                         popravkaUPotpunosti: opt.value === 'completed',
                       }))}
                     >
-                      <Text style={[styles.statusChipText, active && { color }]}>{opt.label}</Text>
+                      <Text style={[styles.statusChipText, active && { color: opt.color }]}>{opt.label}</Text>
                     </TouchableOpacity>
                   );
                 })}
@@ -242,16 +252,33 @@ export default function RepairDetailsScreen({ route, navigation }) {
                 style={[styles.toggleRow, editValues.radniNalogPotpisan && styles.toggleRowActive]}
                 onPress={() => setEditValues((p) => ({ ...p, radniNalogPotpisan: !p.radniNalogPotpisan }))}
               >
-                <Ionicons name={editValues.radniNalogPotpisan ? 'checkbox' : 'square-outline'} size={22} color={editValues.radniNalogPotpisan ? '#10b981' : '#6b7280'} />
+                <Ionicons name={editValues.radniNalogPotpisan ? 'checkbox' : 'square-outline'} size={20} color={editValues.radniNalogPotpisan ? '#10b981' : '#6b7280'} />
                 <Text style={styles.toggleLabel}>Radni nalog potpisan</Text>
               </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.toggleRow, editValues.popravkaUPotpunosti && styles.toggleRowActive]}
+                onPress={() => setEditValues((p) => ({ ...p, popravkaUPotpunosti: !p.popravkaUPotpunosti, status: p.popravkaUPotpunosti ? p.status : 'completed' }))}
+              >
+                <Ionicons name={editValues.popravkaUPotpunosti ? 'checkbox' : 'square-outline'} size={20} color={editValues.popravkaUPotpunosti ? '#10b981' : '#6b7280'} />
+                <Text style={styles.toggleLabel}>Popravak u potpunosti</Text>
+              </TouchableOpacity>
+
+              <Text style={[styles.label, { marginTop: 6 }]}>Opis popravka</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                value={editValues.opisPopravka}
+                onChangeText={(text) => setEditValues((p) => ({ ...p, opisPopravka: text }))}
+                placeholder="Što je rađeno na popravku"
+                multiline
+              />
             </ScrollView>
 
             <View style={styles.modalActions}>
-              <TouchableOpacity onPress={() => setEditVisible(false)} style={styles.secondaryButton}>
+              <TouchableOpacity onPress={() => setEditVisible(false)} style={styles.secondaryGhostButton}>
                 <Text style={styles.secondaryText}>Odustani</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={handleUpdate} style={styles.primaryButtonSmall} disabled={saving}>
+              <TouchableOpacity onPress={handleQuickUpdate} style={[styles.primaryButtonSmall, saving && { opacity: 0.7 }]} disabled={saving}>
                 <Text style={styles.primaryButtonText}>{saving ? 'Spremam...' : 'Spremi'}</Text>
               </TouchableOpacity>
             </View>
@@ -292,105 +319,127 @@ function DetailRow({ label, value, badgeColor, action, actionIcon }) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5' },
-  header: { backgroundColor: '#fff', paddingTop: 50, paddingBottom: 15, paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: '#e5e5e5' },
-  headerTitle: { fontSize: 19, fontWeight: '700', color: '#1f2937' },
+  header: { backgroundColor: '#fff', paddingTop: ms(50), paddingBottom: ms(15), paddingHorizontal: ms(20), flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: '#e5e5e5' },
+  headerTitle: { fontSize: ms(19), fontWeight: '700', color: '#1f2937' },
   content: { flex: 1 },
-  card: { backgroundColor: '#fff', padding: 16, marginTop: 12, borderRadius: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 2 },
-  sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
-  sectionTitle: { fontSize: 17, fontWeight: '800', color: '#111827' },
-  detailRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  detailLabel: { fontSize: 15, color: '#6b7280', fontWeight: '600' },
-  detailValue: { fontSize: 15, color: '#1f2937', fontWeight: '600' },
-  detailValueWrap: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  actionIconBtn: { paddingHorizontal: 6, paddingVertical: 4 },
-  badgeDot: { width: 10, height: 10, borderRadius: 5 },
-  notes: { fontSize: 15, color: '#4b5563', lineHeight: 22, fontWeight: '500' },
-  elevatorBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, backgroundColor: '#eef2ff', borderWidth: 1, borderColor: '#e0e7ff' },
-  elevatorBadgeText: { fontSize: 14, fontWeight: '700', color: '#1f2937' },
-  statusHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  card: { backgroundColor: '#fff', padding: ms(16), marginTop: ms(12), borderRadius: ms(12), shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 2 },
+  sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: ms(10) },
+  sectionTitle: { fontSize: ms(17), fontWeight: '800', color: '#111827' },
+  detailRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: ms(8), borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
+  detailLabel: { fontSize: ms(15), color: '#6b7280', fontWeight: '600' },
+  detailValue: { fontSize: ms(15), color: '#1f2937', fontWeight: '600' },
+  detailValueWrap: { flexDirection: 'row', alignItems: 'center', gap: ms(6) },
+  actionIconBtn: { paddingHorizontal: ms(6), paddingVertical: ms(4) },
+  badgeDot: { width: ms(10), height: ms(10), borderRadius: ms(5) },
+  notes: { fontSize: ms(15), color: '#4b5563', lineHeight: ms(22), fontWeight: '500' },
+  elevatorBadge: { paddingHorizontal: ms(10), paddingVertical: ms(4), borderRadius: ms(10), backgroundColor: '#eef2ff', borderWidth: 1, borderColor: '#e0e7ff' },
+  elevatorBadgeText: { fontSize: ms(14), fontWeight: '700', color: '#1f2937' },
+  statusHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: ms(10) },
   statusIcon: { marginRight: -2 },
-  statusPill: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
-  statusPillText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  statusPill: { paddingHorizontal: ms(12), paddingVertical: ms(6), borderRadius: ms(12) },
+  statusPillText: { color: '#fff', fontSize: ms(14), fontWeight: '700' },
   primaryButton: {
-    marginTop: 20,
-    marginHorizontal: 20,
+    marginTop: ms(20),
+    marginHorizontal: ms(20),
     backgroundColor: '#2563eb',
-    borderRadius: 10,
-    padding: 14,
+    borderRadius: ms(10),
+    padding: ms(14),
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: ms(8),
   },
   primaryButtonText: {
     color: '#fff',
     fontWeight: '700',
+    fontSize: ms(15),
+  },
+  secondaryButton: {
+    marginHorizontal: ms(20),
+    borderWidth: 1,
+    borderColor: '#2563eb',
+    borderRadius: ms(10),
+    padding: ms(12),
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: ms(8),
+    backgroundColor: '#eef2ff',
+  },
+  secondaryGhostButton: {
+    paddingVertical: ms(10),
+    paddingHorizontal: ms(12),
+  },
+  secondaryText: {
+    color: '#2563eb',
+    fontWeight: '700',
+    fontSize: ms(14),
   },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.4)',
     justifyContent: 'center',
-    padding: 20,
+    padding: ms(20),
   },
   modalCard: {
     backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: ms(12),
+    padding: ms(16),
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: ms(12),
   },
   modalTitle: {
-    fontSize: 16,
+    fontSize: ms(16),
     fontWeight: '700',
     color: '#111827',
   },
   label: {
-    fontSize: 14,
+    fontSize: ms(14),
     fontWeight: '600',
     color: '#1f2937',
-    marginBottom: 8,
+    marginBottom: ms(8),
   },
   input: {
     borderWidth: 1,
     borderColor: '#e5e7eb',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 15,
+    borderRadius: ms(8),
+    padding: ms(12),
+    fontSize: ms(15),
     color: '#1f2937',
     backgroundColor: '#f9fafb',
   },
   textArea: {
-    minHeight: 100,
+    minHeight: ms(100),
     textAlignVertical: 'top',
   },
   toggleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingVertical: 10,
+    gap: ms(10),
+    paddingVertical: ms(10),
   },
   toggleRowActive: {
     backgroundColor: '#ecfeff',
-    paddingHorizontal: 6,
-    borderRadius: 8,
+    paddingHorizontal: ms(6),
+    borderRadius: ms(8),
   },
   toggleLabel: {
-    fontSize: 15,
+    fontSize: ms(15),
     color: '#111827',
   },
   statusChoiceRow: {
     flexDirection: 'row',
-    gap: 8,
-    marginBottom: 6,
+    gap: ms(8),
+    marginBottom: ms(6),
   },
   statusChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
+    paddingHorizontal: ms(12),
+    paddingVertical: ms(8),
+    borderRadius: ms(10),
     borderWidth: 1,
     borderColor: '#e5e7eb',
     backgroundColor: '#fff',
@@ -400,31 +449,20 @@ const styles = StyleSheet.create({
     backgroundColor: '#eff6ff',
   },
   statusChipText: {
-    fontSize: 14,
+    fontSize: ms(14),
     color: '#111827',
     fontWeight: '600',
-  },
-  statusChipTextActive: {
-    color: '#1d4ed8',
   },
   modalActions: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    gap: 12,
-    marginTop: 12,
-  },
-  secondaryButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-  },
-  secondaryText: {
-    color: '#6b7280',
-    fontWeight: '600',
+    gap: ms(12),
+    marginTop: ms(12),
   },
   primaryButtonSmall: {
-    paddingVertical: 10,
-    paddingHorizontal: 14,
+    paddingVertical: ms(10),
+    paddingHorizontal: ms(14),
     backgroundColor: '#2563eb',
-    borderRadius: 8,
+    borderRadius: ms(8),
   },
 });

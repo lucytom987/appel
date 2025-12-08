@@ -48,7 +48,7 @@ router.post('/', authenticate, checkRole(['admin']), async (req, res) => {
     }
 
     // Provjeri valjanost uloge
-    if (!['serviser', 'menadzer', 'admin'].includes(uloga)) {
+    if (!['serviser', 'menadzer', 'admin', 'technician', 'manager'].includes(uloga)) {
       return res.status(400).json({ message: 'Nevaljana uloga' });
     }
 
@@ -111,7 +111,7 @@ router.put('/:id', authenticate, checkRole(['admin']), async (req, res) => {
     if (ime) user.ime = ime;
     if (prezime) user.prezime = prezime;
     if (lozinka) user.lozinka = lozinka; // Će biti hashirana u pre('save')
-    if (uloga && ['serviser', 'menadzer', 'admin'].includes(uloga)) user.uloga = uloga;
+    if (uloga && ['serviser', 'menadzer', 'admin', 'technician', 'manager'].includes(uloga)) user.uloga = uloga;
     if (telefon) user.telefon = telefon;
     if (typeof aktivan === 'boolean') user.aktivan = aktivan;
 

@@ -18,6 +18,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import * as SecureStore from 'expo-secure-store';
 import { elevatorDB, serviceDB, repairDB } from '../database/db';
 import { syncAll } from '../services/syncService';
+import ms, { rf } from '../utils/scale';
 
 // Gauge geometry (semicircle)
 const GAUGE_SIZE = 140;
@@ -285,13 +286,13 @@ export default function HomeScreen({ navigation }) {
             <Ionicons name="construct" size={32} color="#f59e0b" style={{ marginTop: 4 }} />
             <View style={styles.repairsCounters}>
               <Text style={styles.repairsSubLabel}>
-                NA ČEKANJU: <Text style={styles.repairsPending}>{stats.repairsPending}</Text>
+                ČEKANJE: <Text style={styles.repairsPending}>{stats.repairsPending}</Text>
               </Text>
               <Text style={styles.repairsSubLabel}>
                 U TIJEKU: <Text style={styles.repairsInProgress}>{stats.repairsInProgress}</Text>
               </Text>
               <Text style={styles.repairsSubLabel}>
-                ZAVRŠENI: <Text style={styles.repairsCompleted}>{stats.repairsCompleted}</Text>
+                ZAVRŠENO: <Text style={styles.repairsCompleted}>{stats.repairsCompleted}</Text>
               </Text>
             </View>
           </TouchableOpacity>
@@ -351,7 +352,7 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   greeting: {
-    fontSize: 24,
+    fontSize: rf(22, 18, 38),
     fontWeight: 'bold',
     color: '#1f2937',
     marginBottom: 5,
@@ -367,7 +368,7 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
   statusText: {
-    fontSize: 14,
+    fontSize: rf(13, 11.5, 20),
     color: '#666',
   },
   content: {
@@ -396,19 +397,19 @@ const styles = StyleSheet.create({
     borderColor: '#ef4444',
   },
   statNumber: {
-    fontSize: 32,
+    fontSize: rf(30, 24, 46),
     fontWeight: 'bold',
     color: '#1f2937',
     marginTop: 10,
   },
   statLabel: {
-    fontSize: 14,
+    fontSize: rf(13, 11.5, 20),
     color: '#666',
     textAlign: 'center',
     marginTop: 5,
   },
   statSubLabel: {
-    fontSize: 13,
+    fontSize: rf(12, 11, 19),
     color: '#6b7280',
     textAlign: 'center',
     marginTop: 2,
@@ -419,22 +420,25 @@ const styles = StyleSheet.create({
   },
   sectionTitleUpper: {
     letterSpacing: 0.8,
-    fontSize: 20,
+    fontSize: rf(18, 15, 28),
     marginBottom: 6,
     fontFamily: Platform.select({ ios: 'HelveticaNeue-Medium', android: 'sans-serif-medium', default: 'sans-serif' }),
   },
   repairsCounters: {
     marginTop: 6,
-    gap: 2,
-    alignItems: 'center',
     width: '100%',
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+    justifyContent: 'flex-start',
+    gap: 2,
   },
   repairsSubLabel: {
-    fontSize: 17,
+    fontSize: rf(15, 11, 38),
     color: '#111827',
-    fontWeight: '600',
+    fontWeight: '800',
     textAlign: 'right',
-    width: '80%',
+    flexShrink: 1,
+    letterSpacing: 0.2,
   },
   repairsPending: {
     color: '#ef4444',
@@ -565,7 +569,7 @@ const styles = StyleSheet.create({
   },
   actionText: {
     flex: 1,
-    fontSize: 16,
+    fontSize: rf(15, 13, 23),
     color: '#1f2937',
     marginLeft: 15,
   },
@@ -585,7 +589,7 @@ const styles = StyleSheet.create({
   },
   offlineAdminText: {
     flex: 1,
-    fontSize: 14,
+    fontSize: rf(13, 11.5, 20),
     color: '#b91c1c',
     lineHeight: 20,
   },

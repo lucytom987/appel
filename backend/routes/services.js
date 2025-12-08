@@ -169,8 +169,9 @@ router.put('/:id', authenticate, async (req, res) => {
       return res.status(404).json({ success: false, message: 'Servis nije pronađen' });
     }
 
-    const isOwnerServiser = req.user.uloga === 'serviser' && String(existingService.serviserID) === String(req.user._id);
-    const canManage = ['menadzer', 'admin'].includes(req.user.uloga);
+    const role = req.user.normalizedRole || req.user.uloga;
+    const isOwnerServiser = role === 'serviser' && String(existingService.serviserID) === String(req.user._id);
+    const canManage = ['menadzer', 'admin'].includes(role);
     if (!isOwnerServiser && !canManage) {
       return res.status(403).json({ success: false, message: 'Nedovoljna prava za ažuriranje ovog servisa' });
     }

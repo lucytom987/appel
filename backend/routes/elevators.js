@@ -9,14 +9,19 @@ const { logAction } = require('../services/auditService');
 // @access  Private
 router.get('/', authenticate, async (req, res) => {
   try {
-    const { updatedAfter, limit = 200, skip = 0 } = req.query;
+    const { updatedAfter, includeDeleted = 'false', limit = 200, skip = 0 } = req.query;
     const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 0, 1), 500);
     const parsedSkip = Math.max(parseInt(skip, 10) || 0, 0);
     const filter = {};
+
+    if (includeDeleted !== 'true') {
+      filter.is_deleted = { $ne: true };
+    }
+
     if (updatedAfter) {
       const afterDate = new Date(updatedAfter);
-      filter.azuriranDatum = { $gte: afterDate };
-      console.log('Delta sync elevators, updatedAfter:', afterDate.toISOString());
+      filter.updated_at = { $gte: afterDate };
+      console.log('Delta sync elevators, updatedAfter:', afterDate.toISOString(), 'includeDeleted:', includeDeleted);
     }
 
     const elevators = await Elevator.find(filter)
@@ -47,9 +52,10 @@ router.get('/', authenticate, async (req, res) => {
 // @access  Private
 router.get('/stats/overview', authenticate, async (req, res) => {
   try {
-    const total = await Elevator.countDocuments();
-    const active = await Elevator.countDocuments({ status: 'aktivan' });
-    const inactive = await Elevator.countDocuments({ status: 'neaktivan' });
+    const baseFilter = { is_deleted: { $ne: true } };
+    const total = await Elevator.countDocuments(baseFilter);
+    const active = await Elevator.countDocuments({ ...baseFilter, status: 'aktivan' });
+    const inactive = await Elevator.countDocuments({ ...baseFilter, status: 'neaktivan' });
 
     res.json({
       success: true,
@@ -73,7 +79,7 @@ router.get('/stats/overview', authenticate, async (req, res) => {
 // @access  Private
 router.get('/:id', authenticate, async (req, res) => {
   try {
-    const elevator = await Elevator.findById(req.params.id)
+    const elevator = await Elevator.findOne({ _id: req.params.id, is_deleted: { $ne: true } })
       .lean();
 
     if (!elevator) {
@@ -103,7 +109,11 @@ router.post('/', authenticate, async (req, res) => {
   try {
     const elevator = new Elevator({
       ...req.body,
-      kreiranOd: req.user._id
+      kreiranOd: req.user._id,
+      updated_by: req.user._id,
+      updated_at: new Date(),
+      is_deleted: false,
+      deleted_at: null
     });
 
     await elevator.save();
@@ -143,14 +153,15 @@ router.put('/:id', authenticate, checkRole(['menadzer', 'admin']), async (req, r
   try {
     const oldElevator = await Elevator.findById(req.params.id).lean();
     
-    if (!oldElevator) {
+    if (!oldElevator || oldElevator.is_deleted) {
       return res.status(404).json({
         success: false,
         message: 'Dizalo nije pronađeno'
       });
     }
 
-    const updateData = { ...req.body };
+    const now = new Date();
+    const updateData = { ...req.body, updated_by: req.user._id, updated_at: now };
     // Ako je zadnjiServis i/ili intervalServisa zadano, izračunaj sljedeći servis
     const zadnjiServis = updateData.zadnjiServis ?? oldElevator.zadnjiServis;
     const intervalServisa = updateData.intervalServisa ?? oldElevator.intervalServisa ?? 1;
@@ -159,7 +170,7 @@ router.put('/:id', authenticate, checkRole(['menadzer', 'admin']), async (req, r
       nextDate.setMonth(nextDate.getMonth() + Number(intervalServisa || 1));
       updateData.sljedeciServis = nextDate;
     }
-    updateData.azuriranDatum = new Date();
+    updateData.azuriranDatum = now;
 
     const elevator = await Elevator.findByIdAndUpdate(
       req.params.id,
@@ -202,14 +213,20 @@ router.delete('/:id', authenticate, checkRole(['menadzer', 'admin']), async (req
   try {
     const elevator = await Elevator.findById(req.params.id);
 
-    if (!elevator) {
+    if (!elevator || elevator.is_deleted) {
       return res.status(404).json({
         success: false,
         message: 'Dizalo nije pronađeno'
       });
     }
 
-    await elevator.deleteOne();
+    const now = new Date();
+    elevator.is_deleted = true;
+    elevator.deleted_at = now;
+    elevator.updated_at = now;
+    elevator.updated_by = req.user._id;
+    elevator.azuriranDatum = now;
+    await elevator.save();
 
     // Audit log
     await logAction({
@@ -220,7 +237,7 @@ router.delete('/:id', authenticate, checkRole(['menadzer', 'admin']), async (req
       entitetNaziv: `${elevator.nazivStranke} - ${elevator.brojDizala}`,
       stareVrijednosti: elevator.toObject(),
       ipAdresa: req.ip,
-      opis: 'Obrisano dizalo'
+      opis: 'Soft delete dizala'
     });
 
     res.json({

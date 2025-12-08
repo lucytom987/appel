@@ -42,6 +42,10 @@ const elevatorSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   },
+  updated_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  updated_at: { type: Date, default: Date.now },
+  is_deleted: { type: Boolean, default: false },
+  deleted_at: { type: Date },
   kreiranDatum: { type: Date, default: Date.now },
   azuriranDatum: { type: Date, default: Date.now }
 }, { 
@@ -51,7 +55,9 @@ const elevatorSchema = new mongoose.Schema({
 
 // Ažuriraj azuriranDatum pri spremanju
 elevatorSchema.pre('save', function (next) {
-  this.azuriranDatum = Date.now();
+  const now = Date.now();
+  this.azuriranDatum = now;
+  this.updated_at = now;
   
   // Automatski izračunaj sljedeći servis ako je postavljen zadnji servis
   if (this.zadnjiServis && this.intervalServisa) {
@@ -71,5 +77,7 @@ elevatorSchema.index({ mjesto: 1 });
 elevatorSchema.index({ brojDizala: 1 });
 elevatorSchema.index({ status: 1 });
 elevatorSchema.index({ azuriranDatum: -1 });
+elevatorSchema.index({ updated_at: -1 });
+elevatorSchema.index({ is_deleted: 1 });
 
 module.exports = mongoose.model('Elevator', elevatorSchema);

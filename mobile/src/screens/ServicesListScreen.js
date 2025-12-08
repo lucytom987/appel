@@ -142,6 +142,23 @@ export default function ServicesListScreen({ navigation }) {
     loadServices();
   }, [loadServices]);
 
+  // Ako u trenutno odabranom periodu nema servisa, automatski prebaci na najnoviji dostupni period
+  useEffect(() => {
+    if (!services.length) return;
+    const hasInSelection = services.some((s) => {
+      const d = parseDate(s.datum || s.serviceDate);
+      return d && d.getMonth() === selectedMonth && d.getFullYear() === selectedYear;
+    });
+    if (!hasInSelection) {
+      const latest = services[0];
+      const d = parseDate(latest?.datum || latest?.serviceDate);
+      if (d) {
+        setSelectedMonth(d.getMonth());
+        setSelectedYear(d.getFullYear());
+      }
+    }
+  }, [services, selectedMonth, selectedYear]);
+
   const applyFilter = useCallback(() => {
     let filtered = Array.isArray(services) ? services : [];
 

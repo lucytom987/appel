@@ -109,11 +109,12 @@ export const authAPI = {
 
 // Elevators API
 export const elevatorsAPI = {
-  getAll: () => api.get('/elevators'),
+  getAll: (params) => api.get('/elevators', { params }),
   getOne: (id) => api.get(`/elevators/${id}`),
   create: (data) => api.post('/elevators', data),
   update: (id, data) => api.put(`/elevators/${id}`, data),
   delete: (id) => api.delete(`/elevators/${id}`),
+  remove: (id) => api.delete(`/elevators/${id}`), // alias radi kompatibilnosti
   getStats: () => api.get('/elevators/stats/overview'),
 };
 

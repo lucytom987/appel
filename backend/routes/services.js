@@ -21,8 +21,9 @@ router.get('/', authenticate, async (req, res) => {
     const { elevatorId, startDate, endDate, technician, updatedAfter, limit = 100, skip = 0, includeDeleted } = req.query;
     const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 0, 1), 200);
     const parsedSkip = Math.max(parseInt(skip, 10) || 0, 0);
+    const includeDeletedBool = includeDeleted === 'true' || includeDeleted === true;
     const filter = {};
-    if (!includeDeleted) filter.is_deleted = { $ne: true };
+    if (!includeDeletedBool) filter.is_deleted = { $ne: true };
 
     if (elevatorId) filter.elevatorId = elevatorId;
     if (technician) filter.serviserID = technician;
@@ -65,7 +66,7 @@ router.get('/stats/monthly', authenticate, async (req, res) => {
 
     const baseFilter = { is_deleted: { $ne: true } };
     const total = await Service.countDocuments({ ...baseFilter, datum: { $gte: startDate, $lte: endDate } });
-    const totalElevators = await Elevator.countDocuments();
+    const totalElevators = await Elevator.countDocuments({ is_deleted: { $ne: true } });
     const servicedElevatorIds = await Service.distinct('elevatorId', { ...baseFilter, datum: { $gte: startDate, $lte: endDate } });
     const needsService = totalElevators - servicedElevatorIds.length;
 

@@ -155,53 +155,107 @@ export const syncElevatorsFromServer = async () => {
     const shouldFullSync = periodicFull || (await shouldForceFullSync('lastSyncElevators', elevatorDB.getAll));
     const last = shouldFullSync ? null : await getLastSync('lastSyncElevators');
 
-    const params = last ? { updatedAfter: last, includeDeleted: true } : { includeDeleted: true };
-    console.log('Sync elevators, params:', params);
-    const res = await elevatorsAPI.getAll(params);
-    const serverElevators = res.data.data || [];
-    serverElevators.forEach((e) => {
-      const local = elevatorDB.getAnyById?.(e._id);
-      const serverUpdated = toMs(e.updated_at || e.azuriranDatum || e.updatedAt || e.kreiranDatum);
-      const localUpdated = local ? toMs(local.updated_at || local.azuriranDatum) : 0;
-      const localDirty = local && (local.sync_status === 'dirty' || local.synced === 0);
+    const baseParams = last ? { updatedAfter: last, includeDeleted: true } : { includeDeleted: true };
+    const limit = 200; // backend cap
+    let skip = 0;
+    let fetched = 0;
+    let total = 0;
 
-      if (localDirty && localUpdated > serverUpdated) {
-        return; // zadrži noviju lokalnu verziju
-      }
+    const serverIds = new Set();
 
-      const payload = {
-        id: e._id,
-        brojUgovora: e.brojUgovora,
-        nazivStranke: e.nazivStranke,
-        ulica: e.ulica,
-        mjesto: e.mjesto,
-        brojDizala: e.brojDizala,
-        kontaktOsoba: e.kontaktOsoba,
-        koordinate: e.koordinate,
-        status: e.status,
-        intervalServisa: e.intervalServisa,
-        zadnjiServis: e.zadnjiServis,
-        sljedeciServis: e.sljedeciServis,
-        napomene: e.napomene,
-        updated_at: e.updated_at || e.azuriranDatum || e.updatedAt,
-        updated_by: e.updated_by,
-        is_deleted: e.is_deleted,
-        deleted_at: e.deleted_at,
-        sync_status: 'synced',
-        synced: 1,
-      };
+    do {
+      const params = { ...baseParams, limit, skip };
+      console.log('Sync elevators, params:', params);
+      const res = await elevatorsAPI.getAll(params);
+      const serverElevators = res.data.data || [];
+      total = res.data.total || serverElevators.length;
 
+      serverElevators.forEach((e) => {
+        serverIds.add(String(e._id));
+        const local = elevatorDB.getAnyById?.(e._id);
+        const serverUpdated = toMs(e.updated_at || e.azuriranDatum || e.updatedAt || e.kreiranDatum);
+        const localUpdated = local ? toMs(local.updated_at || local.azuriranDatum) : 0;
+        const localDirty = local && (local.sync_status === 'dirty' || local.synced === 0);
+
+        if (localDirty && localUpdated > serverUpdated) {
+          return; // zadrži noviju lokalnu verziju
+        }
+
+        const payload = {
+          id: e._id,
+          brojUgovora: e.brojUgovora,
+          nazivStranke: e.nazivStranke,
+          ulica: e.ulica,
+          mjesto: e.mjesto,
+          brojDizala: e.brojDizala,
+          kontaktOsoba: e.kontaktOsoba,
+          koordinate: e.koordinate,
+          status: e.status,
+          intervalServisa: e.intervalServisa,
+          zadnjiServis: e.zadnjiServis,
+          sljedeciServis: e.sljedeciServis,
+          napomene: e.napomene,
+          updated_at: e.updated_at || e.azuriranDatum || e.updatedAt,
+          updated_by: e.updated_by,
+          is_deleted: e.is_deleted,
+          deleted_at: e.deleted_at,
+          sync_status: 'synced',
+          synced: 1,
+        };
+
+        try {
+          elevatorDB.insert(payload);
+        } catch {
+          elevatorDB.update(e._id, payload);
+        }
+      });
+
+      fetched += serverElevators.length;
+      skip += serverElevators.length;
+    } while (fetched < total && skip < 5000);
+
+    // Ako je full pull (nema updatedAfter) napravimo reconciliaciju: lokalni zapisi koji nisu na serveru -> označi kao obrisane (osim local_ i dirty)
+    if (!last) {
       try {
-        elevatorDB.insert(payload);
-      } catch {
-        elevatorDB.update(e._id, payload);
+        const locals = elevatorDB.getAllIncludingDeleted?.() || [];
+        locals
+          .filter((loc) => !String(loc.id || '').startsWith('local_'))
+          .filter((loc) => !(loc.sync_status === 'dirty' || loc.synced === 0))
+          .forEach((loc) => {
+            if (!serverIds.has(String(loc.id))) {
+              elevatorDB.update(loc.id, {
+                ...loc,
+                is_deleted: 1,
+                deleted_at: loc.deleted_at || new Date().toISOString(),
+                updated_at: Date.now(),
+                sync_status: 'synced',
+                synced: 1,
+              });
+            }
+          });
+      } catch (e) {
+        console.log('Elevator reconciliation skipped:', e?.message);
       }
-    });
+    }
+
+    // Ako delta nije vratila ništa, forsiraj jedan full pull
+    if (!shouldFullSync && fetched === 0) {
+      try {
+        if (SecureStore.deleteItemAsync) {
+          await SecureStore.deleteItemAsync('lastSyncElevators');
+          console.log('Elevators delta returned 0; retrying with full pull');
+        }
+      } catch (e) {
+        console.log('Could not clear lastSyncElevators for full retry:', e?.message);
+      }
+      return syncElevatorsFromServer();
+    }
+
     await setLastSync('lastSyncElevators');
     if (shouldFullSync) {
       await setLastFull('lastFullElevators');
     }
-    console.log(`Elevators synced: ${serverElevators.length}`);
+    console.log(`Elevators synced: ${fetched} (total reported: ${total || fetched})`);
     return true;
   } catch (err) {
     console.log('Greška sync elevators:', err.message);

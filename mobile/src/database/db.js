@@ -288,6 +288,18 @@ export const elevatorDB = {
     }
     return elevator;
   },
+
+  getAllIncludingDeleted: () => {
+    const elevators = db.getAllSync('SELECT * FROM elevators ORDER BY nazivStranke');
+    return elevators.map(e => ({
+      ...e,
+      kontaktOsoba: typeof e.kontaktOsoba === 'string' ? JSON.parse(e.kontaktOsoba || '{}') : (e.kontaktOsoba || {}),
+      koordinate: {
+        latitude: e.koordinate_lat || 0,
+        longitude: e.koordinate_lng || 0,
+      }
+    }));
+  },
   
   insert: (elevator) => {
     const syncStatus = elevator.sync_status || 'synced';

@@ -8,17 +8,18 @@ const { logAction } = require('../services/auditService');
 // GET /api/repairs - popis popravaka (filtri)
 router.get('/', authenticate, async (req, res) => {
   try {
-    const { elevatorId, status, startDate, endDate, serviserId, updatedAfter, limit = 100, skip = 0 } = req.query;
+    const { elevatorId, status, startDate, endDate, serviserId, updatedAfter, limit = 100, skip = 0, includeDeleted } = req.query;
     const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 0, 1), 200);
     const parsedSkip = Math.max(parseInt(skip, 10) || 0, 0);
     const filter = {};
+    if (!includeDeleted) filter.is_deleted = { $ne: true };
 
     if (elevatorId) filter.elevatorId = elevatorId;
     if (status) filter.status = status;
     if (serviserId) filter.serviserID = serviserId;
     if (updatedAfter) {
       const afterDate = new Date(updatedAfter);
-      filter.azuriranDatum = { $gte: afterDate };
+      filter.updated_at = { $gte: afterDate };
       console.log('Delta sync repairs, updatedAfter:', afterDate.toISOString());
     }
     if (startDate || endDate) {
@@ -47,10 +48,11 @@ router.get('/', authenticate, async (req, res) => {
 // GET /api/repairs/stats/overview - osnovna statistika
 router.get('/stats/overview', authenticate, async (req, res) => {
   try {
-    const total = await Repair.countDocuments();
-    const pending = await Repair.countDocuments({ status: 'pending' });
-    const inProgress = await Repair.countDocuments({ status: 'in_progress' });
-    const completed = await Repair.countDocuments({ status: 'completed' });
+    const baseFilter = { is_deleted: { $ne: true } };
+    const total = await Repair.countDocuments(baseFilter);
+    const pending = await Repair.countDocuments({ ...baseFilter, status: 'pending' });
+    const inProgress = await Repair.countDocuments({ ...baseFilter, status: 'in_progress' });
+    const completed = await Repair.countDocuments({ ...baseFilter, status: 'completed' });
 
     res.json({ success: true, data: { total, pending, inProgress, completed } });
   } catch (error) {
@@ -69,17 +71,20 @@ router.get('/stats/monthly', authenticate, async (req, res) => {
     const endDate = new Date(currentYear, currentMonth, 0, 23, 59, 59);
 
     const prijavljeni = await Repair.countDocuments({
-      datumPrijave: { $gte: startDate, $lte: endDate }
+      datumPrijave: { $gte: startDate, $lte: endDate },
+      is_deleted: { $ne: true },
     });
 
     const zavrseni = await Repair.countDocuments({
       datumPopravka: { $gte: startDate, $lte: endDate },
-      status: 'completed'
+      status: 'completed',
+      is_deleted: { $ne: true },
     });
 
     const otvoreni = await Repair.countDocuments({
       datumPrijave: { $gte: startDate, $lte: endDate },
-      status: { $in: ['pending', 'in_progress'] }
+      status: { $in: ['pending', 'in_progress'] },
+      is_deleted: { $ne: true },
     });
 
     res.json({
@@ -101,7 +106,7 @@ router.get('/stats/monthly', authenticate, async (req, res) => {
 // GET /api/repairs/:id - detalj popravka
 router.get('/:id', authenticate, async (req, res) => {
   try {
-    const repair = await Repair.findById(req.params.id)
+    const repair = await Repair.findOne({ _id: req.params.id, is_deleted: { $ne: true } })
       .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala')
       .populate('serviserID', 'ime prezime email uloga')
       .lean();
@@ -125,12 +130,16 @@ router.post('/', authenticate, async (req, res) => {
       return res.status(404).json({ success: false, message: 'Dizalo nije pronađeno' });
     }
 
+    const now = new Date();
     const repair = new Repair({
       ...req.body,
       elevatorId: req.body.elevatorId || req.body.elevator,
       serviserID: req.user._id,
       status: req.body.status || 'pending',
-      datumPrijave: req.body.datumPrijave || new Date(),
+      datumPrijave: req.body.datumPrijave || now,
+      updated_at: now,
+      updated_by: req.user._id,
+      is_deleted: false,
     });
 
     await repair.save();
@@ -164,14 +173,25 @@ router.put('/:id', authenticate, checkRole(['serviser', 'menadzer', 'admin']), a
       return res.status(404).json({ success: false, message: 'Popravak nije pronađen' });
     }
 
+    if (existing.is_deleted) {
+      return res.status(404).json({ success: false, message: 'Popravak je obrisan' });
+    }
+
+    const role = req.user.normalizedRole || req.user.uloga;
+    if (existing.status === 'completed' && role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Zaključan popravak može urediti samo admin' });
+    }
+
     // ako se zaključuje popravak
     if (req.body.status === 'completed' && existing.status !== 'completed') {
       req.body.datumPopravka = req.body.datumPopravka || new Date();
     }
 
+    const now = new Date();
+
     const repair = await Repair.findByIdAndUpdate(
       req.params.id,
-      { ...req.body, azuriranDatum: new Date() },
+      { ...req.body, azuriranDatum: now, updated_at: now, updated_by: req.user._id },
       { new: true, runValidators: true }
     )
       .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala')
@@ -203,7 +223,13 @@ router.delete('/:id', authenticate, checkRole(['serviser', 'menadzer', 'admin'])
       return res.status(404).json({ success: false, message: 'Popravak nije pronađen' });
     }
 
-    await repair.deleteOne();
+    const now = new Date();
+    repair.is_deleted = true;
+    repair.deleted_at = now;
+    repair.updated_at = now;
+    repair.updated_by = req.user._id;
+    repair.azuriranDatum = now;
+    await repair.save();
 
     await logAction({
       korisnikId: req.user._id,
@@ -216,7 +242,7 @@ router.delete('/:id', authenticate, checkRole(['serviser', 'menadzer', 'admin'])
       opis: 'Obrisan popravak'
     });
 
-    res.json({ success: true, message: 'Popravak obrisan' });
+    res.json({ success: true, message: 'Popravak obrisan', data: repair });
   } catch (error) {
     console.error('Greška pri brisanju popravka:', error);
     res.status(500).json({ success: false, message: 'Greška pri brisanju popravka' });

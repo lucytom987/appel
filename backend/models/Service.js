@@ -36,6 +36,12 @@ const serviceSchema = new mongoose.Schema({
   
   napomene: String,
   sljedeciServis: Date,
+
+  // Audit
+  updated_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  updated_at: { type: Date, default: Date.now },
+  is_deleted: { type: Boolean, default: false },
+  deleted_at: { type: Date },
   
   kreiranDatum: { type: Date, default: Date.now },
   azuriranDatum: { type: Date, default: Date.now }
@@ -45,11 +51,15 @@ const serviceSchema = new mongoose.Schema({
 });
 
 serviceSchema.pre('save', function (next) {
-  this.azuriranDatum = Date.now();
+  const now = Date.now();
+  this.azuriranDatum = now;
+  this.updated_at = now;
   next();
 });
 
 serviceSchema.index({ elevatorId: 1, datum: -1 });
 serviceSchema.index({ serviserID: 1 });
+serviceSchema.index({ updated_at: -1 });
+serviceSchema.index({ is_deleted: 1 });
 
 module.exports = mongoose.model('Service', serviceSchema);

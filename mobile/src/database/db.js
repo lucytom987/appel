@@ -4,7 +4,7 @@ import * as SQLite from 'expo-sqlite';
 const db = SQLite.openDatabaseSync('appel.db');
 
 // Database version
-const DB_VERSION = 8; // Add primioPoziv + guarded unsynced reads
+const DB_VERSION = 9; // Soft delete + audit fields + sync_status
 
 // Provjeri verziju baze i migriraj ako je potrebno
 const checkAndMigrate = () => {
@@ -119,8 +119,12 @@ export const initDatabase = () => {
         sljedeciServis TEXT,
         kreiranDatum TEXT,
         azuriranDatum TEXT,
-        synced INTEGER DEFAULT 0,
+        is_deleted INTEGER DEFAULT 0,
+        deleted_at TEXT,
+        updated_by TEXT,
         updated_at INTEGER,
+        sync_status TEXT DEFAULT 'synced',
+        synced INTEGER DEFAULT 0,
         FOREIGN KEY (elevatorId) REFERENCES elevators(id)
       );
 
@@ -142,8 +146,12 @@ export const initDatabase = () => {
         primioPoziv TEXT,
         kreiranDatum TEXT,
         azuriranDatum TEXT,
-        synced INTEGER DEFAULT 0,
+        is_deleted INTEGER DEFAULT 0,
+        deleted_at TEXT,
+        updated_by TEXT,
         updated_at INTEGER,
+        sync_status TEXT DEFAULT 'synced',
+        synced INTEGER DEFAULT 0,
         FOREIGN KEY (elevatorId) REFERENCES elevators(id)
       );
 
@@ -199,10 +207,12 @@ export const initDatabase = () => {
       CREATE INDEX IF NOT EXISTS idx_elevators_status ON elevators(status);
       CREATE INDEX IF NOT EXISTS idx_services_elevator ON services(elevatorId);
       CREATE INDEX IF NOT EXISTS idx_services_synced ON services(synced);
+      CREATE INDEX IF NOT EXISTS idx_services_sync_status ON services(sync_status);
       CREATE INDEX IF NOT EXISTS idx_services_datum ON services(datum);
       CREATE INDEX IF NOT EXISTS idx_repairs_elevator ON repairs(elevatorId);
       CREATE INDEX IF NOT EXISTS idx_repairs_status ON repairs(status);
       CREATE INDEX IF NOT EXISTS idx_repairs_synced ON repairs(synced);
+      CREATE INDEX IF NOT EXISTS idx_repairs_sync_status ON repairs(sync_status);
       CREATE INDEX IF NOT EXISTS idx_repairs_datumPrijave ON repairs(datumPrijave);
       CREATE INDEX IF NOT EXISTS idx_messages_chatroom ON messages(chatroomId);
       CREATE INDEX IF NOT EXISTS idx_messages_synced ON messages(synced);
@@ -321,9 +331,9 @@ export const serviceDB = {
   getAll: (elevatorId = null) => {
     let services;
     if (elevatorId) {
-      services = db.getAllSync('SELECT * FROM services WHERE elevatorId = ? ORDER BY datum DESC', [elevatorId]);
+      services = db.getAllSync('SELECT * FROM services WHERE elevatorId = ? AND is_deleted = 0 ORDER BY datum DESC', [elevatorId]);
     } else {
-      services = db.getAllSync('SELECT * FROM services ORDER BY datum DESC');
+      services = db.getAllSync('SELECT * FROM services WHERE is_deleted = 0 ORDER BY datum DESC');
     }
     return services.map(s => ({
       ...s,
@@ -343,9 +353,9 @@ export const serviceDB = {
   
   insert: (service) => {
     const id = service.id || service._id || `local_${Date.now()}`;
-    const syncedFlag = service.synced === undefined
-      ? (String(id).startsWith('local_') ? 0 : 1)
-      : (service.synced ? 1 : 0);
+    const syncStatus = service.sync_status
+      || (String(id).startsWith('local_') ? 'dirty' : 'synced');
+    const syncedFlag = syncStatus === 'synced' ? 1 : 0;
     // Normaliziraj serviserID u čitljivo ime (ako je objekt)
     let serviserID = service.serviserID;
     if (serviserID && typeof serviserID === 'object') {
@@ -361,8 +371,9 @@ export const serviceDB = {
     }
     return db.runSync(
       `INSERT INTO services (id, elevatorId, serviserID, datum, checklist, 
-       imaNedostataka, nedostaci, napomene, sljedeciServis, kreiranDatum, azuriranDatum, synced, updated_at) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       imaNedostataka, nedostaci, napomene, sljedeciServis, kreiranDatum, azuriranDatum, 
+       is_deleted, deleted_at, updated_by, updated_at, sync_status, synced) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         elevatorId,
@@ -375,8 +386,12 @@ export const serviceDB = {
         service.sljedeciServis,
         service.kreiranDatum || new Date().toISOString(),
         service.azuriranDatum || new Date().toISOString(),
-          syncedFlag,
-        Date.now()
+        service.is_deleted ? 1 : 0,
+        service.deleted_at || null,
+        service.updated_by || null,
+        service.updated_at || Date.now(),
+        syncStatus,
+        syncedFlag
       ]
     );
   },
@@ -389,12 +404,12 @@ export const serviceDB = {
       const full = `${ime} ${prezime}`.trim();
       serviserID = full || (serviserID._id || '');
     }
-      const syncedFlag = service.synced === undefined
-        ? (String(id).startsWith('local_') ? 0 : 1)
-        : (service.synced ? 1 : 0);
+      const syncStatus = service.sync_status
+        || (service.synced === undefined ? 'dirty' : (service.synced ? 'synced' : 'dirty'));
+      const syncedFlag = syncStatus === 'synced' ? 1 : 0;
     return db.runSync(
       `UPDATE services SET serviserID=?, datum=?, checklist=?, imaNedostataka=?, 
-       nedostaci=?, napomene=?, sljedeciServis=?, azuriranDatum=?, synced=?, updated_at=? WHERE id=?`,
+       nedostaci=?, napomene=?, sljedeciServis=?, azuriranDatum=?, is_deleted=?, deleted_at=?, updated_by=?, updated_at=?, sync_status=?, synced=? WHERE id=?`,
       [
         serviserID,
         service.datum,
@@ -404,20 +419,29 @@ export const serviceDB = {
         service.napomene,
         service.sljedeciServis,
         service.azuriranDatum || new Date().toISOString(),
+        service.is_deleted ? 1 : 0,
+        service.deleted_at || null,
+        service.updated_by || null,
+        service.updated_at || Date.now(),
+        syncStatus,
         syncedFlag,
-        Date.now(),
         id
       ]
     );
   },
   
   delete: (id) => {
-    return db.runSync('DELETE FROM services WHERE id = ?', [id]);
+    const now = Date.now();
+    return db.runSync('UPDATE services SET is_deleted = 1, deleted_at = ?, updated_at = ?, sync_status = "dirty", synced = 0 WHERE id = ?', [
+      new Date(now).toISOString(),
+      now,
+      id,
+    ]);
   },
   
   getUnsynced: () => {
     try {
-      const services = db.getAllSync('SELECT * FROM services WHERE synced = 0');
+      const services = db.getAllSync('SELECT * FROM services WHERE sync_status = "dirty" OR synced = 0');
       return services.map(s => ({
         ...s,
         checklist: typeof s.checklist === 'string' ? JSON.parse(s.checklist || '[]') : (s.checklist || []),
@@ -441,7 +465,7 @@ export const serviceDB = {
   },
   
   markSynced: (id, serverId) => {
-    return db.runSync('UPDATE services SET synced = 1, id = ? WHERE id = ?', [serverId, id]);
+    return db.runSync('UPDATE services SET synced = 1, sync_status = "synced", id = ?, updated_at = ? WHERE id = ?', [serverId, Date.now(), id]);
   },
 };
 
@@ -450,9 +474,9 @@ export const repairDB = {
   getAll: (elevatorId = null) => {
     let repairs;
     if (elevatorId) {
-      repairs = db.getAllSync('SELECT * FROM repairs WHERE elevatorId = ? ORDER BY datumPrijave DESC', [elevatorId]);
+      repairs = db.getAllSync('SELECT * FROM repairs WHERE elevatorId = ? AND is_deleted = 0 ORDER BY datumPrijave DESC', [elevatorId]);
     } else {
-      repairs = db.getAllSync('SELECT * FROM repairs ORDER BY datumPrijave DESC');
+      repairs = db.getAllSync('SELECT * FROM repairs WHERE is_deleted = 0 ORDER BY datumPrijave DESC');
     }
     return repairs.map(r => ({
       ...r,
@@ -466,7 +490,8 @@ export const repairDB = {
   
   insert: (repair) => {
     const id = repair.id || repair._id || `local_${Date.now()}`;
-    const syncedFlag = repair.synced === undefined ? (String(id).startsWith('local_') ? 0 : 1) : (repair.synced ? 1 : 0);
+    const syncStatus = repair.sync_status || (String(id).startsWith('local_') ? 'dirty' : 'synced');
+    const syncedFlag = syncStatus === 'synced' ? 1 : 0;
     // Normaliziraj reference kako bi spremili čisti ID umjesto objekta
     let elevatorId = repair.elevatorId || repair.elevator;
     if (elevatorId && typeof elevatorId === 'object') {
@@ -481,8 +506,9 @@ export const repairDB = {
     return db.runSync(
       `INSERT INTO repairs (id, elevatorId, serviserID, datumPrijave, datumPopravka, 
        opisKvara, opisPopravka, status, radniNalogPotpisan, popravkaUPotpunosti, 
-       napomene, prijavio, kontaktTelefon, primioPoziv, kreiranDatum, azuriranDatum, synced, updated_at) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       napomene, prijavio, kontaktTelefon, primioPoziv, kreiranDatum, azuriranDatum, 
+       is_deleted, deleted_at, updated_by, updated_at, sync_status, synced) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         elevatorId,
@@ -500,15 +526,21 @@ export const repairDB = {
         repair.primioPoziv,
         repair.kreiranDatum || new Date().toISOString(),
         repair.azuriranDatum || new Date().toISOString(),
-        syncedFlag,
-        Date.now()
+        repair.is_deleted ? 1 : 0,
+        repair.deleted_at || null,
+        repair.updated_by || null,
+        repair.updated_at || Date.now(),
+        syncStatus,
+        syncedFlag
       ]
     );
   },
   
   update: (id, repair) => {
     // Svaka lokalna izmjena mora označiti zapis kao nesinkroniziran (osim ako je eksplicitno zadano)
-    const syncedFlag = repair.synced === undefined ? 0 : (repair.synced ? 1 : 0);
+    const syncStatus = repair.sync_status
+      || (repair.synced === undefined ? 'dirty' : (repair.synced ? 'synced' : 'dirty'));
+    const syncedFlag = syncStatus === 'synced' ? 1 : 0;
     let serviserID = repair.serviserID;
     if (serviserID && typeof serviserID === 'object') {
       serviserID = serviserID._id || serviserID.id || '';
@@ -522,7 +554,7 @@ export const repairDB = {
     return db.runSync(
       `UPDATE repairs SET elevatorId=?, serviserID=?, datumPrijave=?, datumPopravka=?, opisKvara=?, 
        opisPopravka=?, status=?, radniNalogPotpisan=?, popravkaUPotpunosti=?, 
-       napomene=?, prijavio=?, kontaktTelefon=?, primioPoziv=?, azuriranDatum=?, synced=?, updated_at=? WHERE id=?`,
+       napomene=?, prijavio=?, kontaktTelefon=?, primioPoziv=?, azuriranDatum=?, is_deleted=?, deleted_at=?, updated_by=?, updated_at=?, sync_status=?, synced=? WHERE id=?`,
       [
         elevatorId,
         serviserID,
@@ -538,20 +570,29 @@ export const repairDB = {
         repair.kontaktTelefon,
         repair.primioPoziv,
         repair.azuriranDatum || new Date().toISOString(),
+        repair.is_deleted ? 1 : 0,
+        repair.deleted_at || null,
+        repair.updated_by || null,
+        repair.updated_at || Date.now(),
+        syncStatus,
         syncedFlag,
-        Date.now(),
         id
       ]
     );
   },
   
   delete: (id) => {
-    return db.runSync('DELETE FROM repairs WHERE id = ?', [id]);
+    const now = Date.now();
+    return db.runSync('UPDATE repairs SET is_deleted = 1, deleted_at = ?, updated_at = ?, sync_status = "dirty", synced = 0 WHERE id = ?', [
+      new Date(now).toISOString(),
+      now,
+      id,
+    ]);
   },
   
   getUnsynced: () => {
     try {
-      return db.getAllSync('SELECT * FROM repairs WHERE synced = 0');
+      return db.getAllSync('SELECT * FROM repairs WHERE sync_status = "dirty" OR synced = 0');
     } catch (e) {
       console.log('⚠️ repairs getUnsynced failed:', e?.message);
       return [];
@@ -569,7 +610,7 @@ export const repairDB = {
     });
   },
   markSynced: (id, serverId) => {
-    return db.runSync('UPDATE repairs SET synced = 1, id = ? WHERE id = ?', [serverId, id]);
+    return db.runSync('UPDATE repairs SET synced = 1, sync_status = "synced", id = ?, updated_at = ? WHERE id = ?', [serverId, Date.now(), id]);
   },
 };
 

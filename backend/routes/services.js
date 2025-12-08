@@ -18,16 +18,17 @@ const ALLOWED_CHECKLIST = [
 // GET /api/services - lista servisa (filtri + delta)
 router.get('/', authenticate, async (req, res) => {
   try {
-    const { elevatorId, startDate, endDate, technician, updatedAfter, limit = 100, skip = 0 } = req.query;
+    const { elevatorId, startDate, endDate, technician, updatedAfter, limit = 100, skip = 0, includeDeleted } = req.query;
     const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 0, 1), 200);
     const parsedSkip = Math.max(parseInt(skip, 10) || 0, 0);
     const filter = {};
+    if (!includeDeleted) filter.is_deleted = { $ne: true };
 
     if (elevatorId) filter.elevatorId = elevatorId;
     if (technician) filter.serviserID = technician;
     if (updatedAfter) {
       const afterDate = new Date(updatedAfter);
-      filter.azuriranDatum = { $gte: afterDate };
+      filter.updated_at = { $gte: afterDate };
     }
     if (startDate || endDate) {
       filter.datum = {};
@@ -62,9 +63,10 @@ router.get('/stats/monthly', authenticate, async (req, res) => {
     const startDate = new Date(currentYear, currentMonth - 1, 1);
     const endDate = new Date(currentYear, currentMonth, 0, 23, 59, 59);
 
-    const total = await Service.countDocuments({ datum: { $gte: startDate, $lte: endDate } });
+    const baseFilter = { is_deleted: { $ne: true } };
+    const total = await Service.countDocuments({ ...baseFilter, datum: { $gte: startDate, $lte: endDate } });
     const totalElevators = await Elevator.countDocuments();
-    const servicedElevatorIds = await Service.distinct('elevatorId', { datum: { $gte: startDate, $lte: endDate } });
+    const servicedElevatorIds = await Service.distinct('elevatorId', { ...baseFilter, datum: { $gte: startDate, $lte: endDate } });
     const needsService = totalElevators - servicedElevatorIds.length;
 
     res.json({
@@ -87,7 +89,7 @@ router.get('/stats/monthly', authenticate, async (req, res) => {
 // GET /api/services/:id
 router.get('/:id', authenticate, async (req, res) => {
   try {
-    const service = await Service.findById(req.params.id)
+    const service = await Service.findOne({ _id: req.params.id, is_deleted: { $ne: true } })
       .populate('elevatorId', 'brojUgovora nazivStranke ulica mjesto brojDizala')
       .populate('serviserID', 'ime prezime email uloga')
       .lean();
@@ -116,10 +118,14 @@ router.post('/', authenticate, async (req, res) => {
       return res.status(404).json({ success: false, message: 'Dizalo nije pronađeno', elevatorId });
     }
 
+    const now = new Date();
     const service = new Service({
       ...req.body,
       elevatorId,
-      serviserID: req.user._id
+      serviserID: req.user._id,
+      updated_at: now,
+      updated_by: req.user._id,
+      is_deleted: false,
     });
 
     await service.save();
@@ -169,6 +175,10 @@ router.put('/:id', authenticate, async (req, res) => {
       return res.status(404).json({ success: false, message: 'Servis nije pronađen' });
     }
 
+    if (existingService.is_deleted) {
+      return res.status(404).json({ success: false, message: 'Servis je obrisan' });
+    }
+
     const role = req.user.normalizedRole || req.user.uloga;
     const isOwnerServiser = role === 'serviser' && String(existingService.serviserID) === String(req.user._id);
     const canManage = ['menadzer', 'admin'].includes(role);
@@ -187,13 +197,16 @@ router.put('/:id', authenticate, async (req, res) => {
         }));
     }
 
+    const now = new Date();
     const updateData = {
       ...req.body,
       checklist,
       // ne dozvoli promjenu vlasništva kroz body
       serviserID: existingService.serviserID,
       elevatorId: existingService.elevatorId,
-      azuriranDatum: new Date()
+      azuriranDatum: now,
+      updated_at: now,
+      updated_by: req.user._id,
     };
 
     const service = await Service.findByIdAndUpdate(
@@ -247,13 +260,20 @@ router.delete('/:id', authenticate, async (req, res) => {
       return res.status(404).json({ success: false, message: 'Servis nije pronađen' });
     }
 
-    const isOwnerServiser = req.user.uloga === 'serviser' && String(service.serviserID) === String(req.user._id);
-    const canManage = ['menadzer', 'admin'].includes(req.user.uloga);
+    const role = req.user.normalizedRole || req.user.uloga;
+    const isOwnerServiser = role === 'serviser' && String(service.serviserID) === String(req.user._id);
+    const canManage = ['menadzer', 'admin'].includes(role);
     if (!isOwnerServiser && !canManage) {
       return res.status(403).json({ success: false, message: 'Nedovoljna prava za brisanje ovog servisa' });
     }
 
-    await service.deleteOne();
+    const now = new Date();
+    service.is_deleted = true;
+    service.deleted_at = now;
+    service.updated_at = now;
+    service.updated_by = req.user._id;
+    service.azuriranDatum = now;
+    await service.save();
 
     await logAction({
       korisnikId: req.user._id,
@@ -265,7 +285,7 @@ router.delete('/:id', authenticate, async (req, res) => {
       opis: 'Obrisan servis'
     });
 
-    res.json({ success: true, message: 'Servis obrisan' });
+    res.json({ success: true, message: 'Servis obrisan', data: service });
   } catch (error) {
     console.error('Greška pri brisanju servisa:', error);
     res.status(500).json({ success: false, message: 'Greška pri brisanju servisa' });

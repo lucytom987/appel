@@ -150,7 +150,7 @@ export const syncElevatorsFromServer = async () => {
     const shouldFullSync = periodicFull || (await shouldForceFullSync('lastSyncElevators', elevatorDB.getAll));
     const last = shouldFullSync ? null : await getLastSync('lastSyncElevators');
 
-    const params = last ? { updatedAfter: last } : {};
+    const params = last ? { updatedAfter: last, includeDeleted: true } : { includeDeleted: true };
     console.log('Sync elevators, params:', params);
     const res = await elevatorsAPI.getAll(params);
     const serverElevators = res.data.data || [];
@@ -226,58 +226,51 @@ export const syncServicesFromServer = async () => {
     const shouldFullSync = periodicFull || (await shouldForceFullSync('lastSyncServices', serviceDB.getAll));
     const last = shouldFullSync ? null : await getLastSync('lastSyncServices');
 
-    const params = last ? { updatedAfter: last } : {};
+    const params = last ? { updatedAfter: last, includeDeleted: true } : { includeDeleted: true };
     console.log('Sync services, params:', params);
     const res = await servicesAPI.getAll(params);
     const serverServices = res.data.data || [];
-    const serverIds = new Set(serverServices.map((s) => s._id));
+    const toMs = (v) => {
+      const t = new Date(v || 0).getTime();
+      return Number.isNaN(t) ? 0 : t;
+    };
+
     serverServices.forEach((s) => {
+      const local = serviceDB.getById?.(s._id);
+      const serverUpdated = toMs(s.updated_at || s.azuriranDatum || s.updatedAt || s.kreiranDatum);
+      const localUpdated = local ? toMs(local.updated_at || local.azuriranDatum) : 0;
+      const localDirty = local && (local.sync_status === 'dirty' || local.synced === 0);
+
+      if (localDirty && localUpdated > serverUpdated) {
+        return; // lokalna promjena novija
+      }
+
+      const payload = {
+        id: s._id,
+        elevatorId: s.elevatorId?._id || s.elevatorId,
+        serviserID: s.serviserID?._id || s.serviserID,
+        datum: s.datum,
+        checklist: s.checklist || [],
+        imaNedostataka: s.imaNedostataka,
+        nedostaci: s.nedostaci || [],
+        napomene: s.napomene,
+        sljedeciServis: s.sljedeciServis,
+        kreiranDatum: s.kreiranDatum || s.createdAt,
+        azuriranDatum: s.azuriranDatum || s.updatedAt,
+        updated_at: s.updated_at || s.azuriranDatum || s.updatedAt,
+        updated_by: s.updated_by,
+        is_deleted: s.is_deleted,
+        deleted_at: s.deleted_at,
+        sync_status: 'synced',
+        synced: 1,
+      };
+
       try {
-        serviceDB.insert({
-          id: s._id,
-          elevatorId: s.elevatorId?._id || s.elevatorId,
-          serviserID: s.serviserID?._id || s.serviserID,
-          datum: s.datum,
-          checklist: s.checklist || [],
-          imaNedostataka: s.imaNedostataka,
-          nedostaci: s.nedostaci || [],
-          napomene: s.napomene,
-          sljedeciServis: s.sljedeciServis,
-          kreiranDatum: s.kreiranDatum || s.createdAt,
-          azuriranDatum: s.azuriranDatum || s.updatedAt,
-          synced: 1,
-        });
+        serviceDB.insert(payload);
       } catch {
-        serviceDB.update(s._id, {
-          serviserID: s.serviserID?._id || s.serviserID,
-          datum: s.datum,
-          checklist: s.checklist || [],
-          imaNedostataka: s.imaNedostataka,
-          nedostaci: s.nedostaci || [],
-          napomene: s.napomene,
-          sljedeciServis: s.sljedeciServis,
-          azuriranDatum: s.azuriranDatum || s.updatedAt,
-          synced: 1,
-        });
+        serviceDB.update(s._id, payload);
       }
     });
-
-    // Propagiraj brisanja samo kod full pull-a (bez updatedAfter)
-    if (!params.updatedAfter) {
-      try {
-        const localServices = serviceDB.getAll?.() || [];
-        localServices
-          .filter((loc) => !String(loc.id || '').startsWith('local_'))
-          .filter((loc) => loc.synced !== 0)
-          .forEach((loc) => {
-            if (!serverIds.has(loc.id)) {
-              serviceDB.delete?.(loc.id);
-            }
-          });
-      } catch (e) {
-        console.log('Skip service delete reconciliation:', e?.message);
-      }
-    }
     await setLastSync('lastSyncServices');
     if (shouldFullSync) {
       await setLastFull('lastFullServices');
@@ -294,7 +287,7 @@ export const syncServicesFromServer = async () => {
 export const syncRepairsFromServer = async () => {
   if (!isOnline) return false;
   try {
-    const periodicFull = await shouldRunPeriodicFull('lastFullRepairs', 6);
+    const periodicFull = await shouldRunPeriodicFull('lastFullRepairs', 1); // češći full sync da pokupimo brisanja (svakih ~1h)
     const shouldFullSync = periodicFull || (() => {
       try {
         const existing = repairDB.getAll();
@@ -314,65 +307,54 @@ export const syncRepairsFromServer = async () => {
     console.log('Sync repairs, params:', params);
     const res = await repairsAPI.getAll(params);
     const serverRepairs = res.data.data || [];
-    const serverIds = new Set(serverRepairs.map((r) => r._id));
+    const toMs = (v) => {
+      const t = new Date(v || 0).getTime();
+      return Number.isNaN(t) ? 0 : t;
+    };
+
     serverRepairs.forEach((r) => {
       const elevatorId = r.elevatorId?._id || r.elevatorId?.id || r.elevator || r.elevatorId;
       const serviserID = r.serviserID?._id || r.serviserID?.id || r.serviserID;
+      const local = repairDB.getById?.(r._id);
+      const serverUpdated = toMs(r.updated_at || r.azuriranDatum || r.updatedAt || r.kreiranDatum);
+      const localUpdated = local ? toMs(local.updated_at || local.azuriranDatum) : 0;
+      const localDirty = local && (local.sync_status === 'dirty' || local.synced === 0);
+
+      if (localDirty && localUpdated > serverUpdated) {
+        return; // lokalna promjena novija
+      }
+
+      const payload = {
+        id: r._id,
+        elevatorId,
+        serviserID,
+        datumPrijave: r.datumPrijave,
+        datumPopravka: r.datumPopravka,
+        opisKvara: r.opisKvara,
+        opisPopravka: r.opisPopravka,
+        status: r.status,
+        radniNalogPotpisan: r.radniNalogPotpisan,
+        popravkaUPotpunosti: r.popravkaUPotpunosti,
+        napomene: r.napomene,
+        kreiranDatum: r.kreiranDatum || r.createdAt,
+        azuriranDatum: r.azuriranDatum || r.updatedAt,
+        prijavio: r.prijavio,
+        kontaktTelefon: r.kontaktTelefon,
+        primioPoziv: r.primioPoziv,
+        updated_at: r.updated_at || r.azuriranDatum || r.updatedAt,
+        updated_by: r.updated_by,
+        is_deleted: r.is_deleted,
+        deleted_at: r.deleted_at,
+        sync_status: 'synced',
+        synced: 1,
+      };
+
       try {
-        repairDB.insert({
-          id: r._id,
-          elevatorId,
-          serviserID,
-          datumPrijave: r.datumPrijave,
-          datumPopravka: r.datumPopravka,
-          opisKvara: r.opisKvara,
-          opisPopravka: r.opisPopravka,
-          status: r.status,
-          radniNalogPotpisan: r.radniNalogPotpisan,
-          popravkaUPotpunosti: r.popravkaUPotpunosti,
-          napomene: r.napomene,
-          kreiranDatum: r.kreiranDatum || r.createdAt,
-          azuriranDatum: r.azuriranDatum || r.updatedAt,
-          prijavio: r.prijavio,
-          kontaktTelefon: r.kontaktTelefon,
-          synced: 1,
-        });
+        repairDB.insert(payload);
       } catch {
-        repairDB.update(r._id, {
-          elevatorId,
-          serviserID,
-          datumPrijave: r.datumPrijave,
-          datumPopravka: r.datumPopravka,
-          opisKvara: r.opisKvara,
-          opisPopravka: r.opisPopravka,
-          status: r.status,
-          radniNalogPotpisan: r.radniNalogPotpisan,
-          popravkaUPotpunosti: r.popravkaUPotpunosti,
-          napomene: r.napomene,
-          prijavio: r.prijavio,
-          kontaktTelefon: r.kontaktTelefon,
-          azuriranDatum: r.azuriranDatum || r.updatedAt,
-          synced: 1,
-        });
+        repairDB.update(r._id, payload);
       }
     });
-
-    // Propagiraj brisanja samo kod full pull-a (bez updatedAfter)
-    if (!params.updatedAfter) {
-      try {
-        const localRepairs = repairDB.getAll?.() || [];
-        localRepairs
-          .filter((loc) => !String(loc.id || '').startsWith('local_'))
-          .filter((loc) => loc.synced !== 0)
-          .forEach((loc) => {
-            if (!serverIds.has(loc.id)) {
-              repairDB.delete?.(loc.id);
-            }
-          });
-      } catch (e) {
-        console.log('Skip repair delete reconciliation:', e?.message);
-      }
-    }
     await setLastSync('lastSyncRepairs');
     if (shouldFullSync) {
       await setLastFull('lastFullRepairs');
@@ -399,6 +381,10 @@ export const syncServicesToServer = async () => {
       } else {
         const payload = normalizeServicePayload(s);
         delete payload.elevatorId; // backend čuva originalni elevatorId
+        if (s.is_deleted) {
+          payload.is_deleted = true;
+          payload.deleted_at = s.deleted_at || new Date().toISOString();
+        }
         await servicesAPI.update(s.id, payload);
         serviceDB.markSynced(s.id, s.id);
       }
@@ -451,6 +437,8 @@ export const syncRepairsToServer = async () => {
           prijavio: r.prijavio,
           kontaktTelefon: r.kontaktTelefon,
           primioPoziv: r.primioPoziv,
+          is_deleted: Boolean(r.is_deleted),
+          deleted_at: r.is_deleted ? (r.deleted_at || new Date().toISOString()) : undefined,
           serviserID,
         });
         repairDB.markSynced(r.id, r.id);

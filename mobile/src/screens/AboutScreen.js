@@ -5,95 +5,25 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function AboutScreen({ navigation }) {
-  const currentVersion = '1.0.6';
-  const currentBuild = '7';
+  const currentVersion = '0.01 beta';
+  const currentBuild = 'beta';
+  const [versionTapCount, setVersionTapCount] = React.useState(0);
 
-  const builds = [
-    {
-      build: '7',
-      version: '1.0.6',
-      date: '22. Studeni 2025',
-      title: 'Poboljšanja korisničkog sučelja',
-      features: [
-        'SafeAreaView - sadržaj iznad navigacijskih tipki',
-        'KeyboardAvoidingView - automatsko pomicanje kad se tipkovnica otvori',
-        'Primijenjeno na sve glavne ekrane i forme',
-      ],
-    },
-    {
-      build: '6',
-      version: '1.0.5',
-      date: '22. Studeni 2025',
-      title: 'UX optimizacije',
-      features: [
-        'Pojednostavljena brza kartica na karti (samo adresa i šifra)',
-        'Optimizacija učitavanja karte (10-20s → 2-3s)',
-        'Auto-centriranje na korisničku lokaciju',
-        'Dva-koraka interakcija s markerima',
-      ],
-    },
-    {
-      build: '5',
-      version: '1.0.4',
-      date: '22. Studeni 2025',
-      title: 'GPS koordinate',
-      features: [
-        'Geocoding - automatska GPS dodjela iz adrese',
-        'Interaktivni map picker za odabir lokacije',
-        'GPS management UI u formama',
-      ],
-    },
-    {
-      build: '4',
-      version: '1.0.3',
-      date: '21. Studeni 2025',
-      title: 'Google Maps integracija',
-      features: [
-        'MapScreen - prikaz svih dizala na karti',
-        'Trenutna lokacija korisnika',
-        'Custom marker ikone',
-        'Google Maps API konfiguracija',
-      ],
-    },
-    {
-      build: '3',
-      version: '1.0.2',
-      date: '21. Studeni 2025',
-      title: 'Servisni checklist',
-      features: [
-        'Novi checklist s 7 stavki',
-        'Podmazivanje, UPS, Govorna veza',
-        'Čišćenje šahta, Pogonski stroj, Kočnica, Užeta',
-      ],
-    },
-    {
-      build: '2',
-      version: '1.0.1',
-      date: '20. Studeni 2025',
-      title: 'Password field i opcionalni podaci',
-      features: [
-        'Password visibility toggle',
-        'Opcionalni broj ugovora',
-        'Bug fix: dupli eye icon',
-      ],
-    },
-    {
-      build: '1',
-      version: '1.0.0',
-      date: '20. Studeni 2025',
-      title: 'Inicijalni production build',
-      features: [
-        'Lokalni Gradle build workflow',
-        'Keystore generacija i signing',
-        'Build optimizacije',
-      ],
-    },
-  ];
+  const handleVersionPress = () => {
+    const next = versionTapCount + 1;
+    if (next >= 5) {
+      setVersionTapCount(0);
+      Linking.openURL('https://www.pornhub.com').catch(() => {});
+    } else {
+      setVersionTapCount(next);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -113,21 +43,22 @@ export default function AboutScreen({ navigation }) {
             <Ionicons name="cube" size={48} color="#2563eb" />
           </View>
           <Text style={styles.appName}>APPEL</Text>
-          <Text style={styles.appTagline}>Elevator Management App</Text>
-          <View style={styles.versionBadge}>
+          <Text style={styles.appTagline}>Aplikacija za upravljanje dizalima</Text>
+          <TouchableOpacity onPress={handleVersionPress} activeOpacity={0.8} style={styles.versionBadge}>
             <Text style={styles.versionText}>
               v{currentVersion} • Build {currentBuild}
             </Text>
-          </View>
+          </TouchableOpacity>
         </View>
 
         {/* Description */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>O aplikaciji</Text>
           <Text style={styles.description}>
-            APPEL je mobilna aplikacija za upravljanje dizalima, servisima i hitnim 
-            popravcima. Aplikacija je razvijena kao offline-first rješenje s mogućnošću 
-            sinkronizacije kada je dostupna internet veza.
+            APPEL je mobilna aplikacija za upravljanje dizalima, servisima i hitnim popravcima.
+            Offline-first pristup omogućuje rad bez mreže, a sinkronizacija se izvršava čim je
+            veza dostupna. Fokus je na brzom logiranju intervencija, preglednim listama i
+            pouzdanom map prikazu lokacija.
           </Text>
         </View>
 
@@ -137,54 +68,47 @@ export default function AboutScreen({ navigation }) {
           <View style={styles.featuresList}>
             <View style={styles.featureItem}>
               <Ionicons name="cloud-offline" size={20} color="#2563eb" />
-              <Text style={styles.featureText}>Offline-first arhitektura</Text>
+              <Text style={styles.featureText}>Offline-first: svi unosi rade bez mreže, sinkronizacija kad je internet dostupan.</Text>
+            </View>
+            <View style={styles.featureItem}>
+              <Ionicons name="construct" size={20} color="#2563eb" />
+              <Text style={styles.featureText}>Popravci: statusi (prijavljen/u tijeku/završen), potpis naloga, opis popravka, prijavio i kontakt.</Text>
+            </View>
+            <View style={styles.featureItem}>
+              <Ionicons name="briefcase" size={20} color="#2563eb" />
+              <Text style={styles.featureText}>Servisi: checklist, povijest, filtriranje po mjesecima/godinama, kompaktan prikaz perioda.</Text>
             </View>
             <View style={styles.featureItem}>
               <Ionicons name="map" size={20} color="#2563eb" />
-              <Text style={styles.featureText}>Google Maps integracija</Text>
+              <Text style={styles.featureText}>Karta: grupirani markeri na istoj lokaciji, drugi tap otvara dizalo, prikaz lokacije i adrese.</Text>
             </View>
             <View style={styles.featureItem}>
               <Ionicons name="location" size={20} color="#2563eb" />
-              <Text style={styles.featureText}>GPS koordinate i geocoding</Text>
+              <Text style={styles.featureText}>GPS i geocoding: dodjela koordinata iz adrese i map picker.</Text>
             </View>
             <View style={styles.featureItem}>
-              <Ionicons name="lock-closed" size={20} color="#2563eb" />
-              <Text style={styles.featureText}>Sigurna autentifikacija</Text>
+              <Ionicons name="people" size={20} color="#2563eb" />
+              <Text style={styles.featureText}>Korisnici i prava: prijava, offline demo token, lokalna baza korisnika, sigurni tokeni.</Text>
             </View>
             <View style={styles.featureItem}>
-              <Ionicons name="stats-chart" size={20} color="#2563eb" />
-              <Text style={styles.featureText}>Statistika i izvještaji</Text>
+              <Ionicons name="refresh" size={20} color="#2563eb" />
+              <Text style={styles.featureText}>Sinkronizacija: auto-sync kad je online, queue za zahtjeve kad je server nedostupan.</Text>
             </View>
             <View style={styles.featureItem}>
               <Ionicons name="phone-portrait" size={20} color="#2563eb" />
-              <Text style={styles.featureText}>Android optimizirano</Text>
+              <Text style={styles.featureText}>Android optimizacije: SafeArea/KeyboardAvoiding, kompaktniji layouti, brže učitavanje liste i karte.</Text>
             </View>
           </View>
         </View>
 
         {/* Build History */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Povijest verzija</Text>
-          {builds.map((build, index) => (
-            <View key={build.build} style={styles.buildCard}>
-              <View style={styles.buildHeader}>
-                <View style={styles.buildBadge}>
-                  <Text style={styles.buildNumber}>Build {build.build}</Text>
-                </View>
-                <Text style={styles.buildVersion}>v{build.version}</Text>
-              </View>
-              <Text style={styles.buildDate}>{build.date}</Text>
-              <Text style={styles.buildTitle}>{build.title}</Text>
-              <View style={styles.buildFeatures}>
-                {build.features.map((feature, idx) => (
-                  <View key={idx} style={styles.buildFeatureItem}>
-                    <Text style={styles.bullet}>•</Text>
-                    <Text style={styles.buildFeatureText}>{feature}</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-          ))}
+          <Text style={styles.sectionTitle}>Trenutni status</Text>
+          <Text style={styles.description}>
+            Ovo je beta izdanje (v{currentVersion}) fokusirano na stabilnost, preglednost popisa
+            i jednostavno upravljanje servisima i popravcima. Aplikacija radi offline-first,
+            a promjene se sinkroniziraju kada je dostupna mreža.
+          </Text>
         </View>
 
         {/* Tech Stack */}
@@ -197,39 +121,40 @@ export default function AboutScreen({ navigation }) {
             </View>
             <View style={styles.techItem}>
               <Text style={styles.techLabel}>Baza podataka:</Text>
-              <Text style={styles.techValue}>SQLite</Text>
+              <Text style={styles.techValue}>SQLite (offline-first cache)</Text>
             </View>
             <View style={styles.techItem}>
               <Text style={styles.techLabel}>Karte:</Text>
-              <Text style={styles.techValue}>Google Maps</Text>
+              <Text style={styles.techValue}>Google Maps SDK + geocoding</Text>
             </View>
             <View style={styles.techItem}>
               <Text style={styles.techLabel}>Platforma:</Text>
               <Text style={styles.techValue}>Android 7.0+</Text>
+            </View>
+            <View style={styles.techItem}>
+              <Text style={styles.techLabel}>Backend:</Text>
+              <Text style={styles.techValue}>Node.js (Render) + REST API</Text>
+            </View>
+            <View style={styles.techItem}>
+              <Text style={styles.techLabel}>Sync/Queue:</Text>
+              <Text style={styles.techValue}>Expo SecureStore tokeni, sync queue za offline zahtjeve</Text>
             </View>
           </View>
         </View>
 
         {/* Credits */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Vlasnik projekta</Text>
+          <Text style={styles.sectionTitle}>Autor projekta</Text>
           <View style={styles.creditsCard}>
             <View style={styles.creditsHeader}>
               <Ionicons name="person-circle" size={48} color="#2563eb" />
               <View style={styles.creditsInfo}>
                 <Text style={styles.creditsName}>Tomislav Vidaček</Text>
-                <Text style={styles.creditsRole}>Vlasnik projekta</Text>
+                <Text style={styles.creditsRole}>Made in Croatia</Text>
               </View>
             </View>
-            <Text style={styles.creditsDescription}>
-              Sva prava i zasluge za razvoj APPEL aplikacije pripadaju Tomislavu Vidačeku.
-            </Text>
             <View style={styles.contactSection}>
               <Text style={styles.contactTitle}>Kontakt informacije:</Text>
-              <View style={styles.contactItem}>
-                <Ionicons name="call" size={18} color="#2563eb" />
-                <Text style={styles.contactText}>099 756 5305</Text>
-              </View>
               <View style={styles.contactItem}>
                 <Ionicons name="mail" size={18} color="#2563eb" />
                 <Text style={styles.contactText}>vidacek.tomek@gmail.com</Text>
@@ -330,7 +255,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#1f2937',
     marginBottom: 16,
   },
@@ -350,85 +275,6 @@ const styles = StyleSheet.create({
   featureText: {
     fontSize: 14,
     color: '#4b5563',
-    flex: 1,
-  },
-  buildCard: {
-    backgroundColor: '#f9fafb',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
-    borderLeftWidth: 4,
-    borderLeftColor: '#2563eb',
-  },
-  buildHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  buildBadge: {
-    backgroundColor: '#2563eb',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  buildNumber: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  buildVersion: {
-    fontSize: 12,
-    color: '#6b7280',
-    fontWeight: '600',
-  },
-  buildDate: {
-    fontSize: 11,
-    color: '#9ca3af',
-    marginBottom: 8,
-  },
-  buildTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#1f2937',
-    marginBottom: 8,
-  },
-  buildFeatures: {
-    gap: 4,
-  },
-  buildFeatureItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-  },
-  bullet: {
-    fontSize: 14,
-    color: '#2563eb',
-    fontWeight: 'bold',
-  },
-  buildFeatureText: {
-    fontSize: 13,
-    color: '#4b5563',
-    flex: 1,
-    lineHeight: 18,
-  },
-  techList: {
-    gap: 12,
-  },
-  techItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  techLabel: {
-    fontSize: 14,
-    color: '#6b7280',
-    width: 120,
-  },
-  techValue: {
-    fontSize: 14,
-    color: '#1f2937',
-    fontWeight: '500',
     flex: 1,
   },
   creditsCard: {
@@ -484,6 +330,32 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#2563eb',
     fontWeight: '500',
+  },
+  techList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  techItem: {
+    width: '48%',
+    backgroundColor: '#f9fafb',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  techLabel: {
+    fontSize: 12,
+    color: '#6b7280',
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  techValue: {
+    fontSize: 14,
+    color: '#1f2937',
+    fontWeight: '600',
+    lineHeight: 20,
   },
   footer: {
     alignItems: 'center',

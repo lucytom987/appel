@@ -67,6 +67,23 @@ let isOnline = false;
 let syncInterval = null;
 let syncInProgress = false;
 
+// Helper: odluči treba li full sync i po potrebi očisti lastSync ključ
+const shouldForceFullSync = async (key, hasLocalRecordsFn) => {
+  try {
+    const existing = hasLocalRecordsFn?.() || [];
+    if (!existing.length) {
+      if (SecureStore.deleteItemAsync) {
+        await SecureStore.deleteItemAsync(key);
+        console.log(`${key}: forcing full pull (cleared ${key})`);
+      }
+      return true;
+    }
+  } catch (e) {
+    console.log(`Skip shouldForceFullSync check for ${key}:`, e?.message);
+  }
+  return false;
+};
+
 // Network status
 export const checkOnlineStatus = async () => {
   const state = await NetInfo.fetch();
@@ -100,6 +117,26 @@ const setLastSync = async (key) => {
     /* ignore */
   }
 };
+
+// Odluči treba li periodički forsirati full sync kako bismo uhvatili brisanja
+const shouldRunPeriodicFull = async (key, maxHours = 6) => {
+  try {
+    const last = await SecureStore.getItemAsync(key);
+    if (!last) return true;
+    const diffH = (Date.now() - new Date(last).getTime()) / (1000 * 60 * 60);
+    return diffH >= maxHours;
+  } catch {
+    return true;
+  }
+};
+
+const setLastFull = async (key) => {
+  try {
+    await SecureStore.setItemAsync(key, new Date().toISOString());
+  } catch {
+    /* ignore */
+  }
+};
 const ensureToken = async () => {
   const token = await SecureStore.getItemAsync('userToken');
   return token || null;
@@ -109,11 +146,15 @@ const ensureToken = async () => {
 export const syncElevatorsFromServer = async () => {
   if (!isOnline) return false;
   try {
-    const last = await getLastSync('lastSyncElevators');
+    const periodicFull = await shouldRunPeriodicFull('lastFullElevators', 6);
+    const shouldFullSync = periodicFull || (await shouldForceFullSync('lastSyncElevators', elevatorDB.getAll));
+    const last = shouldFullSync ? null : await getLastSync('lastSyncElevators');
+
     const params = last ? { updatedAfter: last } : {};
     console.log('Sync elevators, params:', params);
     const res = await elevatorsAPI.getAll(params);
     const serverElevators = res.data.data || [];
+    const serverIds = new Set(serverElevators.map((e) => e._id));
     serverElevators.forEach((e) => {
       try {
         elevatorDB.insert({
@@ -148,7 +189,27 @@ export const syncElevatorsFromServer = async () => {
         });
       }
     });
+
+    // Propagiraj brisanja samo kod full pull-a (bez updatedAfter)
+    if (!params.updatedAfter) {
+      try {
+        const localElevators = elevatorDB.getAll?.() || [];
+        localElevators
+          .filter((loc) => !String(loc.id || '').startsWith('local_'))
+          .filter((loc) => loc.synced !== 0)
+          .forEach((loc) => {
+            if (!serverIds.has(loc.id)) {
+              elevatorDB.delete?.(loc.id);
+            }
+          });
+      } catch (e) {
+        console.log('Skip elevator delete reconciliation:', e?.message);
+      }
+    }
     await setLastSync('lastSyncElevators');
+    if (shouldFullSync) {
+      await setLastFull('lastFullElevators');
+    }
     console.log(`Elevators synced: ${serverElevators.length}`);
     return true;
   } catch (err) {
@@ -161,11 +222,14 @@ export const syncElevatorsFromServer = async () => {
 export const syncServicesFromServer = async () => {
   if (!isOnline) return false;
   try {
-    const last = await getLastSync('lastSyncServices');
+    const shouldFullSync = await shouldForceFullSync('lastSyncServices', serviceDB.getAll);
+    const last = shouldFullSync ? null : await getLastSync('lastSyncServices');
+
     const params = last ? { updatedAfter: last } : {};
     console.log('Sync services, params:', params);
     const res = await servicesAPI.getAll(params);
     const serverServices = res.data.data || [];
+    const serverIds = new Set(serverServices.map((s) => s._id));
     serverServices.forEach((s) => {
       try {
         serviceDB.insert({
@@ -180,6 +244,7 @@ export const syncServicesFromServer = async () => {
           sljedeciServis: s.sljedeciServis,
           kreiranDatum: s.kreiranDatum || s.createdAt,
           azuriranDatum: s.azuriranDatum || s.updatedAt,
+          synced: 1,
         });
       } catch {
         serviceDB.update(s._id, {
@@ -191,9 +256,27 @@ export const syncServicesFromServer = async () => {
           napomene: s.napomene,
           sljedeciServis: s.sljedeciServis,
           azuriranDatum: s.azuriranDatum || s.updatedAt,
+          synced: 1,
         });
       }
     });
+
+    // Propagiraj brisanja samo kod full pull-a (bez updatedAfter)
+    if (!params.updatedAfter) {
+      try {
+        const localServices = serviceDB.getAll?.() || [];
+        localServices
+          .filter((loc) => !String(loc.id || '').startsWith('local_'))
+          .filter((loc) => loc.synced !== 0)
+          .forEach((loc) => {
+            if (!serverIds.has(loc.id)) {
+              serviceDB.delete?.(loc.id);
+            }
+          });
+      } catch (e) {
+        console.log('Skip service delete reconciliation:', e?.message);
+      }
+    }
     await setLastSync('lastSyncServices');
     console.log(`Services synced: ${serverServices.length}`);
     return true;
@@ -207,17 +290,34 @@ export const syncServicesFromServer = async () => {
 export const syncRepairsFromServer = async () => {
   if (!isOnline) return false;
   try {
-    const last = await getLastSync('lastSyncRepairs');
+    const shouldFullSync = (() => {
+      try {
+        const existing = repairDB.getAll();
+        if (!existing.length) return true;
+        return existing.some((r) => !r.elevatorId || r.elevatorId === '[object Object]');
+      } catch {
+        return false;
+      }
+    })();
+
+    const last = shouldFullSync ? null : await getLastSync('lastSyncRepairs');
     const params = last ? { updatedAfter: last } : {};
+    if (shouldFullSync && SecureStore.deleteItemAsync) {
+      await SecureStore.deleteItemAsync('lastSyncRepairs');
+      console.log('Repair sync: forcing full pull (cleared lastSyncRepairs)');
+    }
     console.log('Sync repairs, params:', params);
     const res = await repairsAPI.getAll(params);
     const serverRepairs = res.data.data || [];
+    const serverIds = new Set(serverRepairs.map((r) => r._id));
     serverRepairs.forEach((r) => {
+      const elevatorId = r.elevatorId?._id || r.elevatorId?.id || r.elevator || r.elevatorId;
+      const serviserID = r.serviserID?._id || r.serviserID?.id || r.serviserID;
       try {
         repairDB.insert({
           id: r._id,
-          elevatorId: r.elevatorId?._id || r.elevatorId,
-          serviserID: r.serviserID?._id || r.serviserID,
+          elevatorId,
+          serviserID,
           datumPrijave: r.datumPrijave,
           datumPopravka: r.datumPopravka,
           opisKvara: r.opisKvara,
@@ -228,10 +328,14 @@ export const syncRepairsFromServer = async () => {
           napomene: r.napomene,
           kreiranDatum: r.kreiranDatum || r.createdAt,
           azuriranDatum: r.azuriranDatum || r.updatedAt,
+          prijavio: r.prijavio,
+          kontaktTelefon: r.kontaktTelefon,
+          synced: 1,
         });
       } catch {
         repairDB.update(r._id, {
-          serviserID: r.serviserID?._id || r.serviserID,
+          elevatorId,
+          serviserID,
           datumPrijave: r.datumPrijave,
           datumPopravka: r.datumPopravka,
           opisKvara: r.opisKvara,
@@ -240,10 +344,30 @@ export const syncRepairsFromServer = async () => {
           radniNalogPotpisan: r.radniNalogPotpisan,
           popravkaUPotpunosti: r.popravkaUPotpunosti,
           napomene: r.napomene,
+          prijavio: r.prijavio,
+          kontaktTelefon: r.kontaktTelefon,
           azuriranDatum: r.azuriranDatum || r.updatedAt,
+          synced: 1,
         });
       }
     });
+
+    // Propagiraj brisanja samo kod full pull-a (bez updatedAfter)
+    if (!params.updatedAfter) {
+      try {
+        const localRepairs = repairDB.getAll?.() || [];
+        localRepairs
+          .filter((loc) => !String(loc.id || '').startsWith('local_'))
+          .filter((loc) => loc.synced !== 0)
+          .forEach((loc) => {
+            if (!serverIds.has(loc.id)) {
+              repairDB.delete?.(loc.id);
+            }
+          });
+      } catch (e) {
+        console.log('Skip repair delete reconciliation:', e?.message);
+      }
+    }
     await setLastSync('lastSyncRepairs');
     console.log(`Repairs synced: ${serverRepairs.length}`);
     return true;
@@ -287,10 +411,11 @@ export const syncRepairsToServer = async () => {
   if (!unsynced.length) return true;
   console.log(`Push repairs: ${unsynced.length}`);
   for (const r of unsynced) {
+    const elevatorId = (typeof r.elevatorId === 'object') ? (r.elevatorId._id || r.elevatorId.id) : r.elevatorId;
     try {
       if (r.id.startsWith('local_')) {
         const res = await repairsAPI.create({
-          elevator: r.elevatorId,
+          elevatorId,
           status: r.status,
           opisKvara: r.opisKvara,
           opisPopravka: r.opisPopravka,
@@ -299,16 +424,21 @@ export const syncRepairsToServer = async () => {
           radniNalogPotpisan: Boolean(r.radniNalogPotpisan),
           popravkaUPotpunosti: Boolean(r.popravkaUPotpunosti),
           napomene: r.napomene,
+          prijavio: r.prijavio,
+          kontaktTelefon: r.kontaktTelefon,
         });
         repairDB.markSynced(r.id, res.data.data._id);
       } else {
         await repairsAPI.update(r.id, {
+          elevatorId,
           status: r.status,
           opisPopravka: r.opisPopravka,
           datumPopravka: r.datumPopravka,
           radniNalogPotpisan: Boolean(r.radniNalogPotpisan),
           popravkaUPotpunosti: Boolean(r.popravkaUPotpunosti),
           napomene: r.napomene,
+          prijavio: r.prijavio,
+          kontaktTelefon: r.kontaktTelefon,
         });
         repairDB.markSynced(r.id, r.id);
       }
@@ -363,6 +493,14 @@ export const syncAll = async () => {
 
   try {
     console.log('Full sync start...');
+    // Sinkroniziraj stare zapise: sve što nije local_* neka bude synced kako se ne bi krivo guralo ili vraćalo nakon brisanja
+    try {
+      const unsyncedRemote = (serviceDB.getUnsynced?.() || []).filter((s) => !String(s.id).startsWith('local_'));
+      unsyncedRemote.forEach((s) => serviceDB.markSynced(s.id, s.id));
+    } catch (e) {
+      console.log('Skip normalize service synced flag:', e?.message);
+    }
+
     await syncServicesToServer();
     await syncRepairsToServer();
     await syncElevatorsFromServer();

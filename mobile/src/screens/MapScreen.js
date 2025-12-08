@@ -24,6 +24,14 @@ export default function MapScreen({ navigation }) {
   const mapRef = useRef(null);
   const didCenterInitial = useRef(false);
 
+  const sameCoord = (a, b) => {
+    if (!a || !b) return false;
+    return (
+      Math.abs(a.latitude - b.latitude) < 1e-6 &&
+      Math.abs(a.longitude - b.longitude) < 1e-6
+    );
+  };
+
   // Inicijalno: traži permisije + paralelno pokreni dohvat lokacije i elevatore
   useEffect(() => {
     let cancelled = false;
@@ -175,14 +183,18 @@ export default function MapScreen({ navigation }) {
   };
 
   const handleMarkerPress = (elevator) => {
-    // Ako je već odabran isti -> otvori detalje
-    const eid = elevator._id || elevator.id;
-    if (selectedElevator && (selectedElevator._id === eid || selectedElevator.id === eid)) {
-      navigation.navigate('ElevatorDetails', { elevator });
+    const coord = elevator?.koordinate;
+    const groupAtLocation = elevators.filter((e) => sameCoord(e.koordinate, coord));
+
+    // Ako je već odabrana lokacija (bilo koji iz grupe), otvori detalje za prvi (bilo koji) iz grupe
+    if (selectedElevator && sameCoord(selectedElevator.koordinate, coord)) {
+      const target = groupAtLocation[0] || elevator;
+      navigation.navigate('ElevatorDetails', { elevator: target });
       return;
     }
-    // Inače postavi kao selektiran za brzi prikaz ulazne šifre
-    setSelectedElevator(elevator);
+
+    // Inače postavi selekciju (prvi iz grupe, ili kliknuti)
+    setSelectedElevator(groupAtLocation[0] || elevator);
   };
 
   const centerOnUser = () => {

@@ -79,8 +79,12 @@ export const AuthProvider = ({ children }) => {
         const status = err.response?.status;
         const networkProblem = !err.response || status === 502 || status === 503;
         if (networkProblem) {
+          const stillOnline = await checkOnlineStatus().catch(() => false);
           setLoading(false);
-          return { success: false, message: 'Potrebna je online veza za login' };
+          if (!stillOnline) {
+            return { success: false, message: 'Potrebna je online veza za login' };
+          }
+          return { success: false, message: 'Server trenutno nije dostupan. Pokušajte ponovo.' };
         }
         throw err;
       }

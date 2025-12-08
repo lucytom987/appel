@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,8 +10,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { serviceDB, repairDB, elevatorDB } from '../database/db';
+import { useFocusEffect } from '@react-navigation/native';
+import { serviceDB, repairDB, elevatorDB, userDB } from '../database/db';
 import { useAuth } from '../context/AuthContext';
+import { servicesAPI } from '../services/api';
 
 export default function ElevatorDetailsScreen({ route, navigation }) {
   const { elevator: rawElevator } = route.params || {};
@@ -40,6 +42,55 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
   const [repairs, setRepairs] = useState([]);
   const [checklistHistory, setChecklistHistory] = useState({});
   const [groupElevators, setGroupElevators] = useState([]); // sva dizala na adresi
+  const [deletingService, setDeletingService] = useState(null);
+  
+  const parseDateSafe = (value) => {
+    if (!value) return null;
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? null : d;
+  };
+  
+  const getServiserLabel = (service) => {
+    const raw = service?.serviserID;
+    if (!raw) return '-';
+
+    if (typeof raw === 'object') {
+      const ime = raw.ime || raw.firstName || '';
+      const prezime = raw.prezime || raw.lastName || '';
+      const full = `${ime} ${prezime}`.trim();
+      if (full) return full;
+      if (raw._id) {
+        const found = userDB.getById(raw._id);
+        if (found) {
+          const f = `${found.ime || found.firstName || ''} ${found.prezime || found.lastName || ''}`.trim();
+          if (f) return f;
+        }
+      }
+      return '-';
+    }
+
+    if (typeof raw === 'string' || typeof raw === 'number') {
+      const idStr = String(raw);
+      const found = userDB.getById(idStr);
+      if (found) {
+        const full = `${found.ime || found.firstName || ''} ${found.prezime || found.lastName || ''}`.trim();
+        if (full) return full;
+        if (found.email) return found.email;
+      }
+      return idStr.length > 8 ? `${idStr.slice(0, 8)}…` : idStr;
+    }
+
+    return String(raw);
+  };
+
+  const getServiserSurname = (label) => {
+    if (!label || typeof label !== 'string') return '';
+    const parts = label.trim().split(/\s+/).filter(Boolean);
+    if (!parts.length) return '';
+    // ako je e-mail ili skraćeni ID, vrati cijeli label
+    if (label.includes('@') || label.includes('…')) return label;
+    return parts[parts.length - 1];
+  };
 
   // Osiguraj da je elevator pravilno strukturiran
   const elevator = {
@@ -52,17 +103,23 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
       : (rawElevator.koordinate || { latitude: 0, longitude: 0 })
   };
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = () => {
+  const loadData = useCallback(() => {
     try {
       const servicesData = serviceDB.getAll(elevator.id) || [];
+      const sortedServices = [...servicesData].sort((a, b) => {
+        const ad = parseDateSafe(a?.datum || a?.serviceDate);
+        const bd = parseDateSafe(b?.datum || b?.serviceDate);
+        return (bd?.getTime() || 0) - (ad?.getTime() || 0);
+      });
       const repairsData = repairDB.getAll(elevator.id) || [];
-      setServices(servicesData);
-      setRepairs(repairsData);
-      computeChecklistHistory(servicesData);
+      const sortedRepairs = [...repairsData].sort((a, b) => {
+        const ad = parseDateSafe(a?.datumPrijave || a?.reportedDate || a?.datum);
+        const bd = parseDateSafe(b?.datumPrijave || b?.reportedDate || b?.datum);
+        return (bd?.getTime() || 0) - (ad?.getTime() || 0);
+      });
+      setServices(sortedServices);
+      setRepairs(sortedRepairs);
+      computeChecklistHistory(sortedServices);
 
       // Grupiraj dizala na istoj adresi (isti brojUgovora + nazivStranke + ulica + mjesto)
       const all = elevatorDB.getAll();
@@ -77,7 +134,17 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
     } catch (error) {
       console.error('Greška pri učitavanju podataka:', error);
     }
-  };
+  }, [elevator.id]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [loadData])
+  );
 
   const checklistLabels = {
     lubrication: 'Podmazivanje',
@@ -93,8 +160,8 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
     const latest = {};
     servicesData.forEach(svc => {
       const serviceDateStr = svc.datum || svc.serviceDate;
-      if (!serviceDateStr) return;
-      const serviceDate = new Date(serviceDateStr);
+      const serviceDate = parseDateSafe(serviceDateStr);
+      if (!serviceDate) return;
       (svc.checklist || []).forEach(item => {
         if (item.provjereno === 1 || item.provjereno === true) {
           const key = item.stavka;
@@ -153,6 +220,43 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
     navigation.navigate('AddRepair', { elevator });
   };
 
+  const handleDeleteService = (service) => {
+    const backendId = service?._id || service?.id;
+    if (!backendId) {
+      Alert.alert('Greška', 'Nije moguće obrisati: nedostaje ID servisa.');
+      return;
+    }
+
+    Alert.alert(
+      'Obriši servis',
+      'Sigurno želiš obrisati ovaj servis?',
+      [
+        { text: 'Otkaži', style: 'cancel' },
+        {
+          text: 'Obriši',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setDeletingService(backendId);
+
+              if (service.synced && backendId && !String(backendId).startsWith('local_')) {
+                await servicesAPI.delete(backendId);
+              }
+
+              serviceDB.delete(backendId);
+              loadData();
+            } catch (error) {
+              console.error('Greška pri brisanju servisa:', error);
+              Alert.alert('Greška', 'Brisanje servisa nije uspjelo.');
+            } finally {
+              setDeletingService(null);
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const renderInfoTab = () => (
     <View style={styles.tabContent}>
       <View style={styles.infoSection}>
@@ -176,7 +280,7 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
                   style={[styles.elevatorBadge, active && styles.elevatorBadgeActive]}
                   onPress={() => {
                     if (!active) {
-                      navigation.replace('ElevatorDetails', { elevator: e });
+                      navigation.navigate('ElevatorDetails', { elevator: e });
                     }
                   }}
                 >
@@ -304,21 +408,39 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
         </View>
       ) : (
         services.map((service, index) => {
-          // Osiguraj da je service.napomene sigurno string
           const serviceNotes = typeof (service.napomene || service.notes) === 'string'
             ? (service.napomene || service.notes)
             : '';
-          
+          const serviserLabel = getServiserLabel(service);
+          const serviserSurname = getServiserSurname(serviserLabel);
+          const parsedDate = parseDateSafe(service.datum || service.serviceDate);
+          const dateLabel = parsedDate ? parsedDate.toLocaleDateString('hr-HR') : '-';
+          const key = service._id || service.id || service.localId || `svc_${index}`;
+
           return (
-            <View key={service.id || index} style={styles.historyCard}>
+            <TouchableOpacity
+              key={key}
+              style={styles.historyCard}
+              onPress={() => navigation.navigate('ServiceDetails', { service })}
+            >
               <View style={styles.historyHeader}>
                 <Text style={styles.historyDate}>
-                  {new Date(service.datum || service.serviceDate).toLocaleDateString('hr-HR')}
+                  {serviserSurname ? `${dateLabel} · ${serviserSurname}` : dateLabel}
                 </Text>
-                <View style={[styles.historyBadge, { backgroundColor: '#10b981' }]}>
-                  <Text style={styles.historyBadgeText}>Obavljen</Text>
+                <View style={styles.historyHeaderRight}>
+                  <View style={[styles.historyBadge, { backgroundColor: '#10b981' }]}>
+                    <Text style={styles.historyBadgeText}>Obavljen</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.historyDeleteButton}
+                    onPress={() => handleDeleteService(service)}
+                    disabled={deletingService === (service._id || service.id)}
+                  >
+                    <Ionicons name="trash-outline" size={18} color="#ef4444" />
+                  </TouchableOpacity>
                 </View>
               </View>
+
               {serviceNotes && (
                 <Text style={styles.historyNotes}>{serviceNotes}</Text>
               )}
@@ -328,7 +450,7 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
                   <Text style={styles.defectText}>Nedostaci pronađeni</Text>
                 </View>
               )}
-            </View>
+            </TouchableOpacity>
           );
         })
       )}
@@ -348,28 +470,41 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
           const faultDescription = typeof (repair.opisKvara || repair.faultDescription) === 'string'
             ? (repair.opisKvara || repair.faultDescription)
             : '';
+          const parsedDate = parseDateSafe(repair.datumPrijave || repair.reportedDate || repair.datum);
+          const dateLabel = parsedDate ? parsedDate.toLocaleDateString('hr-HR') : '-';
+          const key = repair._id || repair.id || repair.localId || `rep_${index}`;
           
           return (
-            <View key={repair.id || index} style={styles.historyCard}>
+            <TouchableOpacity
+              key={key}
+              style={styles.historyCard}
+              onPress={() => navigation.navigate('RepairDetails', { repair })}
+            >
               <View style={styles.historyHeader}>
                 <Text style={styles.historyDate}>
-                  {new Date(repair.datumPrijave || repair.reportedDate).toLocaleDateString('hr-HR')}
+                  {dateLabel}
                 </Text>
                 <View style={[
                   styles.historyBadge,
                   {
                     backgroundColor:
-                      repair.status === 'završen' ? '#10b981' :
-                      repair.status === 'u tijeku' ? '#f59e0b' : '#ef4444'
+                      repair.status === 'završen' || repair.status === 'completed' ? '#10b981' :
+                      repair.status === 'u tijeku' || repair.status === 'in_progress' ? '#f59e0b' : '#ef4444'
                   }
                 ]}>
-                  <Text style={styles.historyBadgeText}>{repair.status === 'završen' ? 'Završeno' : repair.status === 'u tijeku' ? 'U tijeku' : 'Na čekanju'}</Text>
+                  <Text style={styles.historyBadgeText}>{
+                    repair.status === 'završen' || repair.status === 'completed'
+                      ? 'Završeno'
+                      : repair.status === 'u tijeku' || repair.status === 'in_progress'
+                        ? 'U tijeku'
+                        : 'Na čekanju'
+                  }</Text>
                 </View>
               </View>
               {faultDescription && (
                 <Text style={styles.historyNotes}>{faultDescription}</Text>
               )}
-            </View>
+            </TouchableOpacity>
           );
         })
       )}
@@ -384,7 +519,14 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
           <Ionicons name="arrow-back" size={24} color="#111827" />
         </TouchableOpacity>
         <View style={styles.headerInfo}>
-          <Text style={styles.headerTitle}>{String(elevator.nazivStranke || 'Dizalo')}</Text>
+          <View style={styles.headerTitleRow}>
+            <Text style={styles.headerTitle}>{String(elevator.nazivStranke || 'Dizalo')}</Text>
+            {elevator.brojDizala ? (
+              <View style={styles.headerNumberBadge}>
+                <Text style={styles.headerNumberText}>{elevator.brojDizala}</Text>
+              </View>
+            ) : null}
+          </View>
           <Text style={styles.headerSubtitle}>{String(elevator.ulica || '')}, {String(elevator.mjesto || '')}</Text>
         </View>
         <View style={styles.headerRight}>
@@ -471,27 +613,46 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: '#fff',
-    paddingTop: 60,
-    paddingBottom: 16,
-    paddingHorizontal: 20,
+    paddingTop: 52,
+    paddingBottom: 12,
+    paddingHorizontal: 18,
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
     flexDirection: 'row',
     alignItems: 'center',
   },
   backButton: {
-    marginRight: 12,
+    marginRight: 10,
   },
   headerInfo: {
     flex: 1,
   },
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 17,
+    fontWeight: '700',
     color: '#111827',
   },
+  headerNumberBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+    backgroundColor: '#eef2ff',
+    borderWidth: 1,
+    borderColor: '#e0e7ff',
+  },
+  headerNumberText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1f2937',
+  },
   headerSubtitle: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#6b7280',
     marginTop: 2,
   },
@@ -542,27 +703,27 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   tabContent: {
-    padding: 16,
+    padding: 14,
   },
   infoSection: {
     backgroundColor: '#fff',
     borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
+    padding: 14,
+    marginBottom: 12,
     borderWidth: 1,
     borderColor: '#e5e7eb',
   },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 15,
+    fontWeight: '700',
     color: '#111827',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   infoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 10,
+    paddingVertical: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#f3f4f6',
   },
@@ -639,7 +800,7 @@ const styles = StyleSheet.create({
   },
   actionButtons: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 10,
   },
   actionButton: {
     flex: 1,
@@ -647,7 +808,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 14,
+    padding: 12,
     borderRadius: 12,
     gap: 8,
   },
@@ -659,8 +820,8 @@ const styles = StyleSheet.create({
   historyCard: {
     backgroundColor: '#fff',
     borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+    padding: 14,
+    marginBottom: 10,
     borderWidth: 1,
     borderColor: '#e5e7eb',
   },
@@ -668,7 +829,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 6,
+  },
+  historyHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   historyDate: {
     fontSize: 14,
@@ -685,6 +851,11 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '600',
     textTransform: 'uppercase',
+  },
+  historyDeleteButton: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: '#fee2e2',
   },
   historyNotes: {
     fontSize: 14,
@@ -710,7 +881,7 @@ const styles = StyleSheet.create({
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 48,
+    paddingVertical: 36,
   },
   emptyText: {
     fontSize: 16,
@@ -719,8 +890,8 @@ const styles = StyleSheet.create({
   },
   fabContainer: {
     position: 'absolute',
-    bottom: 24,
-    right: 20,
+    bottom: 20,
+    right: 18,
     flexDirection: 'row',
     gap: 12,
   },

@@ -41,7 +41,10 @@ export default function AddServiceScreen({ navigation, route }) {
   const [isOfflineDemo, setIsOfflineDemo] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [activeDateField, setActiveDateField] = useState('serviceDate');
   const [applyToAll, setApplyToAll] = useState(false);
+  const [includeElevators, setIncludeElevators] = useState({});
+  const [perElevatorChecklist, setPerElevatorChecklist] = useState({});
 
   // Konvertiraj isOnline u boolean
   const online = Boolean(isOnline);
@@ -63,6 +66,32 @@ export default function AddServiceScreen({ navigation, route }) {
     );
   }, [elevator]);
 
+  // Ako ima više dizala na adresi, uključi applyToAll by default
+  React.useEffect(() => {
+    if (elevatorsOnAddress.length > 1) {
+      setApplyToAll(true);
+    } else {
+      setApplyToAll(false);
+    }
+    // inicijalno uključi sva dizala i setiraj prazne checkliste
+    const initInclude = {};
+    const initChecklist = {};
+    elevatorsOnAddress.forEach((e) => {
+      initInclude[e._id || e.id] = true;
+      initChecklist[e._id || e.id] = {
+        lubrication: false,
+        upsCheck: false,
+        voiceComm: false,
+        shaftCleaning: false,
+        driveCheck: false,
+        brakeCheck: false,
+        cableInspection: false,
+      };
+    });
+    setIncludeElevators(initInclude);
+    setPerElevatorChecklist(initChecklist);
+  }, [elevatorsOnAddress]);
+
   // Izračunaj interval servisa u mjesecima (default 1 ako nije postavljen)
   const intervalMjeseci = typeof elevator.intervalServisa === 'number' && elevator.intervalServisa > 0
     ? elevator.intervalServisa
@@ -78,7 +107,7 @@ export default function AddServiceScreen({ navigation, route }) {
     })(),
   });
 
-  const [checklist, setChecklist] = useState({
+  const baseChecklist = {
     lubrication: false,
     upsCheck: false,
     voiceComm: false,
@@ -86,7 +115,7 @@ export default function AddServiceScreen({ navigation, route }) {
     driveCheck: false,
     brakeCheck: false,
     cableInspection: false,
-  });
+  };
 
   const checklistItems = [
     { key: 'lubrication', label: 'Podmazivanje' },
@@ -98,10 +127,13 @@ export default function AddServiceScreen({ navigation, route }) {
     { key: 'cableInspection', label: 'Inspekcija užeta' },
   ];
 
-  const toggleChecklistItem = (key) => {
-    setChecklist(prev => ({
+  const toggleChecklistItem = (elevatorId, key) => {
+    setPerElevatorChecklist((prev) => ({
       ...prev,
-      [key]: !prev[key]
+      [elevatorId]: {
+        ...(prev[elevatorId] || baseChecklist),
+        [key]: !(prev[elevatorId]?.[key]),
+      }
     }));
   };
 
@@ -126,32 +158,47 @@ export default function AddServiceScreen({ navigation, route }) {
     }
   };
 
+  const toggleIncludeElevator = (elevatorId) => {
+    setIncludeElevators((prev) => ({
+      ...prev,
+      [elevatorId]: prev[elevatorId] === false,
+    }));
+  };
+
   const handleSubmit = async () => {
     // Nema obaveznog opisa – redovni servis
 
     setLoading(true);
 
     try {
-      const targets = applyToAll && elevatorsOnAddress.length > 1 ? elevatorsOnAddress : [elevator];
+      const targetsAll = applyToAll && elevatorsOnAddress.length > 1 ? elevatorsOnAddress : [elevator];
+      const targets = targetsAll.filter((t) => includeElevators[t._id || t.id] !== false);
+      if (!targets.length) {
+        throw new Error('Odaberite barem jedno dizalo');
+      }
       let successCount = 0;
       let failCount = 0;
 
-      const serviceData = {
+      const buildChecklistPayload = (cid) => {
+        const state = perElevatorChecklist[cid] || baseChecklist;
+        return [
+          { stavka: 'lubrication', provjereno: state.lubrication ? 1 : 0, napomena: '' },
+          { stavka: 'ups_check', provjereno: state.upsCheck ? 1 : 0, napomena: '' },
+          { stavka: 'voice_comm', provjereno: state.voiceComm ? 1 : 0, napomena: '' },
+          { stavka: 'shaft_cleaning', provjereno: state.shaftCleaning ? 1 : 0, napomena: '' },
+          { stavka: 'drive_check', provjereno: state.driveCheck ? 1 : 0, napomena: '' },
+          { stavka: 'brake_check', provjereno: state.brakeCheck ? 1 : 0, napomena: '' },
+          { stavka: 'cable_inspection', provjereno: state.cableInspection ? 1 : 0, napomena: '' },
+        ];
+      };
+
+      const serviceDataBase = {
         serviserID: user._id,
         datum: formData.serviceDate.toISOString(),
         napomene: formData.napomene,
         imaNedostataka: false,
         nedostaci: [],
         sljedeciServis: formData.nextServiceDate.toISOString(),
-        checklist: [
-          { stavka: 'lubrication', provjereno: checklist.lubrication ? 1 : 0, napomena: '' },
-          { stavka: 'ups_check', provjereno: checklist.upsCheck ? 1 : 0, napomena: '' },
-          { stavka: 'voice_comm', provjereno: checklist.voiceComm ? 1 : 0, napomena: '' },
-          { stavka: 'shaft_cleaning', provjereno: checklist.shaftCleaning ? 1 : 0, napomena: '' },
-          { stavka: 'drive_check', provjereno: checklist.driveCheck ? 1 : 0, napomena: '' },
-          { stavka: 'brake_check', provjereno: checklist.brakeCheck ? 1 : 0, napomena: '' },
-          { stavka: 'cable_inspection', provjereno: checklist.cableInspection ? 1 : 0, napomena: '' },
-        ],
       };
 
       // Provjeri je li offline korisnik (demo korisnik)
@@ -162,7 +209,7 @@ export default function AddServiceScreen({ navigation, route }) {
         console.log('📱 Demo/offline korisnik - dodajem servise lokalno bez API poziva');
         targets.forEach((target, idx) => {
           const localId = 'local_' + Date.now() + '_' + idx + '_' + Math.random().toString(36).substr(2, 9);
-          const payload = { ...serviceData, elevatorId: target._id || target.id };
+          const payload = { ...serviceDataBase, checklist: buildChecklistPayload(target._id || target.id), elevatorId: target._id || target.id };
           serviceDB.insert({ id: localId, ...payload, synced: 0 });
           try {
             const elev = elevatorDB.getById(target._id || target.id);
@@ -178,7 +225,7 @@ export default function AddServiceScreen({ navigation, route }) {
         ]);
       } else {
         for (const target of targets) {
-          const payload = { ...serviceData, elevatorId: target._id || target.id };
+          const payload = { ...serviceDataBase, checklist: buildChecklistPayload(target._id || target.id), elevatorId: target._id || target.id };
           try {
             const response = await servicesAPI.create(payload);
             const created = response.data?.data || response.data;
@@ -279,7 +326,7 @@ export default function AddServiceScreen({ navigation, route }) {
           <Text style={styles.label}>Datum servisa</Text>
           <TouchableOpacity
             style={styles.dateButton}
-            onPress={() => setShowDatePicker(true)}
+            onPress={() => { setActiveDateField('serviceDate'); setShowDatePicker(true); }}
           >
             <Ionicons name="calendar-outline" size={20} color="#666" />
             <Text style={styles.dateText}>
@@ -289,36 +336,15 @@ export default function AddServiceScreen({ navigation, route }) {
 
           {showDatePicker && (
             <DateTimePicker
-              value={formData.serviceDate}
+              value={activeDateField === 'serviceDate' ? formData.serviceDate : formData.nextServiceDate}
               mode="date"
               display="default"
-              onChange={(e, date) => handleDateChange(e, date, 'serviceDate')}
+              onChange={(e, date) => handleDateChange(e, date, activeDateField)}
             />
           )}
         </View>
 
         {/* Opis servisa uklonjen - servis je uvijek redovni */}
-
-        {/* Checklist */}
-        <View style={styles.section}>
-          <Text style={styles.label}>Checklist</Text>
-          <View style={styles.checklist}>
-            {checklistItems.map(item => (
-              <TouchableOpacity
-                key={item.key}
-                style={styles.checklistItem}
-                onPress={() => toggleChecklistItem(item.key)}
-              >
-                <View style={styles.checkbox}>
-                  {checklist[item.key] && (
-                    <Ionicons name="checkmark" size={18} color="#10b981" />
-                  )}
-                </View>
-                <Text style={styles.checklistLabel}>{item.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
 
         {elevatorsOnAddress.length > 1 && (
           <View style={styles.section}>
@@ -331,6 +357,47 @@ export default function AddServiceScreen({ navigation, route }) {
             </TouchableOpacity>
           </View>
         )}
+
+        {/* Checklist po dizalu */}
+        <View style={styles.section}>
+          <Text style={styles.label}>Checklist po dizalu</Text>
+          {(applyToAll && elevatorsOnAddress.length > 1 ? elevatorsOnAddress : [elevator]).map((el) => {
+            const cid = el._id || el.id;
+            const included = includeElevators[cid] !== false;
+            return (
+              <View key={cid} style={styles.elevatorCard}>
+                <View style={styles.elevatorCardHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.elevatorCardTitle}>{el?.brojDizala || 'Dizalo'}</Text>
+                    <Text style={styles.elevatorCardSubtitle}>{(el?.ulica || '')} • {(el?.mjesto || '')}</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => toggleIncludeElevator(cid)} style={styles.includeToggle}>
+                    <Ionicons name={included ? 'checkbox' : 'square-outline'} size={22} color={included ? '#2563eb' : '#9ca3af'} />
+                    <Text style={styles.includeLabel}>Uključi</Text>
+                  </TouchableOpacity>
+                </View>
+                {included && (
+                  <View style={styles.checklist}>
+                    {checklistItems.map(item => (
+                      <TouchableOpacity
+                        key={item.key}
+                        style={styles.checklistItem}
+                        onPress={() => toggleChecklistItem(cid, item.key)}
+                      >
+                        <View style={styles.checkbox}>
+                          {perElevatorChecklist[cid]?.[item.key] && (
+                            <Ionicons name="checkmark" size={18} color="#10b981" />
+                          )}
+                        </View>
+                        <Text style={styles.checklistLabel}>{item.label}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+            );
+          })}
+        </View>
 
         {/* Napomene */}
         <View style={styles.section}>
@@ -351,7 +418,7 @@ export default function AddServiceScreen({ navigation, route }) {
           <Text style={styles.label}>Sljedeći servis</Text>
           <TouchableOpacity
             style={styles.dateButton}
-            onPress={() => setShowDatePicker(true)}
+            onPress={() => { setActiveDateField('nextServiceDate'); setShowDatePicker(true); }}
           >
             <Ionicons name="calendar-outline" size={20} color="#666" />
             <Text style={styles.dateText}>
@@ -495,6 +562,46 @@ const styles = StyleSheet.create({
   checklistLabel: {
     fontSize: 16,
     color: '#1f2937',
+  },
+  multiToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  helperText: {
+    fontSize: 13,
+    color: '#6b7280',
+  },
+  elevatorCard: {
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
+    padding: 14,
+    marginTop: 12,
+  },
+  elevatorCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+    gap: 10,
+  },
+  elevatorCardTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  elevatorCardSubtitle: {
+    fontSize: 13,
+    color: '#6b7280',
+  },
+  includeToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  includeLabel: {
+    fontSize: 13,
+    color: '#374151',
   },
   submitButton: {
     backgroundColor: '#10b981',

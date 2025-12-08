@@ -12,6 +12,8 @@ import {
   TextInput,
   ScrollView,
   Clipboard,
+  StatusBar,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { usersAPI } from '../services/api';
@@ -20,12 +22,16 @@ import { userDB } from '../database/db';
 
 const UserManagementScreen = ({ navigation }) => {
   const { user, isOnline } = useAuth();
+  const { goBack } = navigation;
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [editValues, setEditValues] = useState({});
+  const [passwordModalVisible, setPasswordModalVisible] = useState(false);
+  const [passwordInput, setPasswordInput] = useState('');
+  const [selectedUser, setSelectedUser] = useState(null);
 
   useEffect(() => {
     loadUsers();
@@ -98,6 +104,12 @@ const UserManagementScreen = ({ navigation }) => {
     navigation.navigate('AddUser');
   };
 
+  const isCurrentUser = (u) => {
+    const uid = u?._id || u?.id;
+    const me = user?._id || user?.id;
+    return uid && me && uid === me;
+  };
+
   const handleEditUser = (selectedUser) => {
     setEditingUser(selectedUser);
     setEditValues({
@@ -162,54 +174,48 @@ const UserManagementScreen = ({ navigation }) => {
     );
   };
 
-  const handleResetPassword = (selectedUser) => {
-    Alert.prompt(
-      'Reset lozinke',
-      `Unesite novu lozinku za ${selectedUser.ime} ${selectedUser.prezime}`,
-      [
-        { text: 'Otkaži', onPress: () => {} },
-        {
-          text: 'Resetiraj',
-          onPress: async (newPassword) => {
-            if (!newPassword || newPassword.length < 6) {
-              Alert.alert('Greška', 'Lozinka mora biti najmanje 6 znakova');
-              return;
-            }
-            try {
-              const response = await usersAPI.resetPassword(selectedUser._id || selectedUser.id, newPassword);
-              
-              // Prikaži novu lozinku admin-u
-              const tempPassword = response.data.temporaryPassword || newPassword;
-              // Lokalno ažuriraj privremenaLozinka (cache) za prikaz dok se ne synca
-              try {
-                const localUser = { ...selectedUser, privremenaLozinka: tempPassword };
-                userDB.update(selectedUser._id || selectedUser.id, localUser);
-              } catch (e) {
-                console.log('⚠️ Ne mogu lokalno spremiti privremenu lozinku:', e.message);
-              }
-              Alert.alert(
-                '✅ Lozinka resetirana',
-                `Nova lozinka je: ${tempPassword}\n\nOvaj korisnik će morati koristiti ovu lozinku da se prijavi.`,
-                [
-                  {
-                    text: 'Kopiraj lozinku',
-                    onPress: async () => {
-                      await Clipboard.setString(tempPassword);
-                      Alert.alert('✅ Kopirано', `Lozinka je kopirana u clipboard`);
-                    }
-                  },
-                  { text: 'OK' }
-                ]
-              );
-            } catch (error) {
-              console.error('❌ Greška pri resetiranju lozinke:', error);
-              Alert.alert('Greška', 'Greška pri resetiranju lozinke');
-            }
+  const openPasswordModal = (userToReset) => {
+    setSelectedUser(userToReset);
+    setPasswordInput('');
+    setPasswordModalVisible(true);
+  };
+
+  const handleResetPassword = async () => {
+    if (!selectedUser) return;
+    if (!passwordInput || passwordInput.length < 6) {
+      Alert.alert('Greška', 'Lozinka mora biti najmanje 6 znakova');
+      return;
+    }
+    try {
+      const response = await usersAPI.resetPassword(selectedUser._id || selectedUser.id, passwordInput);
+      const tempPassword = response.data?.temporaryPassword || passwordInput;
+
+      try {
+        const localUser = { ...selectedUser, privremenaLozinka: tempPassword };
+        userDB.update(selectedUser._id || selectedUser.id, localUser);
+      } catch (e) {
+        console.log('⚠️ Ne mogu lokalno spremiti privremenu lozinku:', e.message);
+      }
+
+      setPasswordModalVisible(false);
+      Alert.alert(
+        '✅ Lozinka resetirana',
+        `Nova lozinka je: ${tempPassword}\n\nOvaj korisnik će morati koristiti ovu lozinku da se prijavi.`,
+        [
+          {
+            text: 'Kopiraj lozinku',
+            onPress: async () => {
+              await Clipboard.setString(tempPassword);
+              Alert.alert('✅ Kopirano', 'Lozinka je kopirana u clipboard');
+            },
           },
-        },
-      ],
-      'secure-text'
-    );
+          { text: 'OK' },
+        ]
+      );
+    } catch (error) {
+      console.error('❌ Greška pri resetiranju lozinke:', error);
+      Alert.alert('Greška', 'Greška pri resetiranju lozinke');
+    }
   };
 
   const getRoleColor = (uloga) => {
@@ -219,7 +225,7 @@ const UserManagementScreen = ({ navigation }) => {
       case 'menadzer':
         return '#4ECDC4';
       case 'serviser':
-        return '#45B7D1';
+        return '#22c55e';
       default:
         return '#999';
     }
@@ -258,7 +264,7 @@ const UserManagementScreen = ({ navigation }) => {
         <View
           style={[
             styles.statusIndicator,
-            { backgroundColor: item.aktivan ? '#51CF66' : '#FF6B6B' },
+            { backgroundColor: isCurrentUser(item) ? '#10b981' : '#d1d5db' },
           ]}
         />
       </View>
@@ -280,7 +286,7 @@ const UserManagementScreen = ({ navigation }) => {
 
         <TouchableOpacity
           style={[styles.actionButton, styles.passwordButton]}
-          onPress={() => handleResetPassword(item)}
+          onPress={() => openPasswordModal(item)}
         >
           <Ionicons name="key" size={16} color="#FFF" />
           <Text style={styles.actionButtonText}>Lozinka</Text>
@@ -310,6 +316,15 @@ const UserManagementScreen = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
+      <View style={styles.pageHeader}>
+        <TouchableOpacity onPress={() => goBack()} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={22} color="#111827" />
+        </TouchableOpacity>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.pageTitle}>Korisnici</Text>
+          <Text style={styles.pageSubtitle}>Upravljanje korisnicima i lozinkama</Text>
+        </View>
+      </View>
       <FlatList
         data={users}
         keyExtractor={(item) => item._id || item.id}
@@ -329,6 +344,38 @@ const UserManagementScreen = ({ navigation }) => {
       <TouchableOpacity style={styles.fab} onPress={handleAddUser}>
         <Ionicons name="add" size={28} color="#FFF" />
       </TouchableOpacity>
+
+      {/* Reset password modal (radi i na Androidu) */}
+      <Modal visible={passwordModalVisible} transparent animationType="fade">
+        <View style={styles.passwordOverlay}>
+          <View style={styles.passwordModalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Reset lozinke</Text>
+              <TouchableOpacity onPress={() => setPasswordModalVisible(false)}>
+                <Ionicons name="close" size={24} color="#333" />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.infoText}>
+              {selectedUser ? `Nova lozinka za ${selectedUser.ime} ${selectedUser.prezime}` : ''}
+            </Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Unesite novu lozinku (min 6)"
+              secureTextEntry
+              value={passwordInput}
+              onChangeText={setPasswordInput}
+            />
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 10, gap: 10 }}>
+              <TouchableOpacity onPress={() => setPasswordModalVisible(false)}>
+                <Text style={styles.cancelText}>Otkaži</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleResetPassword} style={styles.resetButton}>
+                <Text style={styles.resetButtonText}>Resetiraj</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Edit Modal */}
       <Modal visible={modalVisible} transparent animationType="slide">
@@ -434,6 +481,30 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F5F5F5',
+    paddingTop: Platform.OS === 'android'
+      ? (StatusBar.currentHeight || 0) + 12
+      : 24,
+  },
+  pageHeader: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: '#F5F5F5',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  backButton: {
+    padding: 6,
+  },
+  pageTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  pageSubtitle: {
+    fontSize: 13,
+    color: '#6b7280',
+    marginTop: 2,
   },
   centeredContainer: {
     flex: 1,
@@ -519,6 +590,20 @@ const styles = StyleSheet.create({
   passwordButton: {
     backgroundColor: '#FFB347',
   },
+  resetButton: {
+    backgroundColor: '#2563eb',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  resetButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  cancelText: {
+    color: '#6b7280',
+    fontWeight: '600',
+  },
   deleteButton: {
     backgroundColor: '#FF6B6B',
   },
@@ -567,6 +652,22 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-end',
+  },
+  passwordOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  passwordModalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
   },
   modalContent: {
     backgroundColor: '#FFF',

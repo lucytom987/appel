@@ -4,7 +4,7 @@ import * as SQLite from 'expo-sqlite';
 const db = SQLite.openDatabaseSync('appel.db');
 
 // Database version
-const DB_VERSION = 6; // Upgrade: dodan privremenaLozinka + novi indexi
+const DB_VERSION = 7; // Add prijavio/kontaktTelefon na repairs
 
 // Provjeri verziju baze i migriraj ako je potrebno
 const checkAndMigrate = () => {
@@ -137,6 +137,8 @@ export const initDatabase = () => {
         radniNalogPotpisan INTEGER DEFAULT 0,
         popravkaUPotpunosti INTEGER DEFAULT 0,
         napomene TEXT,
+        prijavio TEXT,
+        kontaktTelefon TEXT,
         kreiranDatum TEXT,
         azuriranDatum TEXT,
         synced INTEGER DEFAULT 0,
@@ -337,6 +339,9 @@ export const serviceDB = {
   
   insert: (service) => {
     const id = service.id || service._id || `local_${Date.now()}`;
+    const syncedFlag = service.synced === undefined
+      ? (String(id).startsWith('local_') ? 0 : 1)
+      : (service.synced ? 1 : 0);
     // Normaliziraj serviserID u čitljivo ime (ako je objekt)
     let serviserID = service.serviserID;
     if (serviserID && typeof serviserID === 'object') {
@@ -366,13 +371,13 @@ export const serviceDB = {
         service.sljedeciServis,
         service.kreiranDatum || new Date().toISOString(),
         service.azuriranDatum || new Date().toISOString(),
-        0,
+          syncedFlag,
         Date.now()
       ]
     );
   },
   
-  update: (id, service) => {
+    update: (id, service) => {
     let serviserID = service.serviserID;
     if (serviserID && typeof serviserID === 'object') {
       const ime = serviserID.ime || serviserID.firstName || '';
@@ -380,6 +385,9 @@ export const serviceDB = {
       const full = `${ime} ${prezime}`.trim();
       serviserID = full || (serviserID._id || '');
     }
+      const syncedFlag = service.synced === undefined
+        ? (String(id).startsWith('local_') ? 0 : 1)
+        : (service.synced ? 1 : 0);
     return db.runSync(
       `UPDATE services SET serviserID=?, datum=?, checklist=?, imaNedostataka=?, 
        nedostaci=?, napomene=?, sljedeciServis=?, azuriranDatum=?, synced=?, updated_at=? WHERE id=?`,
@@ -392,7 +400,7 @@ export const serviceDB = {
         service.napomene,
         service.sljedeciServis,
         service.azuriranDatum || new Date().toISOString(),
-        0,
+        syncedFlag,
         Date.now(),
         id
       ]
@@ -449,15 +457,27 @@ export const repairDB = {
   
   insert: (repair) => {
     const id = repair.id || repair._id || `local_${Date.now()}`;
+    const syncedFlag = repair.synced === undefined ? (String(id).startsWith('local_') ? 0 : 1) : (repair.synced ? 1 : 0);
+    // Normaliziraj reference kako bi spremili čisti ID umjesto objekta
+    let elevatorId = repair.elevatorId || repair.elevator;
+    if (elevatorId && typeof elevatorId === 'object') {
+      elevatorId = elevatorId._id || elevatorId.id || '';
+    }
+
+    let serviserID = repair.serviserID;
+    if (serviserID && typeof serviserID === 'object') {
+      serviserID = serviserID._id || serviserID.id || '';
+    }
+
     return db.runSync(
       `INSERT INTO repairs (id, elevatorId, serviserID, datumPrijave, datumPopravka, 
        opisKvara, opisPopravka, status, radniNalogPotpisan, popravkaUPotpunosti, 
-       napomene, kreiranDatum, azuriranDatum, synced, updated_at) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       napomene, prijavio, kontaktTelefon, kreiranDatum, azuriranDatum, synced, updated_at) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
-        repair.elevatorId || repair.elevator,
-        repair.serviserID,
+        elevatorId,
+        serviserID,
         repair.datumPrijave,
         repair.datumPopravka,
         repair.opisKvara,
@@ -466,21 +486,35 @@ export const repairDB = {
         repair.radniNalogPotpisan ? 1 : 0,
         repair.popravkaUPotpunosti ? 1 : 0,
         repair.napomene,
+        repair.prijavio,
+        repair.kontaktTelefon,
         repair.kreiranDatum || new Date().toISOString(),
         repair.azuriranDatum || new Date().toISOString(),
-        0,
+        syncedFlag,
         Date.now()
       ]
     );
   },
   
   update: (id, repair) => {
+    const syncedFlag = repair.synced === undefined ? (String(id).startsWith('local_') ? 0 : 1) : (repair.synced ? 1 : 0);
+    let serviserID = repair.serviserID;
+    if (serviserID && typeof serviserID === 'object') {
+      serviserID = serviserID._id || serviserID.id || '';
+    }
+
+    let elevatorId = repair.elevatorId || repair.elevator;
+    if (elevatorId && typeof elevatorId === 'object') {
+      elevatorId = elevatorId._id || elevatorId.id || '';
+    }
+
     return db.runSync(
-      `UPDATE repairs SET serviserID=?, datumPrijave=?, datumPopravka=?, opisKvara=?, 
+      `UPDATE repairs SET elevatorId=?, serviserID=?, datumPrijave=?, datumPopravka=?, opisKvara=?, 
        opisPopravka=?, status=?, radniNalogPotpisan=?, popravkaUPotpunosti=?, 
-       napomene=?, azuriranDatum=?, synced=?, updated_at=? WHERE id=?`,
+       napomene=?, prijavio=?, kontaktTelefon=?, azuriranDatum=?, synced=?, updated_at=? WHERE id=?`,
       [
-        repair.serviserID,
+        elevatorId,
+        serviserID,
         repair.datumPrijave,
         repair.datumPopravka,
         repair.opisKvara,
@@ -489,8 +523,10 @@ export const repairDB = {
         repair.radniNalogPotpisan ? 1 : 0,
         repair.popravkaUPotpunosti ? 1 : 0,
         repair.napomene,
+        repair.prijavio,
+        repair.kontaktTelefon,
         repair.azuriranDatum || new Date().toISOString(),
-        0,
+        syncedFlag,
         Date.now(),
         id
       ]
@@ -680,6 +716,13 @@ export const cleanupOrphans = () => {
     const existingElevators = new Set(
       db.getAllSync('SELECT id FROM elevators').map(row => row.id)
     );
+
+    // Ako nema učitanih dizala, ne briši ništa (čekaj sync)
+    if (existingElevators.size === 0) {
+      console.log('⏸️ Nema dizala u bazi - preskačem čišćenje siročadi');
+      return { removedServices: 0, removedRepairs: 0, skipped: true };
+    }
+
     const orphanServices = db.getAllSync('SELECT id, elevatorId FROM services WHERE elevatorId NOT IN (SELECT id FROM elevators)');
     const orphanRepairs = db.getAllSync('SELECT id, elevatorId FROM repairs WHERE elevatorId NOT IN (SELECT id FROM elevators)');
     let removedServices = 0;

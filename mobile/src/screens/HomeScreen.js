@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,17 +6,32 @@ import {
   ScrollView,
   TouchableOpacity,
   RefreshControl,
+  Animated,
+  Easing,
+  ImageBackground,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
+import { useFocusEffect } from '@react-navigation/native';
 import * as SecureStore from 'expo-secure-store';
 import { elevatorDB, serviceDB, repairDB } from '../database/db';
 import { syncAll } from '../services/syncService';
 
+// Gauge geometry (semicircle)
+const GAUGE_SIZE = 140;
+const GAUGE_RADIUS = GAUGE_SIZE / 2;
+const GAUGE_MASK_HEIGHT = GAUGE_RADIUS;
+const GAUGE_BG_IMAGE = { uri: 'https://images.unsplash.com/photo-1517244871184-6ac0400d035b?auto=format&fit=crop&w=400&q=60' };
+const GAUGE_NEEDLE_COLOR = '#22c55e';
+const GAUGE_NEEDLE_WIDTH = 4;
+const GAUGE_NEEDLE_HEIGHT = GAUGE_RADIUS - 6;
+
 export default function HomeScreen({ navigation }) {
   const { user, isOnline, logout } = useAuth();
   const [offlineDemo, setOfflineDemo] = useState(false);
+  const serviceGauge = useRef(new Animated.Value(0));
 
   useEffect(() => {
     (async () => {
@@ -26,8 +41,11 @@ export default function HomeScreen({ navigation }) {
   }, []);
   const [stats, setStats] = useState({
     totalElevators: 0,
+    servicedElevatorsThisMonth: 0,
     servicesThisMonth: 0,
     repairsPending: 0,
+    repairsInProgress: 0,
+    repairsCompleted: 0,
     repairsUrgent: 0,
   });
   const [refreshing, setRefreshing] = useState(false);
@@ -39,11 +57,41 @@ export default function HomeScreen({ navigation }) {
     loadStats();
   }, []);
 
+  useFocusEffect(
+    useCallback(() => {
+      loadStats();
+    }, [])
+  );
+
+  const serviceProgress = stats.totalElevators
+    ? Math.min(1, Math.max(0, stats.servicedElevatorsThisMonth / stats.totalElevators))
+    : 0;
+
+  // Semicircle only (no labels/dashes)
+
+  useEffect(() => {
+    Animated.timing(serviceGauge.current, {
+      toValue: serviceProgress,
+      duration: 1200,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+  }, [serviceProgress]);
+
   const loadStats = () => {
     try {
       const elevators = elevatorDB.getAll() || [];
       const servicesAll = serviceDB.getAll() || [];
       const repairs = repairDB.getAll() || [];
+
+      const normalizeStatus = (s) => {
+        if (!s) return 'pending';
+        const lower = String(s).toLowerCase();
+        if (lower === 'cek' || lower === 'čekanje' || lower === 'pending') return 'pending';
+        if (lower === 'u tijeku' || lower === 'u_tijeku' || lower === 'in_progress') return 'in_progress';
+        if (lower === 'završen' || lower === 'zavrsen' || lower === 'completed') return 'completed';
+        return s;
+      };
 
       // Broji samo aktivna dizala
       const activeElevators = elevators.filter(e => e.status === 'aktivan');
@@ -83,21 +131,43 @@ export default function HomeScreen({ navigation }) {
                date.getFullYear() === now.getFullYear();
       });
 
-      // Popravci pending ili u tijeku
-      const pending = repairs.filter(r => 
-        r.status === 'čekanje' || r.status === 'u tijeku'
+      // Jedinstvena dizala servisirana ovaj mjesec
+      const servicedElevatorsSet = new Set(
+        thisMonth.map((s) => {
+          const eid = typeof s.elevatorId === 'object' && s.elevatorId !== null
+            ? (s.elevatorId._id || s.elevatorId.id)
+            : s.elevatorId;
+          return eid || null;
+        }).filter(Boolean)
+      );
+      const servicedElevatorsThisMonth = servicedElevatorsSet.size;
+
+      // Popravci po statusu
+      const statusCounts = repairs.reduce(
+        (acc, r) => {
+          const status = normalizeStatus(r.status);
+          if (status === 'pending') acc.pending += 1;
+          else if (status === 'in_progress') acc.inProgress += 1;
+          else if (status === 'completed') acc.completed += 1;
+          return acc;
+        },
+        { pending: 0, inProgress: 0, completed: 0 }
       );
 
       setStats({
         totalElevators: activeElevators.length,
+        servicedElevatorsThisMonth,
         servicesThisMonth: thisMonth.length,
-        repairsPending: pending.length,
+        repairsPending: statusCounts.pending,
+        repairsInProgress: statusCounts.inProgress,
+        repairsCompleted: statusCounts.completed,
         repairsUrgent: 0, // U novoj shemi nema priority polja
       });
     } catch (error) {
       console.error('Greška pri učitavanju statistike:', error);
       setStats({
         totalElevators: 0,
+        servicedElevatorsThisMonth: 0,
         servicesThisMonth: 0,
         repairsPending: 0,
         repairsUrgent: 0,
@@ -150,36 +220,80 @@ export default function HomeScreen({ navigation }) {
             style={styles.statCard}
             onPress={() => navigation.navigate('Elevators')}
           >
+            <Text style={[styles.statLabel, styles.statLabelBold, styles.sectionTitleUpper]}>DIZALA</Text>
             <Ionicons name="business" size={32} color="#2563eb" />
             <Text style={styles.statNumber}>{stats.totalElevators}</Text>
-            <Text style={styles.statLabel}>Dizala</Text>
           </TouchableOpacity>
 
           <TouchableOpacity 
             style={styles.statCard}
             onPress={() => navigation.navigate('Map')}
           >
-            <Ionicons name="map" size={32} color="#8b5cf6" />
-            <Text style={styles.statNumber}>📍</Text>
-            <Text style={styles.statLabel}>Karta</Text>
+            <Text style={[styles.statLabel, styles.statLabelBold, styles.sectionTitleUpper]}>KARTA</Text>
+            <Text style={[styles.statNumber, { marginTop: 4, fontSize: 44 }]}>🌍</Text>
           </TouchableOpacity>
 
           <TouchableOpacity 
             style={styles.statCard}
             onPress={() => navigation.navigate('Services')}
           >
-            <Ionicons name="checkmark-circle" size={32} color="#10b981" />
-            <Text style={styles.statNumber}>{stats.servicesThisMonth}</Text>
-            <Text style={styles.statLabel}>Servisi ovaj mjesec</Text>
+            <Text style={[styles.statLabel, styles.statLabelBold, styles.sectionTitleUpper]}>SERVISI</Text>
+            <View style={styles.gaugeWrapper}>
+              <ImageBackground
+                source={GAUGE_BG_IMAGE}
+                style={styles.gaugeBg}
+                imageStyle={styles.gaugeBgImage}
+              >
+                <View style={styles.gaugeMask}>
+                  <View style={styles.gaugeArc} />
+                  <Animated.View
+                    style={[
+                      styles.gaugeNeedle,
+                      {
+                        transform: [
+                          { translateY: GAUGE_NEEDLE_HEIGHT / 2 },
+                          {
+                            rotateZ: serviceGauge.current.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: ['-90deg', '90deg'],
+                              extrapolate: 'clamp',
+                            }),
+                          },
+                          { translateY: -GAUGE_NEEDLE_HEIGHT / 2 },
+                        ],
+                      },
+                    ]}
+                  >
+                    <View style={styles.gaugeNeedleBody} />
+                    <View style={styles.gaugeNeedleHighlight} />
+                  </Animated.View>
+                  <View style={styles.gaugeNeedleHub} />
+                </View>
+              </ImageBackground>
+            </View>
+            <Text style={styles.statNumber}>
+              {stats.servicedElevatorsThisMonth}/{stats.totalElevators}
+            </Text>
+            <Text style={styles.statLabel}>Dizala servisirana ovaj mjesec</Text>
           </TouchableOpacity>
 
           <TouchableOpacity 
             style={styles.statCard}
             onPress={() => navigation.navigate('Repairs')}
           >
-            <Ionicons name="construct" size={32} color="#f59e0b" />
-            <Text style={styles.statNumber}>{stats.repairsPending}</Text>
-            <Text style={styles.statLabel}>Popravci na čekanju</Text>
+            <Text style={[styles.statLabel, styles.statLabelBold, styles.sectionTitleUpper]}>POPRAVCI</Text>
+            <Ionicons name="construct" size={32} color="#f59e0b" style={{ marginTop: 4 }} />
+            <View style={styles.repairsCounters}>
+              <Text style={styles.repairsSubLabel}>
+                NA ČEKANJU: <Text style={styles.repairsPending}>{stats.repairsPending}</Text>
+              </Text>
+              <Text style={styles.repairsSubLabel}>
+                U TIJEKU: <Text style={styles.repairsInProgress}>{stats.repairsInProgress}</Text>
+              </Text>
+              <Text style={styles.repairsSubLabel}>
+                ZAVRŠENI: <Text style={styles.repairsCompleted}>{stats.repairsCompleted}</Text>
+              </Text>
+            </View>
           </TouchableOpacity>
         </View>
 
@@ -288,10 +402,144 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   statLabel: {
-    fontSize: 12,
+    fontSize: 14,
     color: '#666',
     textAlign: 'center',
     marginTop: 5,
+  },
+  statSubLabel: {
+    fontSize: 13,
+    color: '#6b7280',
+    textAlign: 'center',
+    marginTop: 2,
+  },
+  statLabelBold: {
+    fontWeight: '700',
+    color: '#111827',
+  },
+  sectionTitleUpper: {
+    letterSpacing: 0.8,
+    fontSize: 20,
+    marginBottom: 6,
+    fontFamily: Platform.select({ ios: 'HelveticaNeue-Medium', android: 'sans-serif-medium', default: 'sans-serif' }),
+  },
+  repairsCounters: {
+    marginTop: 6,
+    gap: 2,
+    alignItems: 'center',
+    width: '100%',
+  },
+  repairsSubLabel: {
+    fontSize: 17,
+    color: '#111827',
+    fontWeight: '600',
+    textAlign: 'right',
+    width: '80%',
+  },
+  repairsPending: {
+    color: '#ef4444',
+  },
+  repairsInProgress: {
+    color: '#f59e0b',
+  },
+  repairsCompleted: {
+    color: '#10b981',
+  },
+  gaugeWrapper: {
+    width: GAUGE_SIZE + 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+  },
+  gaugeBg: {
+    width: GAUGE_SIZE,
+    height: GAUGE_MASK_HEIGHT + 2,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  gaugeBgImage: {
+    borderRadius: 12,
+    opacity: 0.22,
+  },
+  gaugeMask: {
+    width: GAUGE_SIZE,
+    height: GAUGE_MASK_HEIGHT,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  gaugeArc: {
+    width: GAUGE_SIZE,
+    height: GAUGE_SIZE,
+    borderRadius: GAUGE_RADIUS,
+    borderWidth: 2,
+    borderColor: '#d1d5db',
+    backgroundColor: '#f9fafb',
+    position: 'absolute',
+    bottom: -GAUGE_RADIUS,
+  },
+  gaugeNeedle: {
+    position: 'absolute',
+    bottom: 8,
+    left: GAUGE_SIZE / 2 - GAUGE_NEEDLE_WIDTH / 2,
+    width: GAUGE_NEEDLE_WIDTH,
+    height: GAUGE_NEEDLE_HEIGHT,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    shadowColor: GAUGE_NEEDLE_COLOR,
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    zIndex: 5,
+  },
+  gaugeNeedleBody: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: GAUGE_NEEDLE_COLOR,
+    borderColor: '#166534',
+    borderWidth: 1,
+    borderTopLeftRadius: GAUGE_NEEDLE_WIDTH,
+    borderTopRightRadius: GAUGE_NEEDLE_WIDTH,
+    borderBottomLeftRadius: GAUGE_NEEDLE_WIDTH / 1.5,
+    borderBottomRightRadius: GAUGE_NEEDLE_WIDTH / 1.5,
+  },
+  gaugeNeedleHighlight: {
+    position: 'absolute',
+    top: 6,
+    width: GAUGE_NEEDLE_WIDTH / 1.5,
+    height: GAUGE_NEEDLE_HEIGHT * 0.6,
+    backgroundColor: '#bbf7d0',
+    borderTopLeftRadius: GAUGE_NEEDLE_WIDTH,
+    borderTopRightRadius: GAUGE_NEEDLE_WIDTH,
+    opacity: 0.6,
+  },
+  gaugeNeedleHub: {
+    position: 'absolute',
+    bottom: -2,
+    left: GAUGE_SIZE / 2 - 10,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#0f172a',
+    borderWidth: 2,
+    borderColor: '#86efac',
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    zIndex: 6,
+  },
+  gaugeTicksOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: GAUGE_SIZE,
+    height: GAUGE_MASK_HEIGHT,
+  },
+  gaugeTickLabel: {
+    fontSize: 10,
+    color: '#6b7280',
+    fontWeight: '600',
   },
   section: {
     padding: 15,

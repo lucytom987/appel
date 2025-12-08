@@ -6,11 +6,10 @@ import {
   FlatList,
   TouchableOpacity,
   RefreshControl,
-  ScrollView,
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { repairDB, elevatorDB } from '../database/db';
+import { repairDB, elevatorDB, userDB } from '../database/db';
 import { syncAll } from '../services/syncService';
 import { repairsAPI } from '../services/api';
 
@@ -18,13 +17,14 @@ export default function RepairsListScreen({ navigation }) {
   const [repairs, setRepairs] = useState([]);
   const [filteredRepairs, setFilteredRepairs] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
-  const [filter, setFilter] = useState('all'); // all, čekanje, u tijeku, završeno
+  const [filter, setFilter] = useState('all');
   const [deleting, setDeleting] = useState(null);
-  const [updating, setUpdating] = useState(null);
 
   useEffect(() => {
     loadRepairs();
-  }, []);
+    const unsubscribe = navigation.addListener('focus', loadRepairs);
+    return unsubscribe;
+  }, [navigation]);
 
   useEffect(() => {
     applyFilter();
@@ -33,23 +33,19 @@ export default function RepairsListScreen({ navigation }) {
   const loadRepairs = () => {
     try {
       const allRepairs = repairDB.getAll() || [];
-      
-      // Dodatna provjera - filtriraj popravke koji nemaju dizalo
-      const validRepairs = allRepairs.filter(r => {
-        const elevatorId = (typeof r.elevatorId === 'object' && r.elevatorId !== null)
-          ? (r.elevatorId._id || r.elevatorId.id)
-          : r.elevatorId;
-        
-        if (!elevatorId) return false;
-        
-        const elevator = elevatorDB.getById(elevatorId);
-        return !!elevator;
-      });
-      
-      // Sortiraj po datumu - najnoviji prvo
-      const sorted = validRepairs.sort((a, b) => 
-        new Date(b.datumPrijave) - new Date(a.datumPrijave)
-      );
+
+      // Ne odbacuj zapise bez dizala: prikaži ih s placeholderom da korisnik zna da postoje
+      const normalizeStatus = (s) => {
+        if (s === 'čekanje' || s === 'cek') return 'pending';
+        if (s === 'u tijeku' || s === 'u_tijeku') return 'in_progress';
+        if (s === 'završen' || s === 'zavrsen') return 'completed';
+        return s || 'pending';
+      };
+
+      const sorted = allRepairs
+        .map((r) => ({ ...r, status: normalizeStatus(r.status) }))
+        .sort((a, b) => new Date(b.datumPrijave) - new Date(a.datumPrijave));
+
       setRepairs(sorted);
     } catch (error) {
       console.error('Greška pri učitavanju popravaka:', error);
@@ -97,62 +93,42 @@ export default function RepairsListScreen({ navigation }) {
     );
   };
 
-  const handleUpdateStatus = async (repair) => {
-    const statusOptions = [
-      { label: 'Na čekanju', value: 'čekanje' },
-      { label: 'U tijeku', value: 'u tijeku' },
-      { label: 'Završeno', value: 'završeno' },
-    ];
-
-    Alert.alert(
-      'Ažuriraj status',
-      'Odaberi novi status:',
-      [
-        ...statusOptions.map(option => ({
-          text: option.label,
-          onPress: async () => {
-            try {
-              setUpdating(repair.id);
-              const updated = { ...repair, status: option.value };
-              
-              // Ažuriraj na backenda ako je sinkroniziran
-              const backendId = repair._id || repair.id;
-              if (repair.synced && backendId && !String(backendId).startsWith('local_')) {
-                await repairsAPI.update(backendId, updated);
-              }
-              
-              // Ažuriraj lokalnu bazu
-              repairDB.update(backendId, updated);
-              loadRepairs();
-            } catch (error) {
-              console.error('Greška pri ažuriranju:', error);
-              Alert.alert('Greška', 'Nije moguće ažurirati status');
-            } finally {
-              setUpdating(null);
-            }
-          }
-        })),
-        { text: 'Otkaži', style: 'cancel' }
-      ]
-    );
-  };
-
   const getStatusColor = (status) => {
     switch (status) {
-      case 'čekanje': return '#f59e0b';
-      case 'u tijeku': return '#3b82f6';
-      case 'završen': return '#10b981';
+      case 'pending': return '#ef4444';
+      case 'in_progress': return '#f59e0b';
+      case 'completed': return '#10b981';
       default: return '#6b7280';
     }
   };
 
   const getStatusLabel = (status) => {
     switch (status) {
-      case 'čekanje': return 'Na čekanju';
-      case 'u tijeku': return 'U tijeku';
-      case 'završen': return 'Završeno';
+      case 'pending': return 'Prijavljen';
+      case 'in_progress': return 'U tijeku';
+      case 'completed': return 'Završeno';
       default: return status;
     }
+  };
+
+  const getServiserName = (serviser) => {
+    if (!serviser) return 'Nepoznat serviser';
+    if (typeof serviser === 'object') {
+      const ime = serviser.ime || serviser.firstName || '';
+      const prezime = serviser.prezime || serviser.lastName || '';
+      const full = `${ime} ${prezime}`.trim();
+      return full || 'Nepoznat serviser';
+    }
+
+    // Ako je serviserID string, probaj dohvatiti korisnika iz lokalne baze radi imena
+    const user = userDB.getById ? userDB.getById(serviser) : null;
+    if (user) {
+      const full = `${user.ime || ''} ${user.prezime || ''}`.trim();
+      if (full) return full;
+    }
+
+    // string ID fallback
+    return serviser.length > 10 ? `${serviser.slice(0, 6)}…` : serviser;
   };
 
   const onRefresh = async () => {
@@ -164,6 +140,10 @@ export default function RepairsListScreen({ navigation }) {
 
   const renderRepairItem = ({ item }) => {
     const datumPrijave = new Date(item.datumPrijave);
+    const prijavaLabel = datumPrijave.toLocaleString('hr-HR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const serviserName = getServiserName(item.serviserID);
+    const prijavio = item.prijavio || '';
+    const kontakt = item.kontaktTelefon || '';
     
     // Pronađi dizalo po ID-u
     const elevator = elevatorDB.getById(item.elevatorId);
@@ -177,10 +157,10 @@ export default function RepairsListScreen({ navigation }) {
           <View style={styles.repairHeader}>
             <View style={styles.repairInfo}>
               <Text style={styles.elevatorName}>
-                {elevator?.nazivStranke || 'N/A'} - {elevator?.ulica || ''} ({elevator?.brojDizala || 'N/A'})
+                {elevator?.ulica || ''}{elevator?.mjesto ? `, ${elevator.mjesto}` : ''} ({elevator?.brojDizala || 'N/A'})
               </Text>
               <Text style={styles.repairDate}>
-                {datumPrijave.toLocaleDateString('hr-HR')}
+                {prijavaLabel}
               </Text>
             </View>
             <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
@@ -195,32 +175,37 @@ export default function RepairsListScreen({ navigation }) {
           <View style={styles.repairFooter}>
             <View style={styles.technicianInfo}>
               <Ionicons name="person-outline" size={16} color="#666" />
-              <Text style={styles.technicianName}>
-                {item.serviserID || 'Nepoznat serviser'}
-              </Text>
+              <View>
+                <Text style={styles.technicianName}>{serviserName}</Text>
+                {(prijavio || kontakt) && (
+                  <Text style={styles.reporterText} numberOfLines={1}>
+                    Prijavio: {prijavio || 'N/A'}{kontakt ? ` • ${kontakt}` : ''}
+                  </Text>
+                )}
+              </View>
             </View>
-            {item.synced && (
-              <Ionicons name="cloud-done-outline" size={16} color="#10b981" />
-            )}
+            <View style={{ width: 60 }} />
           </View>
         </TouchableOpacity>
 
         {/* Action buttons */}
-        <View style={styles.actionButtons}>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.statusButton]}
-            onPress={() => handleUpdateStatus(item)}
-            disabled={updating === item.id}
-          >
-            <Ionicons name="swap-vertical" size={18} color="#3b82f6" />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.deleteButton]}
-            onPress={() => handleDeleteRepair(item)}
-            disabled={deleting === item.id}
-          >
-            <Ionicons name="trash-outline" size={18} color="#ef4444" />
-          </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.floatingDelete}
+          onPress={() => handleDeleteRepair(item)}
+          disabled={deleting === item.id}
+        >
+          <Ionicons name="trash-outline" size={18} color="#ef4444" />
+        </TouchableOpacity>
+        <View style={styles.floatingIconsRight}>
+          <Ionicons
+            name={item.radniNalogPotpisan ? 'document-text-outline' : 'document-outline'}
+            size={16}
+            color={item.radniNalogPotpisan ? '#10b981' : '#ef4444'}
+            style={{ marginRight: 8 }}
+          />
+          {item.synced && (
+            <Ionicons name="cloud-done-outline" size={16} color="#10b981" />
+          )}
         </View>
       </View>
     );
@@ -231,9 +216,9 @@ export default function RepairsListScreen({ navigation }) {
       <Ionicons name="construct-outline" size={64} color="#ccc" />
       <Text style={styles.emptyText}>Nema popravaka</Text>
       <Text style={styles.emptySubtext}>
-        {filter === 'čekanje' ? 'Nema popravaka na čekanju' :
-         filter === 'u tijeku' ? 'Nema popravaka u tijeku' :
-         filter === 'završeno' ? 'Nema završenih popravaka' :
+        {filter === 'pending' ? 'Nema prijavljenih popravaka' :
+         filter === 'in_progress' ? 'Nema popravaka u tijeku' :
+         filter === 'completed' ? 'Nema završenih popravaka' :
          'Još nema logiranih popravaka'}
       </Text>
     </View>
@@ -251,12 +236,12 @@ export default function RepairsListScreen({ navigation }) {
       </View>
 
       {/* Filter tabs */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterContainer}>
+      <View style={styles.filterContainer}>
         {[
           { key: 'all', label: 'Svi' },
-          { key: 'čekanje', label: 'Na čekanju' },
-          { key: 'u tijeku', label: 'U tijeku' },
-          { key: 'završen', label: 'Završeno' },
+          { key: 'pending', label: 'Prijavljeni' },
+          { key: 'in_progress', label: 'U tijeku' },
+          { key: 'completed', label: 'Završeni' },
         ].map(opt => (
           <TouchableOpacity
             key={opt.key}
@@ -268,7 +253,7 @@ export default function RepairsListScreen({ navigation }) {
             </Text>
           </TouchableOpacity>
         ))}
-      </ScrollView>
+      </View>
 
       {/* Repairs list */}
       <FlatList
@@ -307,29 +292,31 @@ const styles = StyleSheet.create({
     color: '#1f2937',
   },
   filterContainer: {
+    flexDirection: 'row',
     backgroundColor: '#fff',
-    paddingHorizontal: 10,
-    paddingVertical: 10,
+    padding: 10,
+    gap: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#e5e5e5',
   },
   filterTab: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+    flex: 1,
     paddingVertical: 8,
     paddingHorizontal: 12,
-    borderRadius: 8,
-    marginRight: 8,
+    borderRadius: 10,
+    alignItems: 'center',
     backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
   },
   filterTabActive: {
-    backgroundColor: '#3b82f6',
+    backgroundColor: '#10b981',
+    borderColor: '#10b981',
   },
   filterText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#666',
+    color: '#4b5563',
   },
   filterTextActive: {
     color: '#fff',
@@ -348,6 +335,7 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 2,
     flexDirection: 'row',
+    position: 'relative',
   },
   repairContent: {
     flex: 1,
@@ -404,6 +392,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
   },
+  reporterText: {
+    fontSize: 12,
+    color: '#888',
+  },
+  footerIcons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   emptyState: {
     flex: 1,
     justifyContent: 'center',
@@ -423,18 +419,28 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   actionButtons: {
-    justifyContent: 'center',
-    paddingRight: 10,
-    gap: 8,
+    display: 'none',
   },
-  actionButton: {
-    padding: 12,
-    borderRadius: 8,
+  floatingDelete: {
+    position: 'absolute',
+    bottom: 12,
+    right: 12,
+    padding: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#fee2e2',
+    backgroundColor: '#fff',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
-  statusButton: {
-    backgroundColor: '#dbeafe',
-  },
-  deleteButton: {
-    backgroundColor: '#fee2e2',
+  floatingIconsRight: {
+    position: 'absolute',
+    bottom: 16,
+    right: 60,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
 });

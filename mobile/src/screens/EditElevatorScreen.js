@@ -17,8 +17,8 @@ import * as SecureStore from 'expo-secure-store';
 import * as Location from 'expo-location';
 import { useAuth } from '../context/AuthContext';
 import LocationPickerModal from '../components/LocationPickerModal';
-import { elevatorDB } from '../database/db';
-import { elevatorsAPI } from '../services/api';
+import { elevatorDB, serviceDB, repairDB } from '../database/db';
+import { elevatorsAPI, servicesAPI, repairsAPI } from '../services/api';
 
 export default function EditElevatorScreen({ navigation, route }) {
   const { elevator } = route.params;
@@ -215,23 +215,75 @@ export default function EditElevatorScreen({ navigation, route }) {
     }
 
     setDeleting(true);
+    let eid;
 
     try {
       // Provjeri je li offline korisnik (demo)
       const token = await SecureStore.getItemAsync('userToken');
       const isOfflineUser = token?.startsWith('offline_token_');
 
-      const eid = elevator._id || elevator.id;
+      eid = elevator._id || elevator.id;
       if (!eid) {
         throw new Error('Nedostaje ID dizala (id/_id)');
       }
 
-      // Ako je online i pravi korisnik - obriši s backenda
+      // Ako je online i pravi korisnik - obriši s backenda (elevator + vezani servisi/popravci)
       if (online && !isOfflineUser) {
-        await elevatorsAPI.delete(eid);
+        try {
+          await elevatorsAPI.delete(eid);
+        } catch (err) {
+          // Ako backend vrati 404 za dizalo, nastavi na brisanje vezanih i lokalno
+          const status = err?.status || err?.response?.status;
+          if (status !== 404) throw err;
+        }
+
+        // Pokušaj obrisati vezane servise/popravke na backendu (best effort)
+        try {
+          const services = serviceDB.getAll(eid) || [];
+          for (const s of services) {
+            const sid = s._id || s.id;
+            if (sid && !String(sid).startsWith('local_')) {
+              try { await servicesAPI.delete(sid); } catch { /* ignore individual failures */ }
+            }
+          }
+        } catch (e) {
+          console.log('Skip remote service delete:', e?.message);
+        }
+
+        try {
+          const repairs = repairDB.getAll(eid) || [];
+          for (const r of repairs) {
+            const rid = r._id || r.id;
+            if (rid && !String(rid).startsWith('local_')) {
+              try { await repairsAPI.delete(rid); } catch { /* ignore individual failures */ }
+            }
+          }
+        } catch (e) {
+          console.log('Skip remote repair delete:', e?.message);
+        }
       }
 
-      // Obriši iz lokalne baze (uvijek, offline ili online)
+      // Obriši iz lokalne baze (uvijek, offline ili online) uključujući vezane servise/popravke
+      try {
+        const services = serviceDB.getAll(eid) || [];
+        services.forEach((s) => {
+          const sid = s._id || s.id;
+          if (sid) serviceDB.delete(sid);
+        });
+      } catch (e) {
+        console.log('Skip local service delete:', e?.message);
+      }
+
+      try {
+        const repairs = repairDB.getAll(eid) || [];
+        repairs.forEach((r) => {
+          const rid = r._id || r.id;
+          if (rid) repairDB.delete(rid);
+        });
+      } catch (e) {
+        console.log('Skip local repair delete:', e?.message);
+      }
+
       elevatorDB.delete(eid);
 
       Alert.alert('Uspjeh', 'Dizalo obrisano', [
@@ -245,26 +297,44 @@ export default function EditElevatorScreen({ navigation, route }) {
 
     } catch (error) {
       console.error('Greška pri brisanju dizala:', error);
-      
-      // Ako je greška s backenda - obriši lokalno i nastavи
-      if (online) {
-        // Ako je online i brisanje s backenda failalo - prikazi grešku
-        Alert.alert('Greška', error.response?.data?.message || 'Nije moguće obrisati dizalo s backenda');
-      } else {
-        // Ako je offline - obriši lokalno kako je planirano
+
+      const status = error?.status || error?.response?.status;
+      const backendMsg = error?.response?.data?.message || error?.message;
+      const isNetwork = Boolean(error?.network);
+      const wasQueued = Boolean(error?.queued);
+
+      // Ako backend kaže 404 (već obrisano), ukloni lokalno i nastavi
+      if (status === 404) {
+        try {
+          elevatorDB.delete(eid);
+        } catch (localError) {
+          console.log('Lok. delete nakon 404 nije uspio:', localError?.message);
+        }
+        Alert.alert('Info', 'Dizalo je već obrisano na serveru. Uklonjeno lokalno.', [
+          {
+            text: 'OK',
+            onPress: () => navigation.navigate('Elevators'),
+          },
+        ]);
+        return;
+      }
+
+      if (!online || isNetwork || wasQueued) {
+        // Offline ili mrežna/queued greška: obriši lokalno i sync kasnije
         try {
           elevatorDB.delete(eid);
           Alert.alert('Uspjeh', 'Dizalo obrisano lokalno (sync će se obaviti kada budete online)', [
             { 
               text: 'OK', 
-              onPress: () => {
-                navigation.navigate('Elevators');
-              }
+              onPress: () => navigation.navigate('Elevators'),
             }
           ]);
         } catch (localError) {
           Alert.alert('Greška', 'Nije moguće obrisati dizalo');
         }
+      } else {
+        // Online druga greška
+        Alert.alert('Greška', backendMsg || 'Nije moguće obrisati dizalo s backenda');
       }
     } finally {
       setDeleting(false);

@@ -10,9 +10,10 @@ import {
   Platform,
   Alert,
 } from 'react-native';
-import { version } from '../../package.json';
 import { useAuth } from '../context/AuthContext';
 import * as SecureStore from 'expo-secure-store';
+
+const APP_VERSION = '0.01 beta';
 
 export default function LoginScreen() {
   const { login, loading, setUser } = useAuth();
@@ -94,7 +95,7 @@ export default function LoginScreen() {
 
         {/* Footer */}
         <Text style={styles.footer}>
-          APPEL v{version} • Build 9 • Offline-First
+          APPEL v{APP_VERSION} • Offline-first
         </Text>
       </View>
     </KeyboardAvoidingView>

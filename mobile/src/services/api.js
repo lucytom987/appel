@@ -150,18 +150,30 @@ export const repairsAPI = {
       datumPopravka: data.datumPopravka || data.repairedDate,
       opisKvara: data.opisKvara || data.faultDescription,
       opisPopravka: data.opisPopravka || data.repairDescription,
-      radniNalogPotpisan: data.radniNalogPotpisan || data.workOrderSigned,
-      popravkaUPotpunosti: data.popravkaUPotpunosti || data.repairCompleted,
+      radniNalogPotpisan: typeof data.radniNalogPotpisan === 'boolean'
+        ? data.radniNalogPotpisan
+        : (typeof data.workOrderSigned === 'boolean' ? data.workOrderSigned : false),
+      popravkaUPotpunosti: typeof data.popravkaUPotpunosti === 'boolean'
+        ? data.popravkaUPotpunosti
+        : (typeof data.repairCompleted === 'boolean' ? data.repairCompleted : false),
       napomene: data.napomene || data.notes,
+      prijavio: data.prijavio || data.reportedBy,
+      kontaktTelefon: data.kontaktTelefon || data.contactPhone,
     }),
   update: (id, data) =>
     api.put(`/repairs/${id}`, {
       status: data.status,
       opisPopravka: data.opisPopravka || data.repairDescription,
       datumPopravka: data.datumPopravka || data.repairedDate,
-      radniNalogPotpisan: data.radniNalogPotpisan || data.workOrderSigned,
-      popravkaUPotpunosti: data.popravkaUPotpunosti || data.repairCompleted,
+      radniNalogPotpisan: typeof data.radniNalogPotpisan === 'boolean'
+        ? data.radniNalogPotpisan
+        : (typeof data.workOrderSigned === 'boolean' ? data.workOrderSigned : undefined),
+      popravkaUPotpunosti: typeof data.popravkaUPotpunosti === 'boolean'
+        ? data.popravkaUPotpunosti
+        : (typeof data.repairCompleted === 'boolean' ? data.repairCompleted : undefined),
       napomene: data.napomene || data.notes,
+      prijavio: data.prijavio || data.reportedBy,
+      kontaktTelefon: data.kontaktTelefon || data.contactPhone,
     }),
   delete: (id) => api.delete(`/repairs/${id}`),
   getStats: () => api.get('/repairs/stats/overview'),

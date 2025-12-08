@@ -4,7 +4,7 @@ import * as SQLite from 'expo-sqlite';
 const db = SQLite.openDatabaseSync('appel.db');
 
 // Database version
-const DB_VERSION = 7; // Add prijavio/kontaktTelefon na repairs
+const DB_VERSION = 8; // Add primioPoziv + guarded unsynced reads
 
 // Provjeri verziju baze i migriraj ako je potrebno
 const checkAndMigrate = () => {
@@ -139,6 +139,7 @@ export const initDatabase = () => {
         napomene TEXT,
         prijavio TEXT,
         kontaktTelefon TEXT,
+        primioPoziv TEXT,
         kreiranDatum TEXT,
         azuriranDatum TEXT,
         synced INTEGER DEFAULT 0,
@@ -207,6 +208,9 @@ export const initDatabase = () => {
       CREATE INDEX IF NOT EXISTS idx_messages_synced ON messages(synced);
     `);
 
+
+    // Dodaj nove kolone na repairs ako nedostaju
+    try { db.execSync('ALTER TABLE repairs ADD COLUMN primioPoziv TEXT;'); } catch (e) {}
     console.log('✅ SQLite baza inicijalizirana');
     return true;
   } catch (error) {
@@ -412,12 +416,17 @@ export const serviceDB = {
   },
   
   getUnsynced: () => {
-    const services = db.getAllSync('SELECT * FROM services WHERE synced = 0');
-    return services.map(s => ({
-      ...s,
-      checklist: typeof s.checklist === 'string' ? JSON.parse(s.checklist || '[]') : (s.checklist || []),
-      nedostaci: typeof s.nedostaci === 'string' ? JSON.parse(s.nedostaci || '[]') : (s.nedostaci || [])
-    }));
+    try {
+      const services = db.getAllSync('SELECT * FROM services WHERE synced = 0');
+      return services.map(s => ({
+        ...s,
+        checklist: typeof s.checklist === 'string' ? JSON.parse(s.checklist || '[]') : (s.checklist || []),
+        nedostaci: typeof s.nedostaci === 'string' ? JSON.parse(s.nedostaci || '[]') : (s.nedostaci || [])
+      }));
+    } catch (e) {
+      console.log('⚠️ services getUnsynced failed:', e?.message);
+      return [];
+    }
   },
   
   bulkInsert: (services) => {
@@ -472,8 +481,8 @@ export const repairDB = {
     return db.runSync(
       `INSERT INTO repairs (id, elevatorId, serviserID, datumPrijave, datumPopravka, 
        opisKvara, opisPopravka, status, radniNalogPotpisan, popravkaUPotpunosti, 
-       napomene, prijavio, kontaktTelefon, kreiranDatum, azuriranDatum, synced, updated_at) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       napomene, prijavio, kontaktTelefon, primioPoziv, kreiranDatum, azuriranDatum, synced, updated_at) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         elevatorId,
@@ -488,6 +497,7 @@ export const repairDB = {
         repair.napomene,
         repair.prijavio,
         repair.kontaktTelefon,
+        repair.primioPoziv,
         repair.kreiranDatum || new Date().toISOString(),
         repair.azuriranDatum || new Date().toISOString(),
         syncedFlag,
@@ -511,7 +521,7 @@ export const repairDB = {
     return db.runSync(
       `UPDATE repairs SET elevatorId=?, serviserID=?, datumPrijave=?, datumPopravka=?, opisKvara=?, 
        opisPopravka=?, status=?, radniNalogPotpisan=?, popravkaUPotpunosti=?, 
-       napomene=?, prijavio=?, kontaktTelefon=?, azuriranDatum=?, synced=?, updated_at=? WHERE id=?`,
+       napomene=?, prijavio=?, kontaktTelefon=?, primioPoziv=?, azuriranDatum=?, synced=?, updated_at=? WHERE id=?`,
       [
         elevatorId,
         serviserID,
@@ -525,6 +535,7 @@ export const repairDB = {
         repair.napomene,
         repair.prijavio,
         repair.kontaktTelefon,
+        repair.primioPoziv,
         repair.azuriranDatum || new Date().toISOString(),
         syncedFlag,
         Date.now(),
@@ -538,7 +549,12 @@ export const repairDB = {
   },
   
   getUnsynced: () => {
-    return db.getAllSync('SELECT * FROM repairs WHERE synced = 0');
+    try {
+      return db.getAllSync('SELECT * FROM repairs WHERE synced = 0');
+    } catch (e) {
+      console.log('⚠️ repairs getUnsynced failed:', e?.message);
+      return [];
+    }
   },
   
   bulkInsert: (repairs) => {

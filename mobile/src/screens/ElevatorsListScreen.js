@@ -134,7 +134,6 @@ export default function ElevatorsListScreen({ navigation }) {
         </View>
       </View>
 
-      <Ionicons name="chevron-forward" size={20} color="#d1d5db" style={styles.chevron} />
     </TouchableOpacity>
   );
 
@@ -241,7 +240,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 28,
-    fontWeight: 'bold',
+    fontWeight: '800',
     color: '#111827',
   },
   headerRight: {
@@ -256,7 +255,7 @@ const styles = StyleSheet.create({
   },
   count: {
     fontSize: 18,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#6b7280',
   },
   searchContainer: {
@@ -327,14 +326,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   address: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 17,
+    fontWeight: '700',
     color: '#111827',
     marginBottom: 4,
   },
   buildingCode: {
-    fontSize: 14,
+    fontSize: 15,
     color: '#6b7280',
+    fontWeight: '600',
   },
   statusBadge: {
     paddingHorizontal: 12,
@@ -342,9 +342,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   statusText: {
-    fontSize: 12,
+    fontSize: 13,
     color: '#fff',
-    fontWeight: '600',
+    fontWeight: '700',
   },
   elevatorDetails: {
     gap: 6,
@@ -355,14 +355,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   detailText: {
-    fontSize: 14,
+    fontSize: 15,
     color: '#6b7280',
-  },
-  chevron: {
-    position: 'absolute',
-    right: 16,
-    top: '50%',
-    marginTop: -10,
+    fontWeight: '600',
   },
   emptyContainer: {
     alignItems: 'center',

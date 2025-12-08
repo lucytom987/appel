@@ -8,7 +8,7 @@ import {
   Alert,
   Linking,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { serviceDB, repairDB, elevatorDB, userDB } from '../database/db';
@@ -16,6 +16,7 @@ import { useAuth } from '../context/AuthContext';
 import { servicesAPI } from '../services/api';
 
 export default function ElevatorDetailsScreen({ route, navigation }) {
+  const insets = useSafeAreaInsets();
   const { elevator: rawElevator } = route.params || {};
   // Ako je dizalo obrisano ili ne postoji u parametrima, prikaži fallback umjesto rušenja
   if (!rawElevator) {
@@ -300,7 +301,12 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
           <InfoRow icon="person" label="Ime i prezime" value={elevator.kontaktOsoba.imePrezime} />
         )}
         {elevator.kontaktOsoba && elevator.kontaktOsoba.mobitel && (
-          <InfoRow icon="call" label="Mobitel" value={elevator.kontaktOsoba.mobitel} />
+          <InfoRow
+            icon="call"
+            label="Mobitel"
+            value={elevator.kontaktOsoba.mobitel}
+            onPress={() => Linking.openURL(`tel:${elevator.kontaktOsoba.mobitel}`)}
+          />
         )}
         {elevator.kontaktOsoba && elevator.kontaktOsoba.email && (
           <InfoRow icon="mail" label="E-mail" value={elevator.kontaktOsoba.email} />
@@ -369,21 +375,10 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
         <Text style={styles.checkHistoryHint}>Prikazuje koliko dana je prošlo od zadnje provjere svake stavke.</Text>
       </View>
 
-      <View style={styles.actionButtons}>
-        {elevator.kontaktOsoba && typeof elevator.kontaktOsoba === 'object' && 
-         elevator.kontaktOsoba.mobitel && typeof elevator.kontaktOsoba.mobitel === 'string' && (
-          <TouchableOpacity 
-            style={styles.actionButton} 
-            onPress={() => Linking.openURL(`tel:${elevator.kontaktOsoba.mobitel}`)}
-          >
-            <Ionicons name="call" size={20} color="#fff" />
-            <Text style={styles.actionButtonText}>Pozovi kontakt osobu</Text>
-          </TouchableOpacity>
-        )}
-
-        {elevator.koordinate && typeof elevator.koordinate === 'object' && 
-         typeof elevator.koordinate.latitude === 'number' && elevator.koordinate.latitude !== 0 &&
-         typeof elevator.koordinate.longitude === 'number' && elevator.koordinate.longitude !== 0 && (
+      {elevator.koordinate && typeof elevator.koordinate === 'object' && 
+       typeof elevator.koordinate.latitude === 'number' && elevator.koordinate.latitude !== 0 &&
+       typeof elevator.koordinate.longitude === 'number' && elevator.koordinate.longitude !== 0 && (
+        <View style={styles.actionButtons}>
           <TouchableOpacity 
             style={styles.actionButton}
             onPress={() => {
@@ -394,8 +389,8 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
             <Ionicons name="map" size={20} color="#fff" />
             <Text style={styles.actionButtonText}>Otvori u Mapama</Text>
           </TouchableOpacity>
-        )}
-      </View>
+        </View>
+      )}
     </View>
   );
 
@@ -571,14 +566,17 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
       </View>
 
       {/* Content */}
-      <ScrollView style={styles.scrollView}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={{ paddingBottom: Math.max(insets.bottom + 20, 40) }}
+      >
         {activeTab === 'info' && renderInfoTab()}
         {activeTab === 'services' && renderServicesTab()}
         {activeTab === 'repairs' && renderRepairsTab()}
       </ScrollView>
 
       {/* Floating Action Buttons */}
-      <View style={styles.fabContainer}>
+      <View style={[styles.fabContainer, { bottom: Math.max(insets.bottom + 12, 20) }]}>
         <TouchableOpacity style={[styles.fab, styles.fabSecondary]} onPress={handleReportFault}>
           <Ionicons name="construct" size={24} color="#fff" />
         </TouchableOpacity>
@@ -591,18 +589,19 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
 }
 
 // Helper component
-function InfoRow({ icon, label, value }) {
+function InfoRow({ icon, label, value, onPress }) {
   // Osiguraj da je vrijednost sigurno string ili prazna
   const safeValue = value ? String(value).trim() : '';
+  const Wrapper = onPress ? TouchableOpacity : View;
 
   return (
-    <View style={styles.infoRow}>
+    <Wrapper style={[styles.infoRow, onPress && styles.infoRowPressable]} onPress={onPress} activeOpacity={0.7}>
       <View style={styles.infoLeft}>
         <Ionicons name={icon} size={18} color="#6b7280" />
         <Text style={styles.infoLabel}>{label}</Text>
       </View>
-      <Text style={styles.infoValue}>{safeValue || '-'}</Text>
-    </View>
+      <Text style={[styles.infoValue, onPress && styles.infoValueLink]}>{safeValue || '-'}</Text>
+    </Wrapper>
   );
 }
 
@@ -634,8 +633,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   headerTitle: {
-    fontSize: 17,
-    fontWeight: '700',
+    fontSize: 19,
+    fontWeight: '800',
     color: '#111827',
   },
   headerNumberBadge: {
@@ -647,13 +646,14 @@ const styles = StyleSheet.create({
     borderColor: '#e0e7ff',
   },
   headerNumberText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '700',
     color: '#1f2937',
   },
   headerSubtitle: {
-    fontSize: 13,
+    fontSize: 15,
     color: '#6b7280',
+    fontWeight: '600',
     marginTop: 2,
   },
   headerRight: {
@@ -714,8 +714,8 @@ const styles = StyleSheet.create({
     borderColor: '#e5e7eb',
   },
   sectionTitle: {
-    fontSize: 15,
-    fontWeight: '700',
+    fontSize: 17,
+    fontWeight: '800',
     color: '#111827',
     marginBottom: 10,
   },
@@ -733,18 +733,20 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   infoLabel: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#6b7280',
+    fontWeight: '600',
   },
   infoValue: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#111827',
-    fontWeight: '500',
+    fontWeight: '600',
   },
   notesText: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#4b5563',
-    lineHeight: 20,
+    lineHeight: 22,
+    fontWeight: '500',
   },
   elevatorsInline: {
     flexDirection: 'row',
@@ -816,6 +818,13 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  infoRowPressable: {
+    paddingVertical: 10,
+  },
+  infoValueLink: {
+    color: '#2563eb',
+    fontWeight: '700',
   },
   historyCard: {
     backgroundColor: '#fff',

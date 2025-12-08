@@ -64,8 +64,9 @@ export default function RepairDetailsScreen({ route, navigation }) {
     if (repairData.serviserID && currentUserId && repairData.serviserID === currentUserId) return user || { id: repairData.serviserID };
     return { ime: '', prezime: '', id: repairData.serviserID };
   })();
-  const reporterName = repairData.prijavio || formatName(user) || 'Nije uneseno';
-  const reporterPhone = repairData.kontaktTelefon || user?.telefon || user?.phone || '';
+  const receivedBy = repairData.primioPoziv || formatName(user) || 'Nije uneseno';
+  const reporterName = repairData.prijavio || 'Nije uneseno';
+  const reporterPhone = repairData.kontaktTelefon || '';
   const workOrderSigned = Boolean(repairData.radniNalogPotpisan);
   const workOrderColor = workOrderSigned ? '#10b981' : '#ef4444';
   const workOrderIcon = workOrderSigned ? 'document-text-outline' : 'document-outline';
@@ -137,10 +138,11 @@ export default function RepairDetailsScreen({ route, navigation }) {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Prijavio kvar</Text>
-          <DetailRow label="Ime i prezime" value={reporterName} />
+          <Text style={styles.sectionTitle}>Poziv</Text>
+          <DetailRow label="Primio poziv" value={receivedBy || 'Nije uneseno'} />
+          <DetailRow label="Pozivatelj" value={reporterName || 'Nije uneseno'} />
           <DetailRow
-            label="Telefon"
+            label="Telefon pozivatelja"
             value={reporterPhone || 'Nije uneseno'}
             action={reporterPhone ? () => Linking.openURL(`tel:${reporterPhone}`) : null}
             actionIcon="call"
@@ -291,24 +293,24 @@ function DetailRow({ label, value, badgeColor, action, actionIcon }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5' },
   header: { backgroundColor: '#fff', paddingTop: 50, paddingBottom: 15, paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: '#e5e5e5' },
-  headerTitle: { fontSize: 18, fontWeight: '600', color: '#1f2937' },
+  headerTitle: { fontSize: 19, fontWeight: '700', color: '#1f2937' },
   content: { flex: 1 },
   card: { backgroundColor: '#fff', padding: 16, marginTop: 12, borderRadius: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 2 },
   sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
-  sectionTitle: { fontSize: 15, fontWeight: '700', color: '#111827' },
+  sectionTitle: { fontSize: 17, fontWeight: '800', color: '#111827' },
   detailRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  detailLabel: { fontSize: 14, color: '#6b7280' },
-  detailValue: { fontSize: 14, color: '#1f2937', fontWeight: '500' },
+  detailLabel: { fontSize: 15, color: '#6b7280', fontWeight: '600' },
+  detailValue: { fontSize: 15, color: '#1f2937', fontWeight: '600' },
   detailValueWrap: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   actionIconBtn: { paddingHorizontal: 6, paddingVertical: 4 },
   badgeDot: { width: 10, height: 10, borderRadius: 5 },
-  notes: { fontSize: 14, color: '#4b5563', lineHeight: 20 },
+  notes: { fontSize: 15, color: '#4b5563', lineHeight: 22, fontWeight: '500' },
   elevatorBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, backgroundColor: '#eef2ff', borderWidth: 1, borderColor: '#e0e7ff' },
-  elevatorBadgeText: { fontSize: 13, fontWeight: '700', color: '#1f2937' },
+  elevatorBadgeText: { fontSize: 14, fontWeight: '700', color: '#1f2937' },
   statusHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   statusIcon: { marginRight: -2 },
   statusPill: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
-  statusPillText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  statusPillText: { color: '#fff', fontSize: 14, fontWeight: '700' },
   primaryButton: {
     marginTop: 20,
     marginHorizontal: 20,

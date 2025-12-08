@@ -50,8 +50,9 @@ export default function AddRepairScreen({ navigation, route }) {
     reportedDate: new Date(),
     opis: '',
     napomene: '',
-    prijavio: '',
-    kontaktTelefon: '',
+    primioPoziv: '',
+    pozivatelj: '',
+    pozivateljTelefon: '',
   });
 
   // Prefill reporter/contact from logged-in user for convenience
@@ -66,8 +67,8 @@ export default function AddRepairScreen({ navigation, route }) {
     if (!defaultReporter.name && !defaultReporter.phone) return;
     setFormData((prev) => ({
       ...prev,
-      prijavio: prev.prijavio || defaultReporter.name,
-      kontaktTelefon: prev.kontaktTelefon || defaultReporter.phone,
+      primioPoziv: prev.primioPoziv || defaultReporter.name,
+      pozivateljTelefon: prev.pozivateljTelefon || '',
     }));
   }, [defaultReporter.name, defaultReporter.phone]);
 
@@ -156,8 +157,9 @@ export default function AddRepairScreen({ navigation, route }) {
     setLoading(true);
 
     try {
-      const reporterName = formData.prijavio?.trim() || defaultReporter.name;
-      const reporterPhone = formData.kontaktTelefon?.trim() || defaultReporter.phone;
+      const receiverName = formData.primioPoziv?.trim() || defaultReporter.name;
+      const reporterName = formData.pozivatelj?.trim() || '';
+      const reporterPhone = formData.pozivateljTelefon?.trim() || '';
       const serviserId = user?._id || user?.id;
       const repairData = {
         elevatorId: selectedElevator._id || selectedElevator.id,
@@ -172,6 +174,7 @@ export default function AddRepairScreen({ navigation, route }) {
         napomene: formData.napomene,
         prijavio: reporterName,
         kontaktTelefon: reporterPhone,
+        primioPoziv: receiverName,
       };
 
       // Provjeri je li offline korisnik (demo korisnik)
@@ -311,21 +314,21 @@ export default function AddRepairScreen({ navigation, route }) {
           />
         </View>
 
-        {/* Tko je prijavio */}
+        {/* Pozivatelj */}
         <View style={styles.section}>
-          <Text style={styles.label}>Tko je prijavio</Text>
+          <Text style={styles.label}>Pozivatelj</Text>
           <TextInput
             style={styles.input}
-            value={formData.prijavio}
-            onChangeText={(text) => setFormData(prev => ({ ...prev, prijavio: text }))}
-            placeholder="Ime i prezime"
+            value={formData.pozivatelj}
+            onChangeText={(text) => setFormData(prev => ({ ...prev, pozivatelj: text }))}
+            placeholder="Ime i prezime pozivatelja"
             placeholderTextColor="#9ca3af"
           />
           <TextInput
             style={[styles.input, { marginTop: 10 }]}
-            value={formData.kontaktTelefon}
-            onChangeText={(text) => setFormData(prev => ({ ...prev, kontaktTelefon: text }))}
-            placeholder="Kontakt telefon"
+            value={formData.pozivateljTelefon}
+            onChangeText={(text) => setFormData(prev => ({ ...prev, pozivateljTelefon: text }))}
+            placeholder="Telefon pozivatelja"
             placeholderTextColor="#9ca3af"
             keyboardType="phone-pad"
           />
@@ -448,10 +451,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#f9fafb',
     borderWidth: 1,
     borderColor: '#e5e7eb',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
     color: '#1f2937',
+  },
+  readonlyInput: {
+    backgroundColor: '#f3f4f6',
   },
   textArea: {
     minHeight: 100,

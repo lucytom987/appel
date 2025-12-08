@@ -159,6 +159,7 @@ export const repairsAPI = {
       napomene: data.napomene || data.notes,
       prijavio: data.prijavio || data.reportedBy,
       kontaktTelefon: data.kontaktTelefon || data.contactPhone,
+      primioPoziv: data.primioPoziv || data.callReceivedBy,
     }),
   update: (id, data) =>
     api.put(`/repairs/${id}`, {
@@ -174,6 +175,7 @@ export const repairsAPI = {
       napomene: data.napomene || data.notes,
       prijavio: data.prijavio || data.reportedBy,
       kontaktTelefon: data.kontaktTelefon || data.contactPhone,
+      primioPoziv: data.primioPoziv || data.callReceivedBy,
     }),
   delete: (id) => api.delete(`/repairs/${id}`),
   getStats: () => api.get('/repairs/stats/overview'),

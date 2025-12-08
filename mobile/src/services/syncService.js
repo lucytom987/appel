@@ -429,15 +429,24 @@ export const syncRepairsFromServer = async () => {
     })();
 
     const last = shouldFullSync ? null : await getLastSync('lastSyncRepairs');
-    const params = last ? { updatedAfter: last } : {};
+    const baseParams = last ? { updatedAfter: last, includeDeleted: true } : { includeDeleted: true };
+    const limit = 200;
+    let skip = 0;
+    let fetched = 0;
+    let total = 0;
+
     if (shouldFullSync && SecureStore.deleteItemAsync) {
       await SecureStore.deleteItemAsync('lastSyncRepairs');
       console.log('Repair sync: forcing full pull (cleared lastSyncRepairs)');
     }
-    console.log('Sync repairs, params:', params);
-    const res = await repairsAPI.getAll(params);
-    const serverRepairs = res.data.data || [];
-    serverRepairs.forEach((r) => {
+    do {
+      const params = { ...baseParams, limit, skip };
+      console.log('Sync repairs, params:', params);
+      const res = await repairsAPI.getAll(params);
+      const serverRepairs = res.data.data || [];
+      total = res.data.total || serverRepairs.length;
+
+      serverRepairs.forEach((r) => {
       const elevatorId = r.elevatorId?._id || r.elevatorId?.id || r.elevator || r.elevatorId;
       const serviserID = r.serviserID?._id || r.serviserID?.id || r.serviserID;
       const local = repairDB.getById?.(r._id);
@@ -479,12 +488,16 @@ export const syncRepairsFromServer = async () => {
       } catch {
         repairDB.update(r._id, payload);
       }
-    });
+      });
+
+      fetched += serverRepairs.length;
+      skip += serverRepairs.length;
+    } while (fetched < total && skip < 5000);
     await setLastSync('lastSyncRepairs');
     if (shouldFullSync) {
       await setLastFull('lastFullRepairs');
     }
-    console.log(`Repairs synced: ${serverRepairs.length}`);
+    console.log(`Repairs synced: ${fetched} (total reported: ${total || fetched})`);
     return true;
   } catch (err) {
     console.log('Greška sync repairs:', err.message);

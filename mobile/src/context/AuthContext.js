@@ -33,8 +33,8 @@ export const AuthProvider = ({ children }) => {
 
   const initializeApp = async () => {
     try {
-      console.log('Inicijaliziram bazu...');
-      initDatabase();
+      // App.js već zove initDatabase; ovdje preskačemo dupli poziv
+      console.log('Preskačem initDatabase u AuthContext (već inicijalizirano)');
 
       const online = await checkOnlineStatus();
       setIsOnline(online);

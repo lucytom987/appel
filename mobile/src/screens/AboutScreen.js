@@ -11,8 +11,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function AboutScreen({ navigation }) {
-  const currentVersion = '1.0.1';
-  const currentBuild = '2';
+  const currentVersion = '1.1.0';
+  const currentBuild = '3';
   const [versionTapCount, setVersionTapCount] = React.useState(0);
 
   const handleVersionPress = () => {
@@ -105,11 +105,59 @@ export default function AboutScreen({ navigation }) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Trenutni status</Text>
           <Text style={styles.description}>
-            Verzija v{currentVersion} (build {currentBuild}).
+            Verzija v{currentVersion} (build {currentBuild}) — 9.12.2025.
             Fokus: usklađeni brojači popravaka (filtracija obrisanih/duplikata), blaži zoom pri lociranju na karti,
-            konzistentan back na listu popravaka, novi prikaz liste dizala (adresa prva, status chip u headeru),
+            konzistentan back na listu popravaka, novi prikaz liste dizala (adresa prva, filter čip u headeru),
             pretraga po adresi/nazivu/kontakt osobi.
           </Text>
+        </View>
+
+        {/* Version history */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Povijest verzija</Text>
+          <View style={styles.versionList}>
+            <View style={styles.versionItem}>
+              <Text style={styles.versionLabel}>v1.1.0 (build 3) • 9.12.2025</Text>
+              <Text style={styles.versionNotes}>
+                Filtriranje obrisanih/duplikata u statistikama popravaka, blaži zoom pri lociranju na karti,
+                back na popravke/home, nova lista dizala (adresa prva, header čip), pretraga po kontakt osobi.
+              </Text>
+            </View>
+            <View style={styles.versionItem}>
+              <Text style={styles.versionLabel}>v1.0.6 (build 7) • 22.11.2025</Text>
+              <Text style={styles.versionNotes}>
+                SafeArea/KeyboardAvoiding na glavnim ekranima, UX poboljšanja.
+              </Text>
+            </View>
+            <View style={styles.versionItem}>
+              <Text style={styles.versionLabel}>v1.0.5 (build 6) • 22.11.2025</Text>
+              <Text style={styles.versionNotes}>
+                Brza kartica na karti, optimizacija učitavanja karte i centriranja.
+              </Text>
+            </View>
+            <View style={styles.versionItem}>
+              <Text style={styles.versionLabel}>v1.0.4 (build 5) • 22.11.2025</Text>
+              <Text style={styles.versionNotes}>
+                Geocoding i map picker za dizala, GPS UI poboljšanja.
+              </Text>
+            </View>
+            <View style={styles.versionItem}>
+              <Text style={styles.versionLabel}>v1.0.3 (build 4) • 21.11.2025</Text>
+              <Text style={styles.versionNotes}>Google Maps integracija i vizualizacija dizala.</Text>
+            </View>
+            <View style={styles.versionItem}>
+              <Text style={styles.versionLabel}>v1.0.2 (build 3) • 21.11.2025</Text>
+              <Text style={styles.versionNotes}>Checklist overhaul za servise.</Text>
+            </View>
+            <View style={styles.versionItem}>
+              <Text style={styles.versionLabel}>v1.0.1 (build 2) • 20.11.2025</Text>
+              <Text style={styles.versionNotes}>Password toggle fix, opcionalni broj ugovora.</Text>
+            </View>
+            <View style={styles.versionItem}>
+              <Text style={styles.versionLabel}>v1.0.0 (build 1) • 20.11.2025</Text>
+              <Text style={styles.versionNotes}>Inicijalni production build.</Text>
+            </View>
+          </View>
         </View>
 
         {/* Tech Stack */}
@@ -264,6 +312,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#4b5563',
     lineHeight: 22,
+  },
+  versionList: {
+    gap: 12,
+  },
+  versionItem: {
+    gap: 4,
+  },
+  versionLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1f2937',
+  },
+  versionNotes: {
+    fontSize: 13,
+    color: '#4b5563',
+    lineHeight: 20,
   },
   featuresList: {
     gap: 12,

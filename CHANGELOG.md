@@ -17,7 +17,7 @@ APPEL je mobilna aplikacija za upravljanje dizalima, servisima i hitnim popravci
 
 ## Povijest Verzija
 
-### Build 8 (v1.0.1) - 9. Prosinac 2025
+### Build 8 (v1.1.0) - 9. Prosinac 2025
 **UX i navigacija (popravci/dizala) + blaži zoom na karti**
 
 #### Izmjene:

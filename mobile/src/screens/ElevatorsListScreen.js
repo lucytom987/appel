@@ -188,7 +188,7 @@ export default function ElevatorsListScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f9fafb',
+    backgroundColor: '#eff6ff', // blago plava pozadina
   },
   header: {
     backgroundColor: '#fff',

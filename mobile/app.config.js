@@ -3,7 +3,7 @@ module.exports = ({ config }) => ({
   expo: {
     name: "mobile",
     slug: "mobile",
-    version: "1.0.1",
+    version: "1.1.0",
     orientation: "portrait",
     icon: "./assets/icon.png",
     userInterfaceStyle: "light",
@@ -15,10 +15,10 @@ module.exports = ({ config }) => ({
     },
     ios: {
       supportsTablet: true,
-      buildNumber: "2",
+      buildNumber: "3",
     },
     android: {
-      versionCode: 2,
+      versionCode: 3,
       package: "com.appel.elevators",
       adaptiveIcon: {
         foregroundImage: "./assets/adaptive-icon.png",

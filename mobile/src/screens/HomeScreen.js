@@ -20,8 +20,6 @@ import { elevatorDB, serviceDB, repairDB } from '../database/db';
 import { syncAll } from '../services/syncService';
 import ms, { rf } from '../utils/scale';
 
-const APP_VERSION = 'v1.0.1 (b2)';
-
 // Gauge geometry (semicircle)
 const GAUGE_SIZE = 140;
 const GAUGE_RADIUS = GAUGE_SIZE / 2;
@@ -225,8 +223,7 @@ export default function HomeScreen({ navigation }) {
       {/* Header */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.greeting}>Pozdrav, {user?.ime}!</Text>
-          <Text style={styles.versionLabel}>{APP_VERSION}</Text>
+          <Text style={styles.greeting}>Pozdrav, {user?.prezime}!</Text>
           <View style={styles.statusContainer}>
             <View style={[styles.statusDot, { backgroundColor: online ? '#10b981' : '#ef4444' }]} />
             <Text style={styles.statusText}>
@@ -256,7 +253,7 @@ export default function HomeScreen({ navigation }) {
         {/* Stats Cards */}
         <View style={styles.statsGrid}>
           <TouchableOpacity 
-            style={styles.statCard}
+            style={[styles.statCard, styles.statCardElevators]}
             onPress={() => navigation.navigate('Elevators')}
           >
             <Text style={[styles.statLabel, styles.statLabelBold, styles.sectionTitleUpper]}>DIZALA</Text>
@@ -273,7 +270,7 @@ export default function HomeScreen({ navigation }) {
           </TouchableOpacity>
 
           <TouchableOpacity 
-            style={styles.statCard}
+            style={[styles.statCard, styles.statCardServices]}
             onPress={() => navigation.navigate('Services')}
           >
             <Text style={[styles.statLabel, styles.statLabelBold, styles.sectionTitleUpper]}>SERVISI</Text>
@@ -317,7 +314,7 @@ export default function HomeScreen({ navigation }) {
           </TouchableOpacity>
 
           <TouchableOpacity 
-            style={styles.statCard}
+            style={[styles.statCard, styles.statCardRepairs]}
             onPress={() => navigation.navigate('Repairs')}
           >
             <Text style={[styles.statLabel, styles.statLabelBold, styles.sectionTitleUpper]}>POPRAVCI</Text>
@@ -395,11 +392,6 @@ const styles = StyleSheet.create({
     color: '#1f2937',
     marginBottom: 5,
   },
-  versionLabel: {
-    fontSize: rf(12, 10.5, 18),
-    color: '#6b7280',
-    marginBottom: 6,
-  },
   statusContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -434,6 +426,18 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+  },
+  statCardElevators: {
+    backgroundColor: '#eff6ff', // blago plava
+    borderColor: '#bfdbfe',
+  },
+  statCardServices: {
+    backgroundColor: '#ecfdf3', // blago zelena
+    borderColor: '#bbf7d0',
+  },
+  statCardRepairs: {
+    backgroundColor: '#fef2f2', // blago crvena
+    borderColor: '#fecaca',
   },
   statCardUrgent: {
     borderWidth: 2,

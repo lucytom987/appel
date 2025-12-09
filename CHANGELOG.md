@@ -17,6 +17,19 @@ APPEL je mobilna aplikacija za upravljanje dizalima, servisima i hitnim popravci
 
 ## Povijest Verzija
 
+### Build 8 (v1.0.1) - 9. Prosinac 2025
+**UX i navigacija (popravci/dizala) + blaži zoom na karti**
+
+#### Izmjene:
+- 📊 Home statistika: filtrira obrisana dizala/popravke i uklanja duplikate kako bi brojevi odgovarali listi.
+- 🗺️ Karta: centriranje na korisnika s većim delta zoomom (manje “zalijepljeno” kod GPS offseta ~25 m).
+- 🔁 Popravci: back (uključivo hardverski) iz liste vodi na Home.
+- ✏️ Uređivanje dizala: svi backovi/alerti vode na listu popravaka (uključujući hardverski back).
+- 📑 Lista dizala: adresa prva i istaknuta, naziv ispod; uklonjen status badge; filter čip u headeru (aktivna/neaktivna); pretraga fokus na adresu/naziv/kontakt osobu.
+
+#### Tehnički:
+- Bump verzije aplikacije na 1.0.1; Android versionCode 2, iOS buildNumber 2 (app.json, app.config.js, package.json).
+
 ### Build 7 (v1.0.6) - 22. Studeni 2025
 **Poboljšanja korisničkog sučelja**
 

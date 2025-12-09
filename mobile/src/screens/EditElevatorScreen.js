@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  BackHandler,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -179,7 +180,7 @@ export default function EditElevatorScreen({ navigation, route }) {
       Alert.alert('Uspjeh', 'Dizalo uspješno ažurirano', [
         { 
           text: 'OK', 
-          onPress: () => navigation.goBack() 
+          onPress: () => navigation.navigate('Repairs') 
         }
       ]);
 
@@ -290,7 +291,7 @@ export default function EditElevatorScreen({ navigation, route }) {
         { 
           text: 'OK', 
           onPress: () => {
-            navigation.navigate('Elevators');
+            navigation.navigate('Repairs');
           }
         }
       ]);
@@ -313,7 +314,7 @@ export default function EditElevatorScreen({ navigation, route }) {
         Alert.alert('Info', 'Dizalo je već obrisano na serveru. Uklonjeno lokalno.', [
           {
             text: 'OK',
-            onPress: () => navigation.navigate('Elevators'),
+            onPress: () => navigation.navigate('Repairs'),
           },
         ]);
         return;
@@ -326,7 +327,7 @@ export default function EditElevatorScreen({ navigation, route }) {
           Alert.alert('Uspjeh', 'Dizalo obrisano lokalno (sync će se obaviti kada budete online)', [
             { 
               text: 'OK', 
-              onPress: () => navigation.navigate('Elevators'),
+              onPress: () => navigation.navigate('Repairs'),
             }
           ]);
         } catch (localError) {
@@ -341,11 +342,21 @@ export default function EditElevatorScreen({ navigation, route }) {
     }
   };
 
+  // Hardverski back uvijek vodi na listu popravaka
+  useEffect(() => {
+    const handler = () => {
+      navigation.navigate('Repairs');
+      return true;
+    };
+    const sub = BackHandler.addEventListener('hardwareBackPress', handler);
+    return () => sub.remove();
+  }, [navigation]);
+
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+        <TouchableOpacity onPress={() => navigation.navigate('Repairs')}>
           <Ionicons name="arrow-back" size={24} color="#1f2937" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Uredi dizalo</Text>

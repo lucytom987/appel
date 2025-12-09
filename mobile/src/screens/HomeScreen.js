@@ -94,12 +94,15 @@ export default function HomeScreen({ navigation }) {
         return s;
       };
 
-      // Broji samo aktivna dizala
-      const activeElevators = elevators.filter(e => e.status === 'aktivan');
+      // Broji samo aktivna, neobrisana dizala
+      const activeElevators = elevators.filter(e => e.status === 'aktivan' && !e.is_deleted);
 
-      // Izgradi skup postojećih ID-eva dizala (lokalni id ili _id)
+      // Izgradi skup postojećih ID-eva dizala (lokalni id ili _id), izuzmi obrisane
       const existingElevatorIds = new Set(
-        elevators.map(e => e.id || e._id).filter(Boolean)
+        elevators
+          .filter(e => !e.is_deleted)
+          .map(e => e.id || e._id)
+          .filter(Boolean)
       );
 
       // Normaliziraj i filtriraj servise koji pripadaju postojećim dizalima
@@ -143,8 +146,40 @@ export default function HomeScreen({ navigation }) {
       );
       const servicedElevatorsThisMonth = servicedElevatorsSet.size;
 
+      // Filtriraj popravke: preskoči obrisane i one čije je dizalo obrisano ili ne postoji
+      const filteredRepairs = repairs
+        .filter((r) => r && typeof r === 'object')
+        .filter((r) => {
+          const elevatorId = typeof r.elevatorId === 'object' && r.elevatorId !== null
+            ? r.elevatorId._id || r.elevatorId.id
+            : r.elevatorId;
+
+          const elevator = elevatorId ? elevatorDB.getById(elevatorId) : null;
+          const elevatorDeleted = Boolean(
+            (typeof r.elevatorId === 'object' && r.elevatorId?.is_deleted) ||
+            (elevator && elevator.is_deleted)
+          );
+
+          if (r.is_deleted) return false;
+          if (elevatorDeleted) return false;
+          if (elevatorId && !elevator) return false;
+          return true;
+        });
+
+      // Ukloni duplikate po id/_id kako bi brojač bio usklađen s listom
+      const uniqueRepairsMap = new Map();
+      filteredRepairs.forEach((r) => {
+        const rid = r._id || r.id;
+        if (rid && !uniqueRepairsMap.has(rid)) {
+          uniqueRepairsMap.set(rid, r);
+        } else if (!rid) {
+          uniqueRepairsMap.set(Symbol('no-id'), r);
+        }
+      });
+      const uniqueRepairs = Array.from(uniqueRepairsMap.values());
+
       // Popravci po statusu
-      const statusCounts = repairs.reduce(
+      const statusCounts = uniqueRepairs.reduce(
         (acc, r) => {
           const status = normalizeStatus(r.status);
           if (status === 'pending') acc.pending += 1;

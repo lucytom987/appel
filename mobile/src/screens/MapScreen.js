@@ -202,8 +202,8 @@ export default function MapScreen({ navigation }) {
       mapRef.current.animateToRegion({
         latitude: userLocation.latitude,
         longitude: userLocation.longitude,
-        latitudeDelta: 0.0001,
-        longitudeDelta: 0.00013,
+        latitudeDelta: 0.002,
+        longitudeDelta: 0.0025,
       }, 1000);
     }
   };
@@ -215,8 +215,8 @@ export default function MapScreen({ navigation }) {
       mapRef.current.animateToRegion({
         latitude: userLocation.latitude,
         longitude: userLocation.longitude,
-        latitudeDelta: 0.0001,
-        longitudeDelta: 0.00013,
+        latitudeDelta: 0.002,
+        longitudeDelta: 0.0025,
       }, 800);
     }
   }, [userLocation]);

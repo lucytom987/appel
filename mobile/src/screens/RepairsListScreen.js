@@ -6,6 +6,7 @@ import {
   FlatList,
   TouchableOpacity,
   RefreshControl,
+  BackHandler,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { repairDB, elevatorDB } from '../database/db';
@@ -42,6 +43,23 @@ export default function RepairsListScreen({ navigation }) {
 
       const sorted = allRepairs
         .filter((r) => r && typeof r === 'object') // safety: drop malformed entries
+        .filter((r) => {
+          const elevatorId = typeof r.elevatorId === 'object' && r.elevatorId !== null
+            ? r.elevatorId._id || r.elevatorId.id
+            : r.elevatorId;
+
+          const elevator = elevatorId ? elevatorDB.getById(elevatorId) : null;
+          const elevatorDeleted = Boolean(
+            (typeof r.elevatorId === 'object' && r.elevatorId?.is_deleted) ||
+            (elevator && elevator.is_deleted)
+          );
+
+          // Ako je zapis popravka obrisan ili vezano dizalo obrisano/ne postoji, sakrij
+          if (r.is_deleted) return false;
+          if (elevatorDeleted) return false;
+          if (elevatorId && !elevator) return false;
+          return true;
+        })
         .map((r) => ({
           ...r,
           status: normalizeStatus(r.status),
@@ -61,6 +79,16 @@ export default function RepairsListScreen({ navigation }) {
     const unsubscribe = navigation.addListener('focus', loadRepairs);
     return unsubscribe;
   }, [navigation, loadRepairs]);
+
+  // Override hardware back to uvijek vrati na Home
+  useEffect(() => {
+    const handler = () => {
+      navigation.navigate('Home');
+      return true; // spriječi default goBack
+    };
+    const sub = BackHandler.addEventListener('hardwareBackPress', handler);
+    return () => sub.remove();
+  }, [navigation]);
 
   const applyFilter = useCallback(() => {
     let filtered = repairs;
@@ -192,7 +220,7 @@ export default function RepairsListScreen({ navigation }) {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+        <TouchableOpacity onPress={() => navigation.navigate('Home')}>
           <Ionicons name="arrow-back" size={24} color="#1f2937" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Popravci</Text>

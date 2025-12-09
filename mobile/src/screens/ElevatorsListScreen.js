@@ -20,7 +20,7 @@ export default function ElevatorsListScreen({ navigation }) {
   const [filteredElevators, setFilteredElevators] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
-  const [filter, setFilter] = useState('all'); // all, aktivan, neaktivan
+  const [filter, setFilter] = useState('aktivan'); // aktivan, neaktivan
 
   useEffect(() => {
     loadElevators();
@@ -54,9 +54,7 @@ export default function ElevatorsListScreen({ navigation }) {
   const filterElevators = () => {
     let filtered = elevators;
 
-    if (filter !== 'all') {
-      filtered = filtered.filter(e => e.status === filter);
-    }
+    filtered = filtered.filter(e => e.status === filter);
 
     if (searchQuery) {
       const q = normalize(searchQuery);
@@ -92,22 +90,6 @@ export default function ElevatorsListScreen({ navigation }) {
     setRefreshing(false);
   };
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'aktivan': return '#10b981';
-      case 'neaktivan': return '#6b7280';
-      default: return '#6b7280';
-    }
-  };
-
-  const getStatusLabel = (status) => {
-    switch (status) {
-      case 'aktivan': return 'Aktivno';
-      case 'neaktivan': return 'Neaktivno';
-      default: return status;
-    }
-  };
-
   const renderElevator = ({ item }) => (
     <TouchableOpacity
       style={styles.elevatorCard}
@@ -115,19 +97,12 @@ export default function ElevatorsListScreen({ navigation }) {
     >
       <View style={styles.elevatorHeader}>
         <View style={styles.elevatorInfo}>
-          <Text style={styles.address}>{item.nazivStranke}</Text>
           <Text style={styles.buildingCode}>{item.ulica}, {item.mjesto}</Text>
-        </View>
-        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
-          <Text style={styles.statusText}>{getStatusLabel(item.status)}</Text>
+          <Text style={styles.address}>{item.nazivStranke}</Text>
         </View>
       </View>
 
       <View style={styles.elevatorDetails}>
-        <View style={styles.detailRow}>
-          <Ionicons name="document-text-outline" size={16} color="#6b7280" />
-          <Text style={styles.detailText}>Ugovor: {item.brojUgovora}</Text>
-        </View>
         <View style={styles.detailRow}>
           <Ionicons name="barcode-outline" size={16} color="#6b7280" />
           <Text style={styles.detailText}>Dizalo: {item.brojDizala}</Text>
@@ -137,6 +112,10 @@ export default function ElevatorsListScreen({ navigation }) {
     </TouchableOpacity>
   );
 
+  const activeCount = elevators.filter(e => e.status === 'aktivan').length;
+  const inactiveCount = elevators.filter(e => e.status === 'neaktivan').length;
+  const isActiveFilter = filter === 'aktivan';
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -145,10 +124,16 @@ export default function ElevatorsListScreen({ navigation }) {
             <Ionicons name="arrow-back" size={24} color="#111827" />
           </TouchableOpacity>
           <Text style={styles.title}>Dizala</Text>
-          <View style={styles.headerRight}>
-            <View style={[styles.onlineIndicator, { backgroundColor: isOnline ? '#10b981' : '#ef4444' }]} />
-            <Text style={styles.count}>{filteredElevators.length}</Text>
-          </View>
+          <TouchableOpacity
+            style={[styles.filterChip, isActiveFilter ? styles.filterChipActive : styles.filterChipInactive]}
+            onPress={() => setFilter(isActiveFilter ? 'neaktivan' : 'aktivan')}
+            activeOpacity={0.8}
+          >
+            <View style={[styles.chipDot, { backgroundColor: isActiveFilter ? '#10b981' : '#6b7280' }]} />
+            <Text style={styles.chipText}>
+              {isActiveFilter ? `Aktivna · ${activeCount}` : `Neaktivna · ${inactiveCount}`}
+            </Text>
+          </TouchableOpacity>
         </View>
 
       {/* Search */}
@@ -156,7 +141,7 @@ export default function ElevatorsListScreen({ navigation }) {
         <Ionicons name="search" size={20} color="#9ca3af" style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Pretraži po nazivu, adresi, ugovoru..."
+          placeholder="Pretraži po adresi, nazivu, kontakt osobi..."
           value={searchQuery}
           onChangeText={setSearchQuery}
           placeholderTextColor="#9ca3af"
@@ -166,25 +151,6 @@ export default function ElevatorsListScreen({ navigation }) {
             <Ionicons name="close-circle" size={20} color="#9ca3af" />
           </TouchableOpacity>
         )}
-      </View>
-
-      {/* Filters */}
-      <View style={styles.filterContainer}>
-        {[
-          { key: 'all', label: 'Sva dizala' },
-          { key: 'aktivan', label: 'Aktivna' },
-          { key: 'neaktivan', label: 'Neaktivna' },
-        ].map(opt => (
-          <TouchableOpacity
-            key={opt.key}
-            style={[styles.filterButton, filter === opt.key && styles.filterButtonActive]}
-            onPress={() => setFilter(opt.key)}
-          >
-            <Text style={[styles.filterText, filter === opt.key && styles.filterTextActive]}>
-              {opt.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
       </View>
 
       {/* List */}
@@ -248,15 +214,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  onlineIndicator: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+  filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    gap: 8,
   },
-  count: {
-    fontSize: 18,
+  filterChipActive: {
+    backgroundColor: '#ecfdf3',
+    borderColor: '#bbf7d0',
+  },
+  filterChipInactive: {
+    backgroundColor: '#f3f4f6',
+    borderColor: '#e5e7eb',
+  },
+  chipDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  chipText: {
+    fontSize: 14,
     fontWeight: '700',
-    color: '#6b7280',
+    color: '#111827',
   },
   searchContainer: {
     backgroundColor: '#fff',
@@ -276,32 +259,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     fontSize: 16,
     color: '#111827',
-  },
-  filterContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    marginBottom: 16,
-    gap: 8,
-  },
-  filterButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-  },
-  filterButtonActive: {
-    backgroundColor: '#2563eb',
-    borderColor: '#2563eb',
-  },
-  filterText: {
-    fontSize: 14,
-    color: '#6b7280',
-    fontWeight: '500',
-  },
-  filterTextActive: {
-    color: '#fff',
   },
   listContent: {
     paddingHorizontal: 16,
@@ -332,9 +289,10 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   buildingCode: {
-    fontSize: 15,
-    color: '#6b7280',
-    fontWeight: '600',
+    fontSize: 22,
+    color: '#111827',
+    fontWeight: '800',
+    marginBottom: 4,
   },
   statusBadge: {
     paddingHorizontal: 12,

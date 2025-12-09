@@ -177,11 +177,6 @@ router.put('/:id', authenticate, checkRole(['serviser', 'menadzer', 'admin']), a
       return res.status(404).json({ success: false, message: 'Popravak je obrisan' });
     }
 
-    const role = req.user.normalizedRole || req.user.uloga;
-    if (existing.status === 'completed' && role !== 'admin') {
-      return res.status(403).json({ success: false, message: 'Zaključan popravak može urediti samo admin' });
-    }
-
     // ako se zaključuje popravak
     if (req.body.status === 'completed' && existing.status !== 'completed') {
       req.body.datumPopravka = req.body.datumPopravka || new Date();

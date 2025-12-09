@@ -10,14 +10,12 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import * as SecureStore from 'expo-secure-store';
 import { useAuth } from '../context/AuthContext';
-import { repairDB, elevatorDB } from '../database/db';
+import { repairDB } from '../database/db';
 import { repairsAPI } from '../services/api';
 
 export default function AddRepairScreen({ navigation, route }) {
@@ -25,8 +23,6 @@ export default function AddRepairScreen({ navigation, route }) {
   const { user, isOnline } = useAuth();
   const [isOfflineDemo, setIsOfflineDemo] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [pickerOpen, setPickerOpen] = useState(false);
 
   // Konvertiraj isOnline u boolean
   const online = Boolean(isOnline);
@@ -39,17 +35,11 @@ export default function AddRepairScreen({ navigation, route }) {
     })();
   }, []);
 
-  const elevators = React.useMemo(() => elevatorDB.getAll() || [], []);
-
-  const [selectedElevator, setSelectedElevator] = useState(() => {
-    if (elevator) return elevator;
-    return elevators[0] || null;
-  });
+  const [selectedElevator] = useState(() => elevator || null);
 
   const [formData, setFormData] = useState({
     reportedDate: new Date(),
     opis: '',
-    napomene: '',
     primioPoziv: '',
     pozivatelj: '',
     pozivateljTelefon: '',
@@ -89,60 +79,6 @@ export default function AddRepairScreen({ navigation, route }) {
     );
   }
 
-
-
-  const handleDateChange = (event, selectedDate) => {
-    setShowDatePicker(false);
-    if (selectedDate) {
-      // Zadrži vrijeme trenutka prijave (sat/min) ali promijeni dan po izboru
-      const now = new Date();
-      const merged = new Date(selectedDate);
-      merged.setHours(now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds());
-      setFormData(prev => ({
-        ...prev,
-        reportedDate: merged
-      }));
-    }
-  };
-
-  const renderElevatorPicker = () => (
-    <Modal
-      visible={pickerOpen}
-      transparent
-      animationType="fade"
-      onRequestClose={() => setPickerOpen(false)}
-    >
-      <View style={styles.pickerOverlay}>
-        <View style={styles.pickerCard}>
-          <View style={styles.pickerHeader}>
-            <Text style={styles.pickerTitle}>Odaberi dizalo</Text>
-            <TouchableOpacity onPress={() => setPickerOpen(false)}>
-              <Ionicons name="close" size={22} color="#111827" />
-            </TouchableOpacity>
-          </View>
-          <ScrollView style={{ maxHeight: 400 }}>
-            {elevators.map((e) => {
-              const id = e._id || e.id;
-              return (
-                <TouchableOpacity
-                  key={id}
-                  style={styles.pickerItem}
-                  onPress={() => {
-                    setSelectedElevator(e);
-                    setPickerOpen(false);
-                  }}
-                >
-                  <Text style={styles.pickerItemTitle}>{e.brojDizala || 'Dizalo'}</Text>
-                  <Text style={styles.pickerItemSub}>{`${e.nazivStranke || ''} • ${e.ulica || ''}, ${e.mjesto || ''}`}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        </View>
-      </View>
-    </Modal>
-  );
-
   const handleSubmit = async () => {
     if (!selectedElevator) {
       Alert.alert('Greška', 'Odaberite dizalo');
@@ -171,7 +107,7 @@ export default function AddRepairScreen({ navigation, route }) {
         status: 'pending',
         radniNalogPotpisan: false,
         popravkaUPotpunosti: false,
-        napomene: formData.napomene,
+        napomene: '',
         prijavio: reporterName,
         kontaktTelefon: reporterPhone,
         primioPoziv: receiverName,
@@ -191,7 +127,7 @@ export default function AddRepairScreen({ navigation, route }) {
         });
 
         Alert.alert('Prijavljeno', 'Prijava kvara je spremljena lokalno', [
-          { text: 'OK', onPress: () => navigation.navigate('Home') }
+          { text: 'OK', onPress: () => navigation.navigate('Repairs') }
         ]);
       } else {
         // Online s pravim korisničkim tokenom - spremi na backend
@@ -207,7 +143,7 @@ export default function AddRepairScreen({ navigation, route }) {
           });
 
           Alert.alert('Prijavljeno', 'Prijava kvara je uspješno poslana', [
-            { text: 'OK', onPress: () => navigation.navigate('Home') }
+            { text: 'OK', onPress: () => navigation.navigate('Repairs') }
           ]);
         } catch (error) {
           console.error('Greška pri slanju na backend:', error);
@@ -223,7 +159,7 @@ export default function AddRepairScreen({ navigation, route }) {
           });
 
           Alert.alert('Prijavljeno', 'Kvar je spremljen lokalno (sync kad budete online)', [
-            { text: 'OK', onPress: () => navigation.navigate('Home') }
+            { text: 'OK', onPress: () => navigation.navigate('Repairs') }
           ]);
         }
       }
@@ -253,20 +189,6 @@ export default function AddRepairScreen({ navigation, route }) {
         keyboardVerticalOffset={100}
       >
         <ScrollView style={styles.content}>
-        {/* Odabir dizala */}
-        <View style={styles.elevatorInfo}>
-          <TouchableOpacity onPress={() => setPickerOpen(true)} style={styles.elevatorPickerButton}>
-            <View>
-              <Text style={styles.elevatorLabel}>Dizalo</Text>
-              <Text style={styles.elevatorName}>{selectedElevator?.brojDizala || 'Odaberi dizalo'}</Text>
-              <Text style={styles.elevatorDetail}>
-                {(selectedElevator?.ulica || '')} • {(selectedElevator?.mjesto || '')}
-              </Text>
-            </View>
-            <Ionicons name="chevron-down" size={20} color="#6b7280" />
-          </TouchableOpacity>
-        </View>
-
         {/* Offline warning */}
         {!online && !isOfflineDemo && (
           <View style={styles.offlineWarning}>
@@ -276,29 +198,6 @@ export default function AddRepairScreen({ navigation, route }) {
             </Text>
           </View>
         )}
-
-        {/* Datum prijave */}
-        <View style={styles.section}>
-          <Text style={styles.label}>Datum prijave</Text>
-          <TouchableOpacity
-            style={styles.dateButton}
-            onPress={() => setShowDatePicker(true)}
-          >
-            <Ionicons name="calendar-outline" size={20} color="#666" />
-            <Text style={styles.dateText}>
-              {formData.reportedDate.toLocaleDateString('hr-HR')}
-            </Text>
-          </TouchableOpacity>
-
-          {showDatePicker && (
-            <DateTimePicker
-              value={formData.reportedDate}
-              mode="date"
-              display="default"
-              onChange={handleDateChange}
-            />
-          )}
-        </View>
 
         {/* Opis kvara */}
         <View style={styles.section}>
@@ -334,20 +233,6 @@ export default function AddRepairScreen({ navigation, route }) {
           />
         </View>
 
-        {/* Napomene */}
-        <View style={styles.section}>
-          <Text style={styles.label}>Napomene</Text>
-          <TextInput
-            style={[styles.input, styles.textArea]}
-            value={formData.napomene}
-            onChangeText={(text) => setFormData(prev => ({ ...prev, napomene: text }))}
-            placeholder="Dodatne napomene..."
-            multiline
-            numberOfLines={3}
-            textAlignVertical="top"
-          />
-        </View>
-
         {/* Submit button */}
         <TouchableOpacity
           style={[styles.submitButton, (loading || (!online && !isOfflineDemo)) && styles.submitButtonDisabled]}
@@ -367,7 +252,6 @@ export default function AddRepairScreen({ navigation, route }) {
         <View style={{ height: 40 }} />
       </ScrollView>
       </KeyboardAvoidingView>
-      {renderElevatorPicker()}
     </SafeAreaView>
   );
 }
@@ -395,32 +279,6 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-  },
-  elevatorInfo: {
-    backgroundColor: '#fff',
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e5e5',
-  },
-  elevatorPickerButton: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  elevatorLabel: {
-    fontSize: 12,
-    color: '#6b7280',
-    marginBottom: 4,
-  },
-  elevatorName: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1f2937',
-    marginBottom: 5,
-  },
-  elevatorDetail: {
-    fontSize: 14,
-    color: '#666',
   },
   offlineWarning: {
     backgroundColor: '#fef2f2',
@@ -460,42 +318,8 @@ const styles = StyleSheet.create({
     minHeight: 100,
     paddingTop: 12,
   },
-  dateButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f9fafb',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 8,
-    padding: 12,
-    gap: 10,
-  },
-  dateText: {
-    fontSize: 16,
-    color: '#1f2937',
-  },
-  priorityContainer: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  priorityButton: {
-    flex: 1,
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 2,
-    borderColor: '#e5e7eb',
-    alignItems: 'center',
-  },
-  priorityText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#666',
-  },
-  priorityTextActive: {
-    color: '#fff',
-  },
   submitButton: {
-    backgroundColor: '#ef4444',
+    backgroundColor: '#b91c1c',
     marginHorizontal: 20,
     marginTop: 20,
     padding: 16,
@@ -517,43 +341,5 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#fff',
-  },
-  pickerOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'center',
-    padding: 20,
-  },
-  pickerCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    maxHeight: '80%',
-  },
-  pickerHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  pickerTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  pickerItem: {
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  pickerItemTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#111827',
-  },
-  pickerItemSub: {
-    fontSize: 13,
-    color: '#6b7280',
-    marginTop: 2,
   },
 });

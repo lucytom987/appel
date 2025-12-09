@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,13 +6,10 @@ import {
   FlatList,
   TouchableOpacity,
   RefreshControl,
-  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { repairDB, elevatorDB, userDB } from '../database/db';
+import { repairDB, elevatorDB } from '../database/db';
 import { syncAll } from '../services/syncService';
-import { repairsAPI } from '../services/api';
-import { useAuth } from '../context/AuthContext';
 
 const safeText = (value, fallback = '') => {
   if (value === null || value === undefined) return fallback;
@@ -24,47 +21,12 @@ const safeText = (value, fallback = '') => {
   }
 };
 
-// helper za datume
-const parseDate = (value) => {
-  if (!value) return null;
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? null : d;
-};
-
 export default function RepairsListScreen({ navigation }) {
-  const { user } = useAuth();
-
   const [repairs, setRepairs] = useState([]);
   const [filteredRepairs, setFilteredRepairs] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState('all');
-  const [deleting, setDeleting] = useState(null);
-  const [userMap, setUserMap] = useState({});
-
-  // Prebaci sve korisnike u mapu id -> ime radi brzog resolve-a
-  useEffect(() => {
-    try {
-      const all = userDB.getAll ? userDB.getAll() || [] : [];
-      const map = {};
-      all.forEach((u) => {
-        if (!u || typeof u !== 'object') return;
-        const uid = u.id || u._id;
-        if (!uid) return;
-        const full = `${u.ime || u.firstName || ''} ${u.prezime || u.lastName || ''}`.trim();
-        map[uid] = full || u.email || 'Serviser';
-      });
-
-      const authId = user?._id || user?.id;
-      const authName = `${user?.ime || user?.firstName || ''} ${user?.prezime || user?.lastName || ''}`.trim();
-      if (authId && authName) {
-        map[authId] = authName;
-      }
-
-      setUserMap(map);
-    } catch (e) {
-      console.warn('RepairsListScreen: ne mogu učitati korisnike', e?.message || e);
-    }
-  }, [user]);
+  const [userMap] = useState({}); // placeholder, više se ne koristi u prikazu
 
   const loadRepairs = useCallback(() => {
     try {
@@ -112,38 +74,6 @@ export default function RepairsListScreen({ navigation }) {
     applyFilter();
   }, [applyFilter]);
 
-  const handleDeleteRepair = async (repair) => {
-    Alert.alert(
-      'Obriši popravak',
-      'Sigurno želiš obrisati ovaj popravak?',
-      [
-        { text: 'Otkaži', style: 'cancel' },
-        {
-          text: 'Obriši',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setDeleting(repair.id);
-              // Obriši s backenda ako je sinkroniziran
-              const backendId = repair._id || repair.id;
-              if (repair.synced && backendId && !String(backendId).startsWith('local_')) {
-                await repairsAPI.delete(backendId);
-              }
-              // Obriši iz lokalne baze
-              repairDB.delete(backendId);
-              loadRepairs();
-            } catch (error) {
-              console.error('Greška pri brisanju popravka:', error);
-              Alert.alert('Greška', 'Nije moguće obrisati popravak');
-            } finally {
-              setDeleting(null);
-            }
-          }
-        }
-      ]
-    );
-  };
-
   const getStatusColor = (status) => {
     switch (status) {
       case 'pending': return '#ef4444';
@@ -152,48 +82,6 @@ export default function RepairsListScreen({ navigation }) {
       default: return '#6b7280';
     }
   };
-
-  const getStatusLabel = (status) => {
-    switch (status) {
-      case 'pending': return 'Prijavljen';
-      case 'in_progress': return 'U tijeku';
-      case 'completed': return 'Završeno';
-      default: return status;
-    }
-  };
-
-  const resolvePersonName = useCallback((raw, fallbackUnknown = 'N/A') => {
-    if (!raw) return fallbackUnknown;
-
-    if (typeof raw === 'object') {
-      const full = `${raw.ime || raw.firstName || raw.name || raw.fullName || ''} ${raw.prezime || raw.lastName || ''}`.trim();
-      if (full) return full;
-      const refId = raw._id || raw.id;
-      if (refId && userMap[refId]) return userMap[refId];
-      if (refId) return refId.length > 14 ? `${refId.slice(0, 6)}…${refId.slice(-3)}` : String(refId);
-      if (raw.email) return raw.email;
-      return fallbackUnknown;
-    }
-
-    if (typeof raw === 'string') {
-      const maybe = userMap[raw];
-      if (maybe) return maybe;
-      return raw.length > 14 ? `${raw.slice(0, 6)}…${raw.slice(-3)}` : raw;
-    }
-
-    if (typeof raw === 'number') return String(raw);
-    return fallbackUnknown;
-  }, [userMap]);
-
-  const resolveServiserName = useCallback((item) => {
-    // Prefer explicit name fields if present on the record
-    const explicit = item?.serviserName || item?.serviser || item?.serviserFullName;
-    const explicitStr = safeText(explicit, '');
-    if (explicitStr) return explicitStr;
-
-    // Fallback to serviserID resolution
-    return resolvePersonName(item?.serviserID, 'Nepoznat serviser');
-  }, [resolvePersonName]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -220,16 +108,6 @@ export default function RepairsListScreen({ navigation }) {
       );
     }
 
-    const datumPrijave = parseDate(item.datumPrijave);
-    const prijavaLabel = datumPrijave
-      ? datumPrijave.toLocaleString('hr-HR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-      : '-';
-
-    const serviserName = safeText(resolveServiserName(item), 'Nepoznat serviser');
-    const prijavio = safeText(resolvePersonName(item.prijavio, 'N/A'), 'N/A');
-    const primioPoziv = safeText(item.primioPoziv || item.receivedBy, '');
-    const kontakt = safeText(item.kontaktTelefon, '');
-
     const elevatorId = typeof item.elevatorId === 'object' && item.elevatorId !== null
       ? item.elevatorId._id || item.elevatorId.id
       : item.elevatorId;
@@ -254,79 +132,46 @@ export default function RepairsListScreen({ navigation }) {
       };
     }
 
-    const elevatorLabel = `${safeText(elevator.nazivStranke || 'Obrisano dizalo')}${elevator.brojDizala ? ` - ${safeText(elevator.brojDizala)}` : ''}`;
     const elevatorAddress = elevator.ulica || elevator.mjesto
       ? `${safeText(elevator.ulica)}${elevator.mjesto ? `, ${safeText(elevator.mjesto)}` : ''}`
-      : '';
+      : 'Adresa nije dostupna';
+    const elevatorLabel = `${elevatorAddress}${elevator.brojDizala ? ` • ${safeText(elevator.brojDizala)}` : ''}`;
 
     const opisKvara = safeText(item.opisKvara, 'Bez opisa');
+    const isSigned = Boolean(item.radniNalogPotpisan);
+    const isSynced = Boolean(item.synced);
 
     return (
-      <View style={styles.repairCard}>
-        <TouchableOpacity
-          onPress={() => navigation.navigate('RepairDetails', { repair: item })}
-          style={styles.repairContent}
-        >
-          <View style={styles.repairHeader}>
-            <View style={styles.repairInfo}>
-              <Text style={styles.elevatorName}>{elevatorLabel}</Text>
-              {elevatorAddress ? (
-                <Text style={styles.repairDate}>{elevatorAddress}</Text>
-              ) : null}
-              <Text style={styles.repairDate}>
-                {prijavaLabel}
-              </Text>
+      <TouchableOpacity
+        style={[styles.repairCard, { borderColor: getStatusColor(item.status) }]}
+        onPress={() => navigation.navigate('RepairDetails', { repair: item })}
+        activeOpacity={0.8}
+      >
+        <View style={styles.repairContent}>
+          <View style={styles.headerRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.elevatorName} numberOfLines={1}>{elevatorLabel}</Text>
             </View>
-            <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
-              <Text style={styles.badgeText}>{safeText(getStatusLabel(item.status), '-')}</Text>
+            <View style={styles.iconRow}>
+              <Ionicons
+                name={isSigned ? 'document-text-outline' : 'document-outline'}
+                size={18}
+                color={isSigned ? '#16a34a' : '#9ca3af'}
+                style={{ marginRight: 8 }}
+              />
+              <Ionicons
+                name={isSynced ? 'cloud-done-outline' : 'cloud-offline-outline'}
+                size={18}
+                color={isSynced ? '#16a34a' : '#f59e0b'}
+              />
             </View>
           </View>
 
-          <Text style={styles.repairDescription} numberOfLines={2}>
+          <Text style={styles.repairDescription} numberOfLines={3}>
             {opisKvara}
           </Text>
-
-          <View style={styles.repairFooter}>
-            <View style={styles.technicianInfo}>
-              <Ionicons name="person-outline" size={16} color="#666" />
-              <View>
-                <Text style={styles.technicianName}>{serviserName}</Text>
-                {primioPoziv ? (
-                  <Text style={styles.reporterText} numberOfLines={1}>
-                    Primio poziv: {primioPoziv}
-                  </Text>
-                ) : null}
-                {(prijavio !== 'N/A' || kontakt) && (
-                  <Text style={styles.reporterText} numberOfLines={1}>
-                    Prijavio: {prijavio}{kontakt ? ` • ${kontakt}` : ''}
-                  </Text>
-                )}
-              </View>
-            </View>
-            <View style={{ width: 60 }} />
-          </View>
-        </TouchableOpacity>
-
-        {/* Action buttons */}
-        <TouchableOpacity
-          style={styles.floatingDelete}
-          onPress={() => handleDeleteRepair(item)}
-          disabled={deleting === item.id}
-        >
-          <Ionicons name="trash-outline" size={18} color="#ef4444" />
-        </TouchableOpacity>
-        <View style={styles.floatingIconsRight}>
-          <Ionicons
-            name={item.radniNalogPotpisan ? 'document-text-outline' : 'document-outline'}
-            size={16}
-            color={item.radniNalogPotpisan ? '#10b981' : '#ef4444'}
-            style={{ marginRight: 8 }}
-          />
-          {item.synced && (
-            <Ionicons name="cloud-done-outline" size={16} color="#10b981" />
-          )}
         </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -453,71 +298,33 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 2,
     elevation: 2,
-    flexDirection: 'row',
-    position: 'relative',
+    borderWidth: 2,
   },
   repairContent: {
-    flex: 1,
-    padding: 15,
+    padding: 16,
   },
-  repairHeader: {
+  headerRow: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 10,
-  },
-  repairInfo: {
-    flex: 1,
+    marginBottom: 8,
   },
   elevatorName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1f2937',
-    marginBottom: 4,
+    color: '#111827',
+    marginTop: 2,
   },
-  repairDate: {
-    fontSize: 14,
-    color: '#666',
-  },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  badgeText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#fff',
+  iconRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 12,
   },
   repairDescription: {
     fontSize: 14,
-    color: '#666',
-    marginBottom: 12,
-  },
-  repairFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#f3f4f6',
-  },
-  technicianInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  technicianName: {
-    fontSize: 14,
-    color: '#666',
-  },
-  reporterText: {
-    fontSize: 12,
-    color: '#888',
-  },
-  footerIcons: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    color: '#4b5563',
+    lineHeight: 20,
+    marginTop: 4,
   },
   emptyState: {
     flex: 1,
@@ -536,30 +343,5 @@ const styles = StyleSheet.create({
     color: '#999',
     marginTop: 5,
     textAlign: 'center',
-  },
-  actionButtons: {
-    display: 'none',
-  },
-  floatingDelete: {
-    position: 'absolute',
-    bottom: 12,
-    right: 12,
-    padding: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#fee2e2',
-    backgroundColor: '#fff',
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  floatingIconsRight: {
-    position: 'absolute',
-    bottom: 16,
-    right: 60,
-    flexDirection: 'row',
-    alignItems: 'center',
   },
 });

@@ -1,7 +1,7 @@
 import NetInfo from '@react-native-community/netinfo';
 import * as SecureStore from 'expo-secure-store';
-import { elevatorsAPI, servicesAPI, repairsAPI, usersAPI } from './api';
-import { elevatorDB, serviceDB, repairDB, userDB } from '../database/db';
+import api, { elevatorsAPI, servicesAPI, repairsAPI, usersAPI } from './api';
+import { elevatorDB, serviceDB, repairDB, userDB, syncQueue } from '../database/db';
 
 const ALLOWED_CHECKLIST = [
   'lubrication',
@@ -66,6 +66,7 @@ const explainError = (err) => {
 let isOnline = false;
 let syncInterval = null;
 let syncInProgress = false;
+let queueInProgress = false;
 
 // Helper: odluči treba li full sync i po potrebi očisti lastSync ključ
 const shouldForceFullSync = async (key, hasLocalRecordsFn) => {
@@ -103,6 +104,7 @@ export const subscribeToNetworkChanges = (callback) =>
     if (callback) callback(isOnline);
     if (!wasOnline && isOnline) {
       console.log('Online - pokrećem sync');
+      processSyncQueue();
       syncAll();
     }
   });
@@ -145,6 +147,78 @@ const setLastFull = async (key) => {
 const ensureToken = async () => {
   const token = await SecureStore.getItemAsync('userToken');
   return token || null;
+};
+
+// Queue helpers
+const parseQueuedData = (raw) => {
+  if (!raw) return {};
+  if (typeof raw === 'object') return raw;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return raw;
+  }
+};
+
+export const processSyncQueue = async () => {
+  if (queueInProgress) return false;
+  queueInProgress = true;
+
+  try {
+    const online = await checkOnlineStatus();
+    if (!online) {
+      queueInProgress = false;
+      return false;
+    }
+
+    const token = await ensureToken();
+    if (!token) {
+      queueInProgress = false;
+      return false;
+    }
+
+    const items = syncQueue.getAll?.() || [];
+    if (!items.length) {
+      queueInProgress = false;
+      return true;
+    }
+
+    console.log(`Sync queue: processing ${items.length} item(s)`);
+
+    for (const item of items) {
+      const payload = parseQueuedData(item.data);
+      try {
+        await api.request({
+          method: item.method,
+          url: item.endpoint,
+          data: payload,
+        });
+        syncQueue.remove(item.id);
+        console.log(`Queue item ${item.id} sent`);
+      } catch (err) {
+        const status = err?.response?.status;
+
+        // Stop early if offline again
+        if (!err?.response) {
+          console.log(`Queue item ${item.id} failed (offline): ${err?.message || 'n/a'}`);
+          break;
+        }
+
+        // Drop on unrecoverable 4xx to avoid endless retry
+        if (status && status >= 400 && status < 500) {
+          console.log(`Queue item ${item.id} dropped (status ${status})`);
+          syncQueue.remove(item.id);
+          continue;
+        }
+
+        console.log(`Queue item ${item.id} retained (status ${status || 'unknown'})`);
+      }
+    }
+
+    return true;
+  } finally {
+    queueInProgress = false;
+  }
 };
 
 // Pull elevatori (delta)
@@ -632,6 +706,7 @@ export const syncAll = async () => {
 
   try {
     console.log('Full sync start...');
+    await processSyncQueue();
     await syncElevatorsToServer();
     await syncServicesToServer();
     await syncRepairsToServer();
@@ -681,4 +756,5 @@ export default {
   syncUsersFromServer,
   syncServicesToServer,
   syncRepairsToServer,
+  processSyncQueue,
 };

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -18,24 +18,45 @@ import { elevatorDB, repairDB } from '../database/db';
 import { repairsAPI } from '../services/api';
 import ms from '../utils/scale';
 
-const statusOptions = [
-  { label: 'Prijavljen', value: 'pending', color: '#ef4444' },
-  { label: 'U tijeku', value: 'in_progress', color: '#f59e0b' },
-  { label: 'Završeno', value: 'completed', color: '#10b981' },
-];
-
-const normalizeStatus = (status) => {
-  if (['pending', 'in_progress', 'completed'].includes(status)) return status;
-  if (status === 'u tijeku' || status === 'u_tijeku') return 'in_progress';
-  if (status === 'završen' || status === 'zavrsen') return 'completed';
-  return 'pending';
-};
-
 function formatName(person) {
   if (!person) return '';
   const full = `${person.ime || person.firstName || person.name || person.fullName || ''} ${person.prezime || person.lastName || ''}`.trim();
   return full || person.email || '';
 }
+
+const confirmDelete = (baseRepair, navigation, setSaving) => {
+  const id = baseRepair?._id || baseRepair?.id;
+  if (!id) {
+    Alert.alert('Greška', 'Nije moguće obrisati zapis.');
+    return;
+  }
+
+  Alert.alert('Brisanje popravka', 'Želite li obrisati ovaj popravak?', [
+    { text: 'Odustani', style: 'cancel' },
+    {
+      text: 'Obriši',
+      style: 'destructive',
+      onPress: async () => {
+        setSaving(true);
+        try {
+          try {
+            await repairsAPI.delete(id);
+          } catch (err) {
+            console.log('Skip remote delete', err?.message);
+          }
+          repairDB.delete(id);
+          Alert.alert('Obrisano', 'Popravak je obrisan', [
+            { text: 'OK', onPress: () => navigation.navigate('Repairs') },
+          ]);
+        } catch (e) {
+          Alert.alert('Greška', e?.message || 'Brisanje nije uspjelo');
+        } finally {
+          setSaving(false);
+        }
+      },
+    },
+  ]);
+};
 
 export default function EditRepairScreen({ route, navigation }) {
   const { repair } = route.params;
@@ -72,15 +93,9 @@ export default function EditRepairScreen({ route, navigation }) {
   const [form, setForm] = useState(() => ({
     datumPrijave: parseDate(baseRepair.datumPrijave) || new Date(),
     datumPopravka: parseDate(baseRepair.datumPopravka),
-    status: normalizeStatus(baseRepair.status || 'pending'),
-    opisKvara: baseRepair.opisKvara || '',
-    opisPopravka: baseRepair.opisPopravka || '',
-    napomene: baseRepair.napomene || '',
     prijavio: baseRepair.prijavio || '',
     kontaktTelefon: baseRepair.kontaktTelefon || '',
     primioPoziv: baseRepair.primioPoziv || formatName(user) || '',
-    radniNalogPotpisan: Boolean(baseRepair.radniNalogPotpisan),
-    popravkaUPotpunosti: Boolean(baseRepair.popravkaUPotpunosti) || normalizeStatus(baseRepair.status) === 'completed',
   }));
 
   const [showingSaveHint, setShowingSaveHint] = useState(false);
@@ -96,26 +111,20 @@ export default function EditRepairScreen({ route, navigation }) {
   const formatDate = (date) => date ? date.toLocaleString('hr-HR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'Nije postavljeno';
 
   const handleSave = async () => {
-    if (!form.opisKvara.trim()) {
-      Alert.alert('Greška', 'Opis kvara je obavezan');
-      return;
-    }
-
     setSaving(true);
     const id = baseRepair._id || baseRepair.id;
-    const status = normalizeStatus(form.status);
     const payload = {
       datumPrijave: form.datumPrijave ? form.datumPrijave.toISOString() : null,
       datumPopravka: form.datumPopravka ? form.datumPopravka.toISOString() : null,
-      status,
-      opisKvara: form.opisKvara,
-      opisPopravka: form.opisPopravka,
-      napomene: form.napomene,
+      status: baseRepair.status,
+      opisKvara: baseRepair.opisKvara,
+      opisPopravka: baseRepair.opisPopravka,
+      napomene: baseRepair.napomene,
       prijavio: form.prijavio,
       kontaktTelefon: form.kontaktTelefon,
       primioPoziv: form.primioPoziv,
-      radniNalogPotpisan: form.radniNalogPotpisan,
-      popravkaUPotpunosti: status === 'completed' ? true : Boolean(form.popravkaUPotpunosti),
+      radniNalogPotpisan: baseRepair.radniNalogPotpisan,
+      popravkaUPotpunosti: baseRepair.popravkaUPotpunosti,
     };
 
     // Označi lokalnu izmjenu kao nesinkroniziranu dok backend ne potvrdi
@@ -131,12 +140,11 @@ export default function EditRepairScreen({ route, navigation }) {
       setShowingSaveHint(true);
     } finally {
       setSaving(false);
-      Alert.alert('Spremljeno', 'Podaci o popravku su ažurirani');
-      navigation.goBack();
+      Alert.alert('Spremljeno', 'Podaci o popravku su ažurirani', [
+        { text: 'OK', onPress: () => navigation.navigate('Repairs') },
+      ]);
     }
   };
-
-  const toggle = (key) => setForm((prev) => ({ ...prev, [key]: !prev[key] }));
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -158,34 +166,6 @@ export default function EditRepairScreen({ route, navigation }) {
               <Text style={styles.elevatorCode}>Dizalo: {elevator.brojDizala}</Text>
             </View>
           )}
-
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Status</Text>
-            <View style={styles.statusRow}>
-              {statusOptions.map((opt) => {
-                const active = form.status === opt.value;
-                return (
-                  <TouchableOpacity
-                    key={opt.value}
-                    style={[styles.statusChip, active && { borderColor: opt.color, backgroundColor: '#fff' }]}
-                    onPress={() => setForm((p) => ({ ...p, status: opt.value, popravkaUPotpunosti: opt.value === 'completed' }))}
-                  >
-                    <Text style={[styles.statusChipText, active && { color: opt.color }]}>{opt.label}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-            <View style={styles.toggleRow}>
-              <TouchableOpacity style={[styles.toggleButton, form.radniNalogPotpisan && styles.toggleButtonActive]} onPress={() => toggle('radniNalogPotpisan')}>
-                <Ionicons name={form.radniNalogPotpisan ? 'checkbox' : 'square-outline'} size={18} color={form.radniNalogPotpisan ? '#10b981' : '#6b7280'} />
-                <Text style={styles.toggleText}>Radni nalog potpisan</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.toggleButton, form.popravkaUPotpunosti && styles.toggleButtonActive]} onPress={() => toggle('popravkaUPotpunosti')}>
-                <Ionicons name={form.popravkaUPotpunosti ? 'checkbox' : 'square-outline'} size={18} color={form.popravkaUPotpunosti ? '#10b981' : '#6b7280'} />
-                <Text style={styles.toggleText}>Popravak u potpunosti</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
 
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>Datumi</Text>
@@ -246,45 +226,6 @@ export default function EditRepairScreen({ route, navigation }) {
             />
           </View>
 
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Opis kvara</Text>
-            <TextInput
-              style={[styles.input, styles.textArea]}
-              value={form.opisKvara}
-              onChangeText={(text) => setForm((p) => ({ ...p, opisKvara: text }))}
-              placeholder="Detaljno opišite kvar"
-              multiline
-              numberOfLines={4}
-              textAlignVertical="top"
-            />
-          </View>
-
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Opis popravka</Text>
-            <TextInput
-              style={[styles.input, styles.textArea]}
-              value={form.opisPopravka}
-              onChangeText={(text) => setForm((p) => ({ ...p, opisPopravka: text }))}
-              placeholder="Što je rađeno na popravku"
-              multiline
-              numberOfLines={3}
-              textAlignVertical="top"
-            />
-          </View>
-
-          <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Napomene</Text>
-            <TextInput
-              style={[styles.input, styles.textArea]}
-              value={form.napomene}
-              onChangeText={(text) => setForm((p) => ({ ...p, napomene: text }))}
-              placeholder="Dodatne napomene"
-              multiline
-              numberOfLines={3}
-              textAlignVertical="top"
-            />
-          </View>
-
           {showingSaveHint && (
             <Text style={styles.hintText}>Backend nije bio dostupan, promjene su snimljene lokalno i sinkat će se kasnije.</Text>
           )}
@@ -292,6 +233,11 @@ export default function EditRepairScreen({ route, navigation }) {
           <TouchableOpacity style={[styles.saveButton, saving && styles.saveButtonDisabled]} onPress={handleSave} disabled={saving}>
             <Ionicons name="save" size={20} color="#fff" />
             <Text style={styles.saveButtonText}>{saving ? 'Spremam...' : 'Spremi promjene'}</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.deleteButton} onPress={() => confirmDelete(baseRepair, navigation, setSaving)} disabled={saving}>
+            <Ionicons name="trash" size={20} color="#b91c1c" />
+            <Text style={styles.deleteButtonText}>Obriši popravak</Text>
           </TouchableOpacity>
 
           <View style={{ height: 40 }} />
@@ -311,20 +257,14 @@ const styles = StyleSheet.create({
   elevatorTitle: { fontSize: ms(16), fontWeight: '700', color: '#111827' },
   elevatorDetail: { fontSize: ms(14), color: '#6b7280', marginTop: ms(2) },
   elevatorCode: { fontSize: ms(14), color: '#374151', marginTop: ms(4), fontWeight: '600' },
-  statusRow: { flexDirection: 'row', gap: ms(10) },
-  statusChip: { paddingHorizontal: ms(12), paddingVertical: ms(8), borderRadius: ms(10), borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#fff' },
-  statusChipText: { fontSize: ms(15), fontWeight: '700', color: '#6b7280' },
-  toggleRow: { flexDirection: 'row', gap: ms(10), marginTop: ms(12), flexWrap: 'wrap' },
-  toggleButton: { flexDirection: 'row', alignItems: 'center', gap: ms(8), paddingVertical: ms(10), paddingHorizontal: ms(12), borderRadius: ms(10), borderWidth: 1, borderColor: '#e5e7eb' },
-  toggleButtonActive: { borderColor: '#10b981', backgroundColor: '#ecfdf3' },
-  toggleText: { fontSize: ms(14), color: '#111827', fontWeight: '600' },
   label: { fontSize: ms(14), fontWeight: '600', color: '#1f2937', marginBottom: ms(8) },
   dateButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: ms(8), padding: ms(12), gap: ms(10) },
   dateText: { fontSize: ms(16), color: '#1f2937' },
   input: { backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: ms(8), padding: ms(12), fontSize: ms(16), color: '#1f2937' },
-  textArea: { minHeight: ms(100), paddingTop: ms(12), textAlignVertical: 'top' },
   hintText: { marginTop: ms(10), marginHorizontal: ms(16), fontSize: ms(13), color: '#6b7280' },
   saveButton: { backgroundColor: '#2563eb', marginHorizontal: ms(16), marginTop: ms(16), padding: ms(16), borderRadius: ms(12), flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: ms(8) },
   saveButtonDisabled: { opacity: 0.7 },
   saveButtonText: { color: '#fff', fontSize: ms(16), fontWeight: '700' },
+  deleteButton: { borderWidth: 1, borderColor: '#fca5a5', backgroundColor: '#fef2f2', marginHorizontal: ms(16), marginTop: ms(12), padding: ms(14), borderRadius: ms(12), flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: ms(8) },
+  deleteButtonText: { color: '#b91c1c', fontSize: ms(15), fontWeight: '700' },
 });

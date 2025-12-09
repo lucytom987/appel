@@ -11,8 +11,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function AboutScreen({ navigation }) {
-  const currentVersion = '0.01 beta';
-  const currentBuild = 'beta';
+  const currentVersion = '1.0.1';
+  const currentBuild = '2';
   const [versionTapCount, setVersionTapCount] = React.useState(0);
 
   const handleVersionPress = () => {
@@ -58,7 +58,7 @@ export default function AboutScreen({ navigation }) {
             APPEL je mobilna aplikacija za upravljanje dizalima, servisima i hitnim popravcima.
             Offline-first pristup omogućuje rad bez mreže, a sinkronizacija se izvršava čim je
             veza dostupna. Fokus je na brzom logiranju intervencija, preglednim listama i
-            pouzdanom map prikazu lokacija.
+            pouzdanom prikazu lokacija na karti.
           </Text>
         </View>
 
@@ -105,9 +105,10 @@ export default function AboutScreen({ navigation }) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Trenutni status</Text>
           <Text style={styles.description}>
-            Ovo je beta izdanje (v{currentVersion}) fokusirano na stabilnost, preglednost popisa
-            i jednostavno upravljanje servisima i popravcima. Aplikacija radi offline-first,
-            a promjene se sinkroniziraju kada je dostupna mreža.
+            Verzija v{currentVersion} (build {currentBuild}).
+            Fokus: usklađeni brojači popravaka (filtracija obrisanih/duplikata), blaži zoom pri lociranju na karti,
+            konzistentan back na listu popravaka, novi prikaz liste dizala (adresa prva, status chip u headeru),
+            pretraga po adresi/nazivu/kontakt osobi.
           </Text>
         </View>
 

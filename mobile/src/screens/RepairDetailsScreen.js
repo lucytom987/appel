@@ -10,7 +10,7 @@ const statusLabel = (status) => {
   switch (status) {
     case 'pending': return 'Prijavljen';
     case 'in_progress': return 'U tijeku';
-    case 'completed': return 'ZavrÅ¡eno';
+    case 'completed': return 'Završeno';
     default: return status;
   }
 };
@@ -37,7 +37,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
         setRepairData({ ...repair, ...fresh });
       }
     } catch (e) {
-      console.log('Ne mogu uÄitati detalje popravka iz baze:', e?.message);
+      console.log('Ne mogu učitati detalje popravka iz baze:', e?.message);
     }
   }, [repair]);
 
@@ -112,7 +112,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
             style={[styles.input, styles.textArea]}
             value={opisKvara}
             onChangeText={setOpisKvara}
-            placeholder="UpiÅ¡i opis kvara"
+            placeholder="Upiši opis kvara"
             multiline
           />
         </View>
@@ -123,7 +123,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
             style={[styles.input, styles.textArea]}
             value={opisPopravka}
             onChangeText={setOpisPopravka}
-            placeholder="Å to je raÄ‘eno na popravku"
+            placeholder="Što je rađeno na popravku"
             multiline
           />
         </View>
@@ -134,7 +134,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
             {[
               { label: 'Prijavljen', value: 'pending', color: '#ef4444' },
               { label: 'U tijeku', value: 'in_progress', color: '#f59e0b' },
-              { label: 'ZavrÅ¡eno', value: 'completed', color: '#10b981' },
+              { label: 'Završeno', value: 'completed', color: '#10b981' },
             ].map((opt) => {
               const active = status === opt.value;
               return (

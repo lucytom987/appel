@@ -43,6 +43,23 @@ const parseDate = (value) => {
 
 const formatDateLabel = (date) => (date ? date.toLocaleDateString('hr-HR') : '-');
 
+const normalizeElevatorId = (raw) => {
+  if (typeof raw === 'object' && raw !== null) return raw._id || raw.id;
+  return raw;
+};
+
+const isInactiveElevator = (rawElevatorId) => {
+  const elevatorId = normalizeElevatorId(rawElevatorId);
+  let elevator = elevatorId ? elevatorDB.getById?.(elevatorId) : null;
+
+  // Ako je zapis stigao sa servera s ugniježđenim objektom, koristi ga kao fallback
+  if (!elevator && rawElevatorId && typeof rawElevatorId === 'object') {
+    elevator = rawElevatorId;
+  }
+
+  return elevator?.status === 'neaktivan';
+};
+
 const buildAddressLabel = (service) => {
   if (!service) return 'Nepoznata adresa';
   const raw = service.elevatorId;
@@ -162,6 +179,9 @@ export default function ServicesListScreen({ navigation }) {
   const applyFilter = useCallback(() => {
     let filtered = Array.isArray(services) ? services : [];
 
+    // Izbaci servise vezane uz neaktivna dizala
+    filtered = filtered.filter((s) => !isInactiveElevator(s?.elevatorId));
+
     if (filter === 'notServiced') {
       const servicedThisMonth = new Set();
       const latestByElevator = new Map();
@@ -169,9 +189,7 @@ export default function ServicesListScreen({ navigation }) {
       filtered.forEach((s) => {
         const date = parseDate(s.datum || s.serviceDate);
         const elevatorIdRaw = s.elevatorId;
-        const elevatorId = typeof elevatorIdRaw === 'object' && elevatorIdRaw !== null
-          ? (elevatorIdRaw._id || elevatorIdRaw.id)
-          : elevatorIdRaw;
+        const elevatorId = normalizeElevatorId(elevatorIdRaw);
         if (!elevatorId) return;
 
         const prev = latestByElevator.get(elevatorId);
@@ -185,7 +203,7 @@ export default function ServicesListScreen({ navigation }) {
         }
       });
 
-      const allElevators = elevatorDB.getAll?.() || [];
+      const allElevators = (elevatorDB.getAll?.() || []).filter((e) => e?.status !== 'neaktivan');
       const notServiced = allElevators
         .map((e) => {
           const eid = e._id || e.id;

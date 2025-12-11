@@ -734,14 +734,14 @@ export const userDB = {
         user.ime,
         user.prezime,
         user.email,
-        user.uloga || 'serviser',
+        user.uloga,
         user.telefon,
         user.privremenaLozinka || null,
         user.aktivan !== false ? 1 : 0,
-        1, // synced
+        1,
         Date.now()
       ]
-    );
+      );
   },
   
   update: (id, user) => {
@@ -776,6 +776,45 @@ export const userDB = {
   },
 };
 
+// Chatrooms DB
+export const chatroomDB = {
+  getAll: () => {
+    const rooms = db.getAllSync('SELECT * FROM chatrooms ORDER BY updated_at DESC');
+    return rooms.map((r) => ({
+      ...r,
+      members: typeof r.members === 'string' ? JSON.parse(r.members || '[]') : (r.members || []),
+    }));
+  },
+  insertOrReplace: (room) => {
+    const id = room.id || room._id;
+    if (!id) return;
+    db.runSync(
+      'INSERT OR REPLACE INTO chatrooms (id, name, description, createdBy, members, synced, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [
+        id,
+        room.name || room.naziv,
+        room.description || room.opis,
+        room.kreiraoId || room.createdBy || null,
+        JSON.stringify(room.members || room.clanovi || []),
+        1,
+        room.updated_at || room.azuriranDatum || Date.now(),
+      ]
+    );
+  },
+  bulkInsert: (rooms) => {
+    rooms.forEach((r) => {
+      try {
+        chatroomDB.insertOrReplace(r);
+      } catch (e) {
+        console.log('Chatroom insert skip:', e?.message);
+      }
+    });
+  },
+  clear: () => {
+    db.runSync('DELETE FROM chatrooms');
+  },
+};
+
 // Messages DB
 export const messageDB = {
   getByRoom: (roomId) => {
@@ -784,19 +823,30 @@ export const messageDB = {
   
   insert: (message) => {
     const id = message.id || message._id || `local_${Date.now()}`;
+    const chatRoomId = message.chatRoomId || message.chatRoom || message.chatroomId;
+    if (!chatRoomId) return null; // ignore malformed messages without room
+    const senderId = message.senderId?._id || message.senderId || message.sender;
+    const senderName = message.senderName
+      || (message.senderId && `${message.senderId.ime || ''} ${message.senderId.prezime || ''}`.trim())
+      || (message.sender?.name)
+      || '';
+
+    const isLocalId = String(id).startsWith('local_');
+    const syncedFlag = message.synced !== undefined ? (message.synced ? 1 : 0) : (isLocalId ? 0 : 1);
+
     return db.runSync(
       `INSERT INTO messages (id, chatroomId, sender, senderName, tekst, slika, 
        isRead, kreiranDatum, synced, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
-        message.chatRoom || message.chatroomId,
-        message.senderId?._id || message.senderId || message.sender,
-        message.sender?.name || message.senderName,
+        chatRoomId,
+        senderId,
+        senderName,
         message.tekst || message.content,
         message.slika || message.imageUrl,
         JSON.stringify(message.isRead || message.readBy || []),
         message.kreiranDatum || message.createdAt || new Date().toISOString(),
-        0,
+        syncedFlag,
         Date.now()
       ]
     );

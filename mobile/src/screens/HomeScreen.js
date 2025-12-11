@@ -238,6 +238,12 @@ export default function HomeScreen({ navigation }) {
           >
             <Ionicons name="information-circle-outline" size={28} color="#666" />
           </TouchableOpacity>
+          <TouchableOpacity 
+            onPress={() => navigation.navigate('ChatRooms')}
+            style={styles.headerButton}
+          >
+            <Ionicons name="chatbubbles-outline" size={26} color="#666" />
+          </TouchableOpacity>
           <TouchableOpacity onPress={logout}>
             <Ionicons name="log-out-outline" size={28} color="#666" />
           </TouchableOpacity>

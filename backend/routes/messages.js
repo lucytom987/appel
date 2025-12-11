@@ -11,14 +11,26 @@ router.get('/room/:roomId', authenticate, async (req, res) => {
     const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 0, 1), 200);
     const parsedSkip = Math.max(parseInt(skip, 10) || 0, 0);
 
-    const messages = await Message.find({ chatRoomId: req.params.roomId })
+    const room = await ChatRoom.findById(req.params.roomId);
+    if (!room) {
+      return res.status(404).json({ success: false, message: 'Chat soba nije pronadena' });
+    }
+
+    const userId = String(req.user._id);
+    if (!room.clanovi.map(String).includes(userId)) {
+      room.clanovi.push(userId);
+      room.azuriranDatum = new Date();
+      await room.save();
+    }
+
+    const messages = await Message.find({ chatRoomId: room._id })
       .populate('senderId', 'ime prezime email uloga')
       .sort({ kreiranDatum: -1 })
       .limit(parsedLimit)
       .skip(parsedSkip)
       .lean();
 
-    const total = await Message.countDocuments({ chatRoomId: req.params.roomId });
+    const total = await Message.countDocuments({ chatRoomId: room._id });
 
     res.json({
       success: true,
@@ -27,12 +39,12 @@ router.get('/room/:roomId', authenticate, async (req, res) => {
       data: messages.reverse() // od najstarije prema najnovijoj
     });
   } catch (error) {
-    console.error('Greška pri dohvaćanju poruka:', error);
-    res.status(500).json({ success: false, message: 'Greška pri dohvaćanju poruka' });
+    console.error('Greska pri dohvacanju poruka:', error);
+    res.status(500).json({ success: false, message: 'Greska pri dohvacanju poruka' });
   }
 });
 
-// POST /api/messages - pošalji poruku
+// POST /api/messages - posalji poruku (dozvoljeno svim prijavljenim ulogama)
 router.post('/', authenticate, async (req, res) => {
   try {
     const chatRoomId = req.body.chatRoomId || req.body.chatRoom;
@@ -41,15 +53,18 @@ router.post('/', authenticate, async (req, res) => {
 
     const room = await ChatRoom.findById(chatRoomId);
     if (!room) {
-      return res.status(404).json({ success: false, message: 'Chat soba nije pronađena' });
+      return res.status(404).json({ success: false, message: 'Chat soba nije pronadena' });
     }
 
-    if (!room.clanovi.map(String).includes(String(req.user._id))) {
-      return res.status(403).json({ success: false, message: 'Niste član ove chat sobe' });
+    const userId = String(req.user._id);
+    if (!room.clanovi.map(String).includes(userId)) {
+      room.clanovi.push(userId);
+      room.azuriranDatum = new Date();
+      await room.save();
     }
 
     const message = new Message({
-      chatRoomId,
+      chatRoomId: room._id,
       senderId: req.user._id,
       tekst,
       slika,
@@ -60,17 +75,17 @@ router.post('/', authenticate, async (req, res) => {
 
     res.status(201).json({ success: true, message: 'Poruka poslana', data: message });
   } catch (error) {
-    console.error('Greška pri slanju poruke:', error);
-    res.status(500).json({ success: false, message: 'Greška pri slanju poruke', error: error.message });
+    console.error('Greska pri slanju poruke:', error);
+    res.status(500).json({ success: false, message: 'Greska pri slanju poruke', error: error.message });
   }
 });
 
-// PUT /api/messages/:id/read - označi pročitano
+// PUT /api/messages/:id/read - oznaci procitano
 router.put('/:id/read', authenticate, async (req, res) => {
   try {
     const message = await Message.findById(req.params.id);
     if (!message) {
-      return res.status(404).json({ success: false, message: 'Poruka nije pronađena' });
+      return res.status(404).json({ success: false, message: 'Poruka nije pronadena' });
     }
 
     if (!message.isRead.map(String).includes(String(req.user._id))) {
@@ -78,19 +93,19 @@ router.put('/:id/read', authenticate, async (req, res) => {
       await message.save();
     }
 
-    res.json({ success: true, message: 'Poruka označena kao pročitana', data: message });
+    res.json({ success: true, message: 'Poruka oznacena kao procitana', data: message });
   } catch (error) {
-    console.error('Greška pri označavanju poruke:', error);
-    res.status(500).json({ success: false, message: 'Greška pri označavanju poruke' });
+    console.error('Greska pri oznacavanju poruke:', error);
+    res.status(500).json({ success: false, message: 'Greska pri oznacavanju poruke' });
   }
 });
 
-// DELETE /api/messages/:id - briši poruku (pošiljatelj ili admin)
+// DELETE /api/messages/:id - brisi poruku (posaljatelj ili admin)
 router.delete('/:id', authenticate, async (req, res) => {
   try {
     const message = await Message.findById(req.params.id);
     if (!message) {
-      return res.status(404).json({ success: false, message: 'Poruka nije pronađena' });
+      return res.status(404).json({ success: false, message: 'Poruka nije pronadena' });
     }
 
     if (String(message.senderId) !== String(req.user._id) && req.user.uloga !== 'admin') {
@@ -100,8 +115,8 @@ router.delete('/:id', authenticate, async (req, res) => {
     await message.deleteOne();
     res.json({ success: true, message: 'Poruka obrisana' });
   } catch (error) {
-    console.error('Greška pri brisanju poruke:', error);
-    res.status(500).json({ success: false, message: 'Greška pri brisanju poruke' });
+    console.error('Greska pri brisanju poruke:', error);
+    res.status(500).json({ success: false, message: 'Greska pri brisanju poruke' });
   }
 });
 

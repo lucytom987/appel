@@ -11,10 +11,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
-import { elevatorDB } from '../database/db';
+import { elevatorDB, serviceDB } from '../database/db';
 
 export default function MapScreen({ navigation }) {
   const [elevators, setElevators] = useState([]);
+  const [servicedThisMonth, setServicedThisMonth] = useState(new Set());
   const [userLocation, setUserLocation] = useState(null);
   const [permissionGranted, setPermissionGranted] = useState(false);
   const [loadingLocation, setLoadingLocation] = useState(true);
@@ -23,6 +24,46 @@ export default function MapScreen({ navigation }) {
   const [selectedElevator, setSelectedElevator] = useState(null); // Prvi tap prikaz kartice
   const mapRef = useRef(null);
   const didCenterInitial = useRef(false);
+
+  const parseDate = (value) => {
+    if (!value) return null;
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? null : d;
+  };
+
+  const normalizeElevatorId = (raw) => {
+    if (typeof raw === 'object' && raw !== null) return raw._id || raw.id;
+    return raw;
+  };
+
+  const getServicedIdsForCurrentMonth = () => {
+    try {
+      const now = new Date();
+      const month = now.getMonth();
+      const year = now.getFullYear();
+      const services = serviceDB.getAll?.() || [];
+      const set = new Set();
+
+      services.forEach((s) => {
+        const d = parseDate(s.datum || s.serviceDate);
+        if (!d) return;
+        if (d.getMonth() !== month || d.getFullYear() !== year) return;
+        const eid = normalizeElevatorId(s.elevatorId);
+        if (eid) set.add(eid);
+      });
+
+      return set;
+    } catch (err) {
+      console.log('⚠️ Servisi za kartu nisu dostupni:', err?.message);
+      return new Set();
+    }
+  };
+
+  const getMarkerColors = (status) => {
+    if (status === 'serviced') return { bubble: '#16a34a', arrow: '#16a34a' };
+    if (status === 'inactive') return { bubble: '#9ca3af', arrow: '#9ca3af' };
+    return { bubble: '#ef4444', arrow: '#ef4444' }; // not serviced
+  };
 
   const sameCoord = (a, b) => {
     if (!a || !b) return false;
@@ -76,6 +117,7 @@ export default function MapScreen({ navigation }) {
         // Elevatori paralelno
         setTimeout(() => {
           try {
+            const servicedSet = getServicedIdsForCurrentMonth();
             const allElevators = elevatorDB.getAll();
             const elevatorsWithGPS = allElevators.filter(e => {
               if (!e.koordinate) return false;
@@ -94,7 +136,10 @@ export default function MapScreen({ navigation }) {
               }
               return { ...e, koordinate: coords };
             });
-            if (!cancelled) setElevators(elevatorsWithGPS);
+            if (!cancelled) {
+              setServicedThisMonth(servicedSet);
+              setElevators(elevatorsWithGPS);
+            }
           } catch (e) {
             console.log('⚠️ Greška elevatori:', e.message);
           } finally {
@@ -151,6 +196,7 @@ export default function MapScreen({ navigation }) {
 
       // Elevators
       try {
+        const servicedSet = getServicedIdsForCurrentMonth();
         const allElevators = elevatorDB.getAll();
         const elevatorsWithGPS = allElevators.filter(e => {
           if (!e.koordinate) return false;
@@ -169,6 +215,7 @@ export default function MapScreen({ navigation }) {
           }
           return { ...e, koordinate: coords };
         });
+        setServicedThisMonth(servicedSet);
         setElevators(elevatorsWithGPS);
       } catch (e) {
         setErrorMsg('Greška pri dohvaćanju dizala');
@@ -313,25 +360,33 @@ export default function MapScreen({ navigation }) {
         showsMyLocationButton={false}
       >
         {/* Elevator markers */}
-        {elevators.map((elevator) => (
-          <Marker
-            key={elevator.id || elevator._id}
-            coordinate={{
-              latitude: elevator.koordinate.latitude,
-              longitude: elevator.koordinate.longitude,
-            }}
-            title={elevator.nazivStranke}
-            description={`${elevator.ulica}, ${elevator.mjesto}`}
-            onPress={() => handleMarkerPress(elevator)}
-          >
-            <View style={styles.markerContainer}>
-              <View style={styles.markerBubble}>
-                <Ionicons name="business" size={20} color="#fff" />
+        {elevators.map((elevator) => {
+          const elevatorId = elevator.id || elevator._id;
+          const markerStatus = elevator.status === 'neaktivan'
+            ? 'inactive'
+            : (servicedThisMonth.has(elevatorId) ? 'serviced' : 'notServiced');
+          const markerColors = getMarkerColors(markerStatus);
+
+          return (
+            <Marker
+              key={elevatorId}
+              coordinate={{
+                latitude: elevator.koordinate.latitude,
+                longitude: elevator.koordinate.longitude,
+              }}
+              title={elevator.nazivStranke}
+              description={`${elevator.ulica}, ${elevator.mjesto}`}
+              onPress={() => handleMarkerPress(elevator)}
+            >
+              <View style={styles.markerContainer}>
+                <View style={[styles.markerBubble, { backgroundColor: markerColors.bubble }]}> 
+                  <Ionicons name="business" size={20} color="#fff" />
+                </View>
+                <View style={[styles.markerArrow, { borderTopColor: markerColors.arrow }]} />
               </View>
-              <View style={styles.markerArrow} />
-            </View>
-          </Marker>
-        ))}
+            </Marker>
+          );
+        })}
       </MapView>
 
       {/* Overlay indikatori */}

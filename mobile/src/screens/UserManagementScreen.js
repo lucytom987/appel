@@ -261,12 +261,7 @@ const UserManagementScreen = ({ navigation }) => {
             <Text style={styles.roleText}>{item.uloga.toUpperCase()}</Text>
           </View>
         </View>
-        <View
-          style={[
-            styles.statusIndicator,
-            { backgroundColor: isCurrentUser(item) ? '#10b981' : '#d1d5db' },
-          ]}
-        />
+        {/* Uklonjeni online-indicatori */}
       </View>
 
       {item.telefon && (
@@ -562,13 +557,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: 'bold',
   },
-  statusIndicator: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    marginTop: 4,
-  },
-  userPhone: {
     fontSize: 13,
     color: '#666',
     marginBottom: 12,
@@ -712,9 +700,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#333',
   },
-  roleSelector: {
-    gap: 8,
-  },
+  roleSelector: { gap: 8 },
   roleOption: {
     borderWidth: 2,
     borderColor: '#DDD',
@@ -747,12 +733,8 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
   },
-  cancelButton: {
-    backgroundColor: '#EEE',
-  },
-  saveButton: {
-    backgroundColor: '#45B7D1',
-  },
+  cancelButton: { backgroundColor: '#EEE' },
+  saveButton: { backgroundColor: '#45B7D1' },
   buttonText: {
     fontSize: 14,
     fontWeight: '600',

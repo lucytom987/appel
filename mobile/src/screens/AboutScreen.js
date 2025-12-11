@@ -11,8 +11,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function AboutScreen({ navigation }) {
-  const currentVersion = '1.1.0';
-  const currentBuild = '3';
+  const currentVersion = '1.2.0';
+  const currentBuild = '4';
   const [versionTapCount, setVersionTapCount] = React.useState(0);
 
   const handleVersionPress = () => {
@@ -105,10 +105,9 @@ export default function AboutScreen({ navigation }) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Trenutni status</Text>
           <Text style={styles.description}>
-            Verzija v{currentVersion} (build {currentBuild}) — 9.12.2025.
-            Fokus: usklađeni brojači popravaka (filtracija obrisanih/duplikata), blaži zoom pri lociranju na karti,
-            konzistentan back na listu popravaka, novi prikaz liste dizala (adresa prva, filter čip u headeru),
-            pretraga po adresi/nazivu/kontakt osobi.
+            Verzija v{currentVersion} (build {currentBuild}) — 11.12.2025.
+            Fokus: chat poboljšanja (badge nepročitanih, automatsko označavanje pročitanih, brisanje soba briše i poruke),
+            svi vide broj članova bez dodavanja, uklonjen neispravan online indikator korisnika.
           </Text>
         </View>
 
@@ -116,6 +115,12 @@ export default function AboutScreen({ navigation }) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Povijest verzija</Text>
           <View style={styles.versionList}>
+            <View style={styles.versionItem}>
+              <Text style={styles.versionLabel}>v1.2.0 (build 4) • 11.12.2025</Text>
+              <Text style={styles.versionNotes}>
+                Chat: badge nepročitanih i označavanje pročitanih, brisanje sobe briše i poruke, svi vide broj članova, uklonjen neispravan online indikator korisnika.
+              </Text>
+            </View>
             <View style={styles.versionItem}>
               <Text style={styles.versionLabel}>v1.1.0 (build 3) • 9.12.2025</Text>
               <Text style={styles.versionNotes}>

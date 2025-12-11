@@ -17,6 +17,19 @@ APPEL je mobilna aplikacija za upravljanje dizalima, servisima i hitnim popravci
 
 ## Povijest Verzija
 
+### Build 9 (v1.2.0) - 11. Prosinac 2025
+**Chat sobe, nepročitane poruke i čišćenja UI-ja**
+
+#### Izmjene:
+- 📨 Nepročitane poruke: dodan backend endpoint `/messages/unread/count`, klijent označava poruke kao pročitane pri otvaranju sobe, a Home badge ispravno parsira broj.
+- 🧹 Brojanje poruka: filtrira samo postojeće sobe i ignorira orfanirane/obrisane sobe i vlastite poruke.
+- 👥 Članovi soba: svi korisnici vide broj članova (`membersCount`), bez potrebe za ručnim dodavanjem u članove.
+- 🗑️ Brisanje chat soba: UI gumb s potvrdom; backend briše i sve poruke te sobe.
+- ✂️ Uklonjen nefunkcionalni online indikator u listi korisnika.
+
+#### Tehnički:
+- Verzija aplikacije 1.2.0; Android versionCode 4; iOS buildNumber 4 (package.json, app.json, app.config.js).
+
 ### Build 8 (v1.1.0) - 9. Prosinac 2025
 **UX i navigacija (popravci/dizala) + blaži zoom na karti**
 

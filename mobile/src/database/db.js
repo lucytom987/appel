@@ -370,11 +370,14 @@ export const elevatorDB = {
   
   delete: (id) => {
     const now = Date.now();
-    return db.runSync('UPDATE elevators SET is_deleted = 1, deleted_at = ?, updated_at = ?, sync_status = "dirty", synced = 0 WHERE id = ?', [
-      new Date(now).toISOString(),
-      now,
-      id,
-    ]);
+    return db.runSync(
+      'UPDATE elevators SET is_deleted = 1, deleted_at = ?, updated_at = ?, sync_status = "pending_delete", synced = 0 WHERE id = ?',
+      [
+        new Date(now).toISOString(),
+        now,
+        id,
+      ]
+    );
   },
   
   bulkInsert: (elevators) => {
@@ -390,15 +393,33 @@ export const elevatorDB = {
 
   getUnsynced: () => {
     try {
-      return db.getAllSync('SELECT * FROM elevators WHERE sync_status = "dirty" OR synced = 0');
+      return db.getAllSync('SELECT * FROM elevators WHERE sync_status IN ("dirty","pending_delete") OR synced = 0');
     } catch (e) {
       console.log('⚠️ elevators getUnsynced failed:', e?.message);
       return [];
     }
   },
 
-  markSynced: (id, serverId) => {
-    return db.runSync('UPDATE elevators SET synced = 1, sync_status = "synced", id = ?, updated_at = ? WHERE id = ?', [serverId, Date.now(), id]);
+  markSynced: (localId, serverId) => {
+    const now = Date.now();
+
+    // Update elevator ID to server ID
+    db.runSync(
+      'UPDATE elevators SET synced = 1, sync_status = "synced", id = ?, updated_at = ? WHERE id = ?',
+      [serverId, now, localId]
+    );
+
+    // Re-point offline child records to the new elevator ID so they can sync
+    db.runSync(
+      'UPDATE services SET elevatorId = ?, sync_status = CASE WHEN sync_status = "synced" THEN "dirty" ELSE sync_status END WHERE elevatorId = ?',
+      [serverId, localId]
+    );
+    db.runSync(
+      'UPDATE repairs SET elevatorId = ?, sync_status = CASE WHEN sync_status = "synced" THEN "dirty" ELSE sync_status END WHERE elevatorId = ?',
+      [serverId, localId]
+    );
+
+    return true;
   },
 };
 
@@ -508,7 +529,7 @@ export const serviceDB = {
   
   delete: (id) => {
     const now = Date.now();
-    return db.runSync('UPDATE services SET is_deleted = 1, deleted_at = ?, updated_at = ?, sync_status = "dirty", synced = 0 WHERE id = ?', [
+    return db.runSync('UPDATE services SET is_deleted = 1, deleted_at = ?, updated_at = ?, sync_status = "pending_delete", synced = 0 WHERE id = ?', [
       new Date(now).toISOString(),
       now,
       id,
@@ -517,7 +538,7 @@ export const serviceDB = {
   
   getUnsynced: () => {
     try {
-      const services = db.getAllSync('SELECT * FROM services WHERE sync_status = "dirty" OR synced = 0');
+      const services = db.getAllSync('SELECT * FROM services WHERE sync_status IN ("dirty","pending_delete") OR synced = 0');
       return services.map(s => ({
         ...s,
         checklist: typeof s.checklist === 'string' ? JSON.parse(s.checklist || '[]') : (s.checklist || []),
@@ -659,7 +680,7 @@ export const repairDB = {
   
   delete: (id) => {
     const now = Date.now();
-    return db.runSync('UPDATE repairs SET is_deleted = 1, deleted_at = ?, updated_at = ?, sync_status = "dirty", synced = 0 WHERE id = ?', [
+    return db.runSync('UPDATE repairs SET is_deleted = 1, deleted_at = ?, updated_at = ?, sync_status = "pending_delete", synced = 0 WHERE id = ?', [
       new Date(now).toISOString(),
       now,
       id,
@@ -668,7 +689,7 @@ export const repairDB = {
   
   getUnsynced: () => {
     try {
-      return db.getAllSync('SELECT * FROM repairs WHERE sync_status = "dirty" OR synced = 0');
+      return db.getAllSync('SELECT * FROM repairs WHERE sync_status IN ("dirty","pending_delete") OR synced = 0');
     } catch (e) {
       console.log('⚠️ repairs getUnsynced failed:', e?.message);
       return [];

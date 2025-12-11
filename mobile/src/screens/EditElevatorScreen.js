@@ -135,12 +135,6 @@ export default function EditElevatorScreen({ navigation, route }) {
       return;
     }
 
-    // Provjeri je li online
-    if (!online) {
-      Alert.alert('Offline', 'Za ažuriranje dizala morate biti online');
-      return;
-    }
-
     setLoading(true);
 
     try {
@@ -166,23 +160,40 @@ export default function EditElevatorScreen({ navigation, route }) {
         throw new Error('Nedostaje ID dizala (id/_id)');
       }
 
-      // Ažuriraj na backend
-      const response = await elevatorsAPI.update(eid, elevatorData);
+      const token = await SecureStore.getItemAsync('userToken');
+      const isOfflineUser = token?.startsWith('offline_token_');
 
-      // Ažuriraj u lokalnoj bazi
-      const updated = response.data?.data || response.data;
-      elevatorDB.update(eid, {
-        ...updated,
-        id: eid,
-        synced: 1,
-      });
+      if (!online || isOfflineUser) {
+        // Spremi samo lokalno i označi za sync
+        elevatorDB.update(eid, {
+          ...elevator,
+          ...elevatorData,
+          id: eid,
+          sync_status: 'dirty',
+          synced: 0,
+          updated_at: Date.now(),
+        });
+        Alert.alert('Spremljeno lokalno', 'Dizalo je ažurirano i čeka sinkronizaciju.');
+      } else {
+        // Ažuriraj na backend
+        const response = await elevatorsAPI.update(eid, elevatorData);
 
-      Alert.alert('Uspjeh', 'Dizalo uspješno ažurirano', [
-        { 
-          text: 'OK', 
-          onPress: () => navigation.navigate('Repairs') 
-        }
-      ]);
+        // Ažuriraj u lokalnoj bazi
+        const updated = response.data?.data || response.data;
+        elevatorDB.update(eid, {
+          ...updated,
+          id: eid,
+          synced: 1,
+          sync_status: 'synced',
+        });
+
+        Alert.alert('Uspjeh', 'Dizalo uspješno ažurirano', [
+          { 
+            text: 'OK', 
+            onPress: () => navigation.navigate('Repairs') 
+          }
+        ]);
+      }
 
     } catch (error) {
       console.error('Greška pri ažuriranju dizala:', error);
@@ -287,7 +298,7 @@ export default function EditElevatorScreen({ navigation, route }) {
 
       elevatorDB.delete(eid);
 
-      Alert.alert('Uspjeh', 'Dizalo obrisano', [
+      Alert.alert('Uspjeh', online && !isOfflineUser ? 'Dizalo obrisano' : 'Dizalo označeno kao obrisano (čeka sync)', [
         { 
           text: 'OK', 
           onPress: () => {
@@ -383,7 +394,7 @@ export default function EditElevatorScreen({ navigation, route }) {
           <View style={styles.offlineWarning}>
             <Ionicons name="warning" size={20} color="#ef4444" />
             <Text style={styles.offlineText}>
-              Za ažuriranje dizala morate biti online
+              Offline ste – izmjene će se spremiti lokalno i syncati čim bude mreže.
             </Text>
           </View>
         )}

@@ -75,7 +75,23 @@ export default function ElevatorsListScreen({ navigation }) {
       });
     }
 
-    setFilteredElevators(filtered);
+    // Sortiraj po abecedi adresa (ulica, zatim mjesto, pa naziv stranke)
+    const compareAddresses = (a, b) => {
+      const au = normalize(a.ulica || '');
+      const bu = normalize(b.ulica || '');
+      if (au !== bu) return au.localeCompare(bu);
+
+      const am = normalize(a.mjesto || '');
+      const bm = normalize(b.mjesto || '');
+      if (am !== bm) return am.localeCompare(bm);
+
+      const an = normalize(a.nazivStranke || '');
+      const bn = normalize(b.nazivStranke || '');
+      return an.localeCompare(bn);
+    };
+
+    const sorted = [...filtered].sort(compareAddresses);
+    setFilteredElevators(sorted);
   };
 
   const onRefresh = async () => {
@@ -106,6 +122,30 @@ export default function ElevatorsListScreen({ navigation }) {
         <View style={styles.detailRow}>
           <Ionicons name="barcode-outline" size={16} color="#6b7280" />
           <Text style={styles.detailText}>Dizalo: {item.brojDizala}</Text>
+        </View>
+        <View style={styles.syncRow}>
+          <View style={[
+            styles.syncBadge,
+            item.sync_status === 'synced' || item.synced ? styles.syncBadgeOk
+              : item.sync_status === 'pending_delete' ? styles.syncBadgeDelete
+              : styles.syncBadgeDirty
+          ]}>
+            <Ionicons
+              name={
+                item.sync_status === 'pending_delete' ? 'trash-outline'
+                  : (item.sync_status === 'synced' || item.synced) ? 'cloud-done-outline'
+                  : 'cloud-offline-outline'
+              }
+              size={14}
+              color="#fff"
+            />
+            <Text style={styles.syncBadgeText}>
+              {item.sync_status === 'pending_delete'
+                ? 'čeka brisanje'
+                : (item.sync_status === 'synced' || item.synced) ? 'sinkronizirano'
+                : 'čeka sync'}
+            </Text>
+          </View>
         </View>
       </View>
 
@@ -317,6 +357,19 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     fontWeight: '600',
   },
+  syncRow: { flexDirection: 'row', marginTop: 6 },
+  syncBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  syncBadgeOk: { backgroundColor: '#10b981' },
+  syncBadgeDirty: { backgroundColor: '#f59e0b' },
+  syncBadgeDelete: { backgroundColor: '#ef4444' },
+  syncBadgeText: { color: '#fff', fontSize: 12, fontWeight: '600' },
   emptyContainer: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -330,7 +383,7 @@ const styles = StyleSheet.create({
   fab: {
     position: 'absolute',
     right: 20,
-    bottom: 20,
+    bottom: 40, // podignuto da ne sjeda prenisko
     width: 56,
     height: 56,
     borderRadius: 28,

@@ -164,7 +164,8 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
       const serviceDate = parseDateSafe(serviceDateStr);
       if (!serviceDate) return;
       (svc.checklist || []).forEach(item => {
-        if (item.provjereno === 1 || item.provjereno === true) {
+        const checked = item?.provjereno ?? item?.provjereno;
+        if (checked === 1 || checked === true) {
           const key = item.stavka;
           if (!latest[key] || serviceDate > latest[key]) {
             latest[key] = serviceDate;

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+﻿import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -24,32 +24,49 @@ function formatName(person) {
   return full || person.email || '';
 }
 
-const confirmDelete = (baseRepair, navigation, setSaving) => {
+const confirmDelete = (baseRepair, navigation, setSaving, isOnline) => {
   const id = baseRepair?._id || baseRepair?.id;
   if (!id) {
-    Alert.alert('Greška', 'Nije moguće obrisati zapis.');
+    Alert.alert('Greska', 'Nije moguce obrisati zapis.');
     return;
   }
 
-  Alert.alert('Brisanje popravka', 'Želite li obrisati ovaj popravak?', [
+  Alert.alert('Brisanje popravka', 'Zelite li obrisati ovaj popravak?', [
     { text: 'Odustani', style: 'cancel' },
     {
-      text: 'Obriši',
+      text: 'Obrisi',
       style: 'destructive',
       onPress: async () => {
         setSaving(true);
         try {
-          try {
-            await repairsAPI.delete(id);
-          } catch (err) {
-            console.log('Skip remote delete', err?.message);
+          const online = Boolean(isOnline);
+          if (online) {
+            try {
+              await repairsAPI.delete(id);
+              repairDB.delete(id);
+              Alert.alert('Obrisano', 'Popravak je obrisan', [
+                { text: 'OK', onPress: () => navigation.navigate('Repairs') },
+              ]);
+              return;
+            } catch (err) {
+              const status = err?.response?.status || err?.status;
+              if (status === 404) {
+                repairDB.delete(id);
+                Alert.alert('Info', 'Popravak je već obrisan na serveru. Uklonjeno lokalno.', [
+                  { text: 'OK', onPress: () => navigation.navigate('Repairs') },
+                ]);
+                return;
+              }
+              console.log('Skip remote delete', err?.message);
+            }
           }
+          // Offline ili mrežna greška – označi za brisanje lokalno
           repairDB.delete(id);
-          Alert.alert('Obrisano', 'Popravak je obrisan', [
+          Alert.alert('Spremljeno lokalno', 'Popravak je označen za brisanje i čeka sync.', [
             { text: 'OK', onPress: () => navigation.navigate('Repairs') },
           ]);
         } catch (e) {
-          Alert.alert('Greška', e?.message || 'Brisanje nije uspjelo');
+          Alert.alert('Greska', e?.message || 'Brisanje nije uspjelo');
         } finally {
           setSaving(false);
         }
@@ -60,9 +77,9 @@ const confirmDelete = (baseRepair, navigation, setSaving) => {
 
 export default function EditRepairScreen({ route, navigation }) {
   const { repair } = route.params;
-  const { user } = useAuth();
+  const { user, isOnline } = useAuth();
 
-  // Učitaj svježi zapis ako postoji u lokalnoj bazi
+  // UÄitaj svjeÅ¾i zapis ako postoji u lokalnoj bazi
   const baseRepair = useMemo(() => {
     const id = repair?._id || repair?.id;
     if (!id) return repair || {};
@@ -70,7 +87,7 @@ export default function EditRepairScreen({ route, navigation }) {
       const fresh = repairDB.getById(id);
       return fresh ? { ...repair, ...fresh } : repair;
     } catch (e) {
-      console.log('Ne mogu učitati popravak iz baze:', e?.message);
+      console.log('Ne mogu uÄitati popravak iz baze:', e?.message);
       return repair;
     }
   }, [repair]);
@@ -110,7 +127,7 @@ export default function EditRepairScreen({ route, navigation }) {
 
   const formatDate = (date) => date ? date.toLocaleString('hr-HR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'Nije postavljeno';
 
-  const handleSave = async () => {
+    const handleSave = async () => {
     setSaving(true);
     const id = baseRepair._id || baseRepair.id;
     const payload = {
@@ -127,16 +144,21 @@ export default function EditRepairScreen({ route, navigation }) {
       popravkaUPotpunosti: baseRepair.popravkaUPotpunosti,
     };
 
-    // Označi lokalnu izmjenu kao nesinkroniziranu dok backend ne potvrdi
-    const merged = { ...baseRepair, ...payload, synced: 0 };
+    const merged = { ...baseRepair, ...payload, synced: 0, sync_status: 'dirty', updated_at: Date.now() };
 
     try {
-      const res = await repairsAPI.update(id, payload);
-      const updated = res.data?.data || res.data || {};
-      repairDB.update(id, { ...merged, ...updated, synced: 1 });
+      const online = Boolean(isOnline);
+      if (!online) {
+        repairDB.update(id, merged);
+        setShowingSaveHint(true);
+      } else {
+        const res = await repairsAPI.update(id, payload);
+        const updated = res.data?.data || res.data || {};
+        repairDB.update(id, { ...merged, ...updated, synced: 1, sync_status: 'synced' });
+      }
     } catch (e) {
-      console.log('⚠️ Backend nedostupan, spremam lokalno', e?.message);
-      repairDB.update(id, { ...merged, synced: 0 });
+      console.log('Backend nedostupan, spremam lokalno', e?.message);
+      repairDB.update(id, merged);
       setShowingSaveHint(true);
     } finally {
       setSaving(false);
@@ -227,7 +249,7 @@ export default function EditRepairScreen({ route, navigation }) {
           </View>
 
           {showingSaveHint && (
-            <Text style={styles.hintText}>Backend nije bio dostupan, promjene su snimljene lokalno i sinkat će se kasnije.</Text>
+            <Text style={styles.hintText}>Backend nije bio dostupan, promjene su snimljene lokalno i sinkat Ä‡e se kasnije.</Text>
           )}
 
           <TouchableOpacity style={[styles.saveButton, saving && styles.saveButtonDisabled]} onPress={handleSave} disabled={saving}>
@@ -235,9 +257,9 @@ export default function EditRepairScreen({ route, navigation }) {
             <Text style={styles.saveButtonText}>{saving ? 'Spremam...' : 'Spremi promjene'}</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.deleteButton} onPress={() => confirmDelete(baseRepair, navigation, setSaving)} disabled={saving}>
+          <TouchableOpacity style={styles.deleteButton} onPress={() => confirmDelete(baseRepair, navigation, setSaving, isOnline)} disabled={saving}>
             <Ionicons name="trash" size={20} color="#b91c1c" />
-            <Text style={styles.deleteButtonText}>Obriši popravak</Text>
+            <Text style={styles.deleteButtonText}>ObriÅ¡i popravak</Text>
           </TouchableOpacity>
 
           <View style={{ height: 40 }} />
@@ -268,3 +290,6 @@ const styles = StyleSheet.create({
   deleteButton: { borderWidth: 1, borderColor: '#fca5a5', backgroundColor: '#fef2f2', marginHorizontal: ms(16), marginTop: ms(12), padding: ms(14), borderRadius: ms(12), flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: ms(8) },
   deleteButtonText: { color: '#b91c1c', fontSize: ms(15), fontWeight: '700' },
 });
+
+
+

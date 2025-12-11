@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { elevatorDB, repairDB } from '../database/db';
@@ -10,7 +10,7 @@ const statusLabel = (status) => {
   switch (status) {
     case 'pending': return 'Prijavljen';
     case 'in_progress': return 'U tijeku';
-    case 'completed': return 'Završeno';
+    case 'completed': return 'ZavrÅ¡eno';
     default: return status;
   }
 };
@@ -25,9 +25,9 @@ const statusColor = (repair) => {
 export default function RepairDetailsScreen({ route, navigation }) {
   const { repair } = route.params;
   const [repairData, setRepairData] = useState(repair);
-  const { user } = useAuth();
+  const { user, isOnline } = useAuth();
 
-  // Učitaj svježe podatke iz lokalne baze (uključujući prijavio/kontakt)
+  // UÄitaj svjeÅ¾e podatke iz lokalne baze (ukljuÄujuÄ‡i prijavio/kontakt)
   useEffect(() => {
     const id = repair._id || repair.id;
     if (!id) return;
@@ -37,7 +37,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
         setRepairData({ ...repair, ...fresh });
       }
     } catch (e) {
-      console.log('Ne mogu učitati detalje popravka iz baze:', e?.message);
+      console.log('Ne mogu uÄitati detalje popravka iz baze:', e?.message);
     }
   }, [repair]);
 
@@ -64,19 +64,20 @@ export default function RepairDetailsScreen({ route, navigation }) {
       opisPopravka,
       status,
       radniNalogPotpisan,
+      updated_at: Date.now(),
     };
 
     setSaving(true);
     try {
-      try {
+      const online = Boolean(isOnline);
+      if (!online) {
+        repairDB.update(id, { ...repairData, ...payload, synced: 0, sync_status: 'dirty' });
+        setRepairData((prev) => ({ ...prev, ...payload, synced: 0, sync_status: 'dirty' }));
+      } else {
         const response = await repairsAPI.update(id, payload);
         const updated = response.data?.data || response.data;
-        repairDB.update(id, { ...repairData, ...updated, synced: 1 });
-        setRepairData((prev) => ({ ...prev, ...updated }));
-      } catch (err) {
-        console.log('Backend nedostupan, spremam lokalno', err?.message);
-        repairDB.update(id, { ...repairData, ...payload, synced: 0 });
-        setRepairData((prev) => ({ ...prev, ...payload, synced: 0 }));
+        repairDB.update(id, { ...repairData, ...updated, synced: 1, sync_status: 'synced' });
+        setRepairData((prev) => ({ ...prev, ...updated, synced: 1, sync_status: 'synced' }));
       }
       Alert.alert('Spremljeno', 'Promjene su spremljene', [
         { text: 'OK', onPress: () => navigation.navigate('Repairs') },
@@ -111,7 +112,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
             style={[styles.input, styles.textArea]}
             value={opisKvara}
             onChangeText={setOpisKvara}
-            placeholder="Upiši opis kvara"
+            placeholder="UpiÅ¡i opis kvara"
             multiline
           />
         </View>
@@ -122,7 +123,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
             style={[styles.input, styles.textArea]}
             value={opisPopravka}
             onChangeText={setOpisPopravka}
-            placeholder="Što je rađeno na popravku"
+            placeholder="Å to je raÄ‘eno na popravku"
             multiline
           />
         </View>
@@ -133,7 +134,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
             {[
               { label: 'Prijavljen', value: 'pending', color: '#ef4444' },
               { label: 'U tijeku', value: 'in_progress', color: '#f59e0b' },
-              { label: 'Završeno', value: 'completed', color: '#10b981' },
+              { label: 'ZavrÅ¡eno', value: 'completed', color: '#10b981' },
             ].map((opt) => {
               const active = status === opt.value;
               return (
@@ -315,3 +316,6 @@ const styles = StyleSheet.create({
     borderRadius: ms(8),
   },
 });
+
+
+

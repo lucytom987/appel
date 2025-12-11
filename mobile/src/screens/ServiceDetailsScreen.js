@@ -117,13 +117,15 @@ export default function ServiceDetailsScreen({ route, navigation }) {
               const rawKey = typeof item?.stavka === 'string' ? item.stavka : '';
               const fallback = rawKey.replace(/_/g, ' ');
               const label = labelMap[rawKey] || fallback || '-';
+              const checked = item?.provjereno ?? item?.provjereno;
+              const isChecked = checked === 1 || checked === true;
 
               return (
                 <View key={idx} style={styles.checkItem}>
                   <Ionicons
-                    name={item.provjereno ? 'checkmark-circle' : 'ellipse-outline'}
+                    name={isChecked ? 'checkmark-circle' : 'ellipse-outline'}
                     size={20}
-                    color={item.provjereno ? '#10b981' : '#9ca3af'}
+                    color={isChecked ? '#10b981' : '#9ca3af'}
                   />
                   <Text style={styles.checkLabel}>{label}</Text>
                 </View>

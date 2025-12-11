@@ -36,7 +36,17 @@ router.get('/', authenticate, async (req, res) => {
     );
 
     const totalUsers = await User.countDocuments();
-    const chatroomsWithCount = chatrooms.map((room) => {
+    const unreadCounts = await Promise.all(
+      chatrooms.map((room) =>
+        Message.countDocuments({
+          chatRoomId: room._id,
+          senderId: { $ne: req.user._id },
+          isRead: { $ne: req.user._id },
+        })
+      )
+    );
+
+    const chatroomsWithCount = chatrooms.map((room, idx) => {
       const latest = latestMap.get(String(room._id));
       const lastAt = latest?.kreiranDatum || latest?.createdAt || latest?.azuriranDatum || null;
       return {
@@ -45,6 +55,7 @@ router.get('/', authenticate, async (req, res) => {
         lastMessageAt: lastAt,
         lastMessageText: latest?.tekst || null,
         lastSenderId: latest?.senderId || null,
+        unreadCount: unreadCounts[idx] || 0,
       };
     });
 
@@ -75,6 +86,12 @@ router.get('/:id', authenticate, async (req, res) => {
       .select('kreiranDatum createdAt azuriranDatum tekst senderId')
       .lean();
 
+    const unreadCount = await Message.countDocuments({
+      chatRoomId: chatroom._id,
+      senderId: { $ne: req.user._id },
+      isRead: { $ne: req.user._id },
+    });
+
     res.json({
       success: true,
       data: {
@@ -83,6 +100,7 @@ router.get('/:id', authenticate, async (req, res) => {
         lastMessageAt: latestMessage?.kreiranDatum || latestMessage?.createdAt || latestMessage?.azuriranDatum || chatroom.azuriranDatum || chatroom.kreiranDatum,
         lastMessageText: latestMessage?.tekst || null,
         lastSenderId: latestMessage?.senderId || null,
+        unreadCount,
       },
     });
   } catch (error) {

@@ -97,11 +97,12 @@ export default function ChatRoomsScreen({ navigation }) {
     const roomId = item._id || item.id;
     const isDeleting = deletingId === roomId;
     const initials = name.slice(0, 2).toUpperCase();
+    const unreadCount = item.unreadCount || 0;
     const lastMessageAt = item.lastMessageAt || null; // prikazi samo vrijeme zadnje poruke; inače "Nema poruka"
     const lastMessageLabel = formatLastMessageTime(lastMessageAt);
     return (
       <TouchableOpacity
-        style={styles.roomCard}
+        style={[styles.roomCard, unreadCount > 0 && styles.roomCardUnread]}
         onPress={() => navigation.navigate('ChatRoom', { room: item })}
         activeOpacity={0.9}
       >
@@ -158,6 +159,11 @@ export default function ChatRoomsScreen({ navigation }) {
           <Ionicons name="time-outline" size={16} color="#475569" />
           <Text style={styles.metaText}>{lastMessageLabel}</Text>
         </View>
+        {unreadCount > 0 ? (
+          <View style={styles.unreadPill}>
+            <Text style={styles.unreadText}>{unreadCount} novih</Text>
+          </View>
+        ) : null}
       </TouchableOpacity>
     );
   };
@@ -274,6 +280,10 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 3,
   },
+  roomCardUnread: {
+    borderColor: '#16a34a',
+    borderWidth: 2,
+  },
   roomHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   roomLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 10 },
   avatar: {
@@ -300,6 +310,17 @@ const styles = StyleSheet.create({
   roomDesc: { marginTop: 10, fontSize: 14, color: '#475569', lineHeight: 20 },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12 },
   metaText: { fontSize: 13, color: '#475569' },
+  unreadPill: {
+    alignSelf: 'flex-start',
+    marginTop: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: 'rgba(22,163,74,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(22,163,74,0.4)',
+  },
+  unreadText: { color: '#15803d', fontWeight: '700', fontSize: 12 },
   loader: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   loaderText: { marginTop: 8, color: '#475569' },
   empty: { alignItems: 'center', marginTop: 60 },

@@ -7,8 +7,17 @@ const { authenticate } = require('../middleware/auth');
 // GET /api/messages/unread/count - broj neprocitanih poruka za prijavljenog korisnika (svi vide sve sobe)
 router.get('/unread/count', authenticate, async (req, res) => {
   try {
-    // Svi vide sve poruke; brojimo sve koje korisnik nije poslao i nije procitao
+    // Svi vide sve sobe, ali brojimo samo poruke iz postojećih soba
+    const rooms = await ChatRoom.find({}, { _id: 1 }).lean();
+    if (!rooms.length) {
+      return res.json({ success: true, count: 0, data: 0 });
+    }
+
+    const roomIds = rooms.map((r) => r._id);
+
+    // Broji tuđe poruke koje korisnik nije označio kao pročitane
     const unreadCount = await Message.countDocuments({
+      chatRoomId: { $in: roomIds },
       senderId: { $ne: req.user._id },
       isRead: { $ne: req.user._id },
     });

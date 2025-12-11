@@ -86,6 +86,10 @@ router.post('/', authenticate, async (req, res) => {
     await message.save();
     await message.populate('senderId', 'ime prezime email uloga');
 
+    // Osvježi timestamp sobe radi prikaza "zadnje poruke" na listi
+    room.azuriranDatum = message.kreiranDatum;
+    await room.save();
+
     res.status(201).json({ success: true, message: 'Poruka poslana', data: message });
   } catch (error) {
     console.error('Greska pri slanju poruke:', error);

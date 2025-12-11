@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { chatroomsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { chatroomDB } from '../database/db';
+import { useFocusEffect } from '@react-navigation/native';
 
 export default function ChatRoomsScreen({ navigation }) {
   const { isOnline } = useAuth();
@@ -37,6 +38,12 @@ export default function ChatRoomsScreen({ navigation }) {
     loadRooms();
   }, [loadRooms]);
 
+  useFocusEffect(
+    useCallback(() => {
+      loadRooms();
+    }, [loadRooms])
+  );
+
   const handleCreate = async () => {
     if (!newName.trim()) return;
     setCreating(true);
@@ -63,16 +70,35 @@ export default function ChatRoomsScreen({ navigation }) {
     setRefreshing(false);
   };
 
+  const formatLastMessageTime = (value) => {
+    if (!value) return 'Nema poruka';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return 'Nema poruka';
+
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    if (diffMs < 0) return 'Upravo sada'; // zaštita ako server/klijent vrijeme kasni/žuri
+
+    const diffMinutes = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMinutes / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffMinutes < 1) return 'Prije manje od minute';
+    if (diffMinutes < 60) return `Prije ${diffMinutes} min`;
+    if (diffHours < 24) return `Prije ${diffHours} h`;
+    if (diffDays < 7) return `Prije ${diffDays} d`; // prikaz samo broj dana unazad
+
+    return date.toLocaleDateString('hr-HR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  };
+
   const renderItem = ({ item }) => {
     const name = item.name || item.title || item.naziv || 'Chat';
     const desc = item.description || item.opis || '';
     const roomId = item._id || item.id;
     const isDeleting = deletingId === roomId;
-    const memberCount = item.membersCount
-      ?? item.members?.length
-      ?? item.clanovi?.length
-      ?? 0;
     const initials = name.slice(0, 2).toUpperCase();
+    const lastMessageAt = item.lastMessageAt || null; // prikazi samo vrijeme zadnje poruke; inače "Nema poruka"
+    const lastMessageLabel = formatLastMessageTime(lastMessageAt);
     return (
       <TouchableOpacity
         style={styles.roomCard}
@@ -86,15 +112,6 @@ export default function ChatRoomsScreen({ navigation }) {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.roomName} numberOfLines={1}>{name}</Text>
-              <View style={styles.tagRow}>
-                <View style={styles.metaPill}>
-                  <Ionicons name="people-outline" size={14} color="#0f172a" />
-                  <Text style={styles.metaPillText}>{memberCount} članova</Text>
-                </View>
-                <View style={[styles.badge, isOnline ? styles.badgeOnline : styles.badgeOffline]}>
-                  <Text style={styles.badgeText}>{isOnline ? 'Online' : 'Offline'}</Text>
-                </View>
-              </View>
             </View>
           </View>
           <View style={styles.headerActions}>
@@ -139,7 +156,7 @@ export default function ChatRoomsScreen({ navigation }) {
         {desc ? <Text style={styles.roomDesc} numberOfLines={2}>{desc}</Text> : null}
         <View style={styles.metaRow}>
           <Ionicons name="time-outline" size={16} color="#475569" />
-          <Text style={styles.metaText}>Ažurirano nedavno</Text>
+          <Text style={styles.metaText}>{lastMessageLabel}</Text>
         </View>
       </TouchableOpacity>
     );
@@ -280,24 +297,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#fecdd3',
   },
-  tagRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
-  metaPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    backgroundColor: '#e2f3ff',
-  },
-  metaPillText: { fontSize: 12, fontWeight: '700', color: '#0f172a' },
   roomDesc: { marginTop: 10, fontSize: 14, color: '#475569', lineHeight: 20 },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12 },
   metaText: { fontSize: 13, color: '#475569' },
-  badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
-  badgeOnline: { backgroundColor: '#dcfce7' },
-  badgeOffline: { backgroundColor: '#fee2e2' },
-  badgeText: { fontSize: 12, fontWeight: '700', color: '#0f172a' },
   loader: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   loaderText: { marginTop: 8, color: '#475569' },
   empty: { alignItems: 'center', marginTop: 60 },

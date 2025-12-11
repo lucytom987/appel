@@ -16,16 +16,37 @@ router.get('/', authenticate, async (req, res) => {
     const chatrooms = await ChatRoom.find()
       .populate('kreiraoId', 'ime prezime email uloga')
       .populate('clanovi', 'ime prezime email uloga')
-      .sort({ kreiranDatum: -1 })
+      // Sortiraj po zadnjem ažuriranju radi relevantnosti liste
+      .sort({ azuriranDatum: -1, kreiranDatum: -1 })
       .skip(parsedSkip)
       .limit(parsedLimit)
       .lean();
 
+    // Izvuci zadnju poruku za svaku sobu (jednostavan upit po sobi radi točnosti)
+    const latestList = await Promise.all(
+      chatrooms.map((room) =>
+        Message.findOne({ chatRoomId: room._id })
+          .sort({ kreiranDatum: -1, createdAt: -1, azuriranDatum: -1, _id: -1 })
+          .select('kreiranDatum createdAt azuriranDatum tekst senderId')
+          .lean()
+      )
+    );
+    const latestMap = new Map(
+      chatrooms.map((room, idx) => [String(room._id), latestList[idx] || null])
+    );
+
     const totalUsers = await User.countDocuments();
-    const chatroomsWithCount = chatrooms.map((room) => ({
-      ...room,
-      membersCount: totalUsers,
-    }));
+    const chatroomsWithCount = chatrooms.map((room) => {
+      const latest = latestMap.get(String(room._id));
+      const lastAt = latest?.kreiranDatum || latest?.createdAt || latest?.azuriranDatum || null;
+      return {
+        ...room,
+        membersCount: totalUsers,
+        lastMessageAt: lastAt,
+        lastMessageText: latest?.tekst || null,
+        lastSenderId: latest?.senderId || null,
+      };
+    });
 
     const total = await ChatRoom.countDocuments();
 
@@ -49,8 +70,21 @@ router.get('/:id', authenticate, async (req, res) => {
     }
 
     const totalUsers = await User.countDocuments();
+    const latestMessage = await Message.findOne({ chatRoomId: chatroom._id })
+      .sort({ kreiranDatum: -1, createdAt: -1, azuriranDatum: -1, _id: -1 })
+      .select('kreiranDatum createdAt azuriranDatum tekst senderId')
+      .lean();
 
-    res.json({ success: true, data: { ...chatroom, membersCount: totalUsers } });
+    res.json({
+      success: true,
+      data: {
+        ...chatroom,
+        membersCount: totalUsers,
+        lastMessageAt: latestMessage?.kreiranDatum || latestMessage?.createdAt || latestMessage?.azuriranDatum || chatroom.azuriranDatum || chatroom.kreiranDatum,
+        lastMessageText: latestMessage?.tekst || null,
+        lastSenderId: latestMessage?.senderId || null,
+      },
+    });
   } catch (error) {
     console.error('Greška pri dohvaćanju chat sobe:', error);
     res.status(500).json({ success: false, message: 'Greška pri dohvaćanju chat sobe' });

@@ -45,9 +45,30 @@ export default function ChatRoomScreen({ route, navigation }) {
       senderId: senderObj,
       senderName,
       tekst: msg.tekst || msg.content,
+      isRead: msg.isRead || [],
       kreiranDatum: msg.kreiranDatum || msg.createdAt || msg.azuriranDatum,
     };
   }, []);
+
+  const markUnreadAsRead = useCallback(async (msgs) => {
+    if (!isOnline || !user?._id) return;
+    const myId = user._id || user.id;
+    const unread = (msgs || []).filter((m) => {
+      if (!m?._id) return false;
+      const senderId = m.sender?._id || m.sender || m.senderId;
+      const already = (m.isRead || []).map(String).includes(String(myId));
+      return senderId !== myId && !already;
+    });
+
+    for (const msg of unread) {
+      try {
+        await messagesAPI.markAsRead(msg._id);
+        messageDB.insert?.({ ...msg, isRead: [...(msg.isRead || []), myId], synced: 1 });
+      } catch (err) {
+        console.log('Mark as read failed', err?.message);
+      }
+    }
+  }, [isOnline, user]);
 
   const loadMessages = useCallback(async () => {
     try {
@@ -88,6 +109,9 @@ export default function ChatRoomScreen({ route, navigation }) {
         }
 
         setMessages(Array.from(mergedById.values()));
+
+        // Označi kao pročitane sve tuđe poruke
+        await markUnreadAsRead(Array.from(mergedById.values()));
       } else {
         const cached = messageDB.getByRoom?.(room._id || room.id) || [];
         setMessages(cached.map(normalizeMessage));
@@ -97,7 +121,7 @@ export default function ChatRoomScreen({ route, navigation }) {
       const cached = messageDB.getByRoom?.(room._id || room.id) || [];
       setMessages(cached.map(normalizeMessage));
     }
-  }, [room, isOnline, normalizeMessage]);
+  }, [room, isOnline, normalizeMessage, markUnreadAsRead]);
 
   useEffect(() => {
     loadMessages();

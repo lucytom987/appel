@@ -63,7 +63,9 @@ export default function HomeScreen({ navigation }) {
     }
     try {
       const res = await messagesAPI.getUnreadCount();
-      const count = res.data?.data?.count ?? res.data?.count ?? 0;
+      const payload = res.data || {};
+      // Backend šalje { success, count, data } gdje su count i data jednaki
+      const count = payload.count ?? payload.data ?? 0;
       setUnreadCount(Number(count) || 0);
     } catch (e) {
       console.log('Unread count fetch failed', e?.message || e);

@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const ChatRoom = require('../models/ChatRoom');
+const User = require('../models/User');
+const Message = require('../models/Message');
 const { authenticate, checkRole } = require('../middleware/auth');
 const { logAction } = require('../services/auditService');
 
@@ -19,9 +21,15 @@ router.get('/', authenticate, async (req, res) => {
       .limit(parsedLimit)
       .lean();
 
+    const totalUsers = await User.countDocuments();
+    const chatroomsWithCount = chatrooms.map((room) => ({
+      ...room,
+      membersCount: totalUsers,
+    }));
+
     const total = await ChatRoom.countDocuments();
 
-    res.json({ success: true, count: chatrooms.length, total, data: chatrooms });
+    res.json({ success: true, count: chatrooms.length, total, data: chatroomsWithCount });
   } catch (error) {
     console.error('Greška pri dohvaćanju chat soba:', error);
     res.status(500).json({ success: false, message: 'Greška pri dohvaćanju chat soba' });
@@ -40,7 +48,9 @@ router.get('/:id', authenticate, async (req, res) => {
       return res.status(404).json({ success: false, message: 'Chat soba nije pronađena' });
     }
 
-    res.json({ success: true, data: chatroom });
+    const totalUsers = await User.countDocuments();
+
+    res.json({ success: true, data: { ...chatroom, membersCount: totalUsers } });
   } catch (error) {
     console.error('Greška pri dohvaćanju chat sobe:', error);
     res.status(500).json({ success: false, message: 'Greška pri dohvaćanju chat sobe' });
@@ -131,6 +141,9 @@ router.delete('/:id', authenticate, checkRole(['admin']), async (req, res) => {
     if (!chatroom) {
       return res.status(404).json({ success: false, message: 'Chat soba nije pronađena' });
     }
+
+    // Obrisi sve poruke vezane uz ovu sobu
+    await Message.deleteMany({ chatRoomId: chatroom._id });
 
     await chatroom.deleteOne();
 

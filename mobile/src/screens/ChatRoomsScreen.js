@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl, TextInput, Modal } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl, TextInput, Modal, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { chatroomsAPI } from '../services/api';
@@ -15,6 +15,7 @@ export default function ChatRoomsScreen({ navigation }) {
   const [newDesc, setNewDesc] = useState('');
   const [creating, setCreating] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
 
   const loadRooms = useCallback(async () => {
     setLoading(true);
@@ -65,6 +66,12 @@ export default function ChatRoomsScreen({ navigation }) {
   const renderItem = ({ item }) => {
     const name = item.name || item.title || item.naziv || 'Chat';
     const desc = item.description || item.opis || '';
+    const roomId = item._id || item.id;
+    const isDeleting = deletingId === roomId;
+    const memberCount = item.membersCount
+      ?? item.members?.length
+      ?? item.clanovi?.length
+      ?? 0;
     return (
     <TouchableOpacity
       style={styles.roomCard}
@@ -73,14 +80,51 @@ export default function ChatRoomsScreen({ navigation }) {
     >
       <View style={styles.roomHeader}>
         <Text style={styles.roomName}>{name}</Text>
-        <View style={[styles.badge, isOnline ? styles.badgeOnline : styles.badgeOffline]}>
-          <Text style={styles.badgeText}>{isOnline ? 'Online' : 'Offline'}</Text>
+        <View style={styles.headerActions}>
+          {isDeleting ? (
+            <ActivityIndicator size="small" color="#ef4444" />
+          ) : (
+            <TouchableOpacity
+              onPress={() =>
+                Alert.alert(
+                  'Obriši chat sobu',
+                  `Sigurno želiš obrisati "${name}"? Sve poruke u toj sobi će se obrisati.`,
+                  [
+                    { text: 'Odustani', style: 'cancel' },
+                    {
+                      text: 'Obriši',
+                      style: 'destructive',
+                      onPress: async () => {
+                        setDeletingId(roomId);
+                        setRooms((prev) => prev.filter((r) => (r._id || r.id) !== roomId));
+                        try {
+                          await chatroomsAPI.delete(roomId);
+                          chatroomDB?.remove?.(roomId);
+                        } catch (e) {
+                          console.log('Delete room failed', e?.message);
+                          await loadRooms();
+                        } finally {
+                          setDeletingId(null);
+                        }
+                      },
+                    },
+                  ]
+                )
+              }
+              style={styles.actionButton}
+            >
+              <Ionicons name="trash-outline" size={20} color="#ef4444" />
+            </TouchableOpacity>
+          )}
+          <View style={[styles.badge, isOnline ? styles.badgeOnline : styles.badgeOffline]}>
+            <Text style={styles.badgeText}>{isOnline ? 'Online' : 'Offline'}</Text>
+          </View>
         </View>
       </View>
       {desc ? <Text style={styles.roomDesc}>{desc}</Text> : null}
       <View style={styles.metaRow}>
         <Ionicons name="people-outline" size={16} color="#6b7280" />
-        <Text style={styles.metaText}>{item.members?.length || 0} članova</Text>
+        <Text style={styles.metaText}>{memberCount} članova</Text>
       </View>
     </TouchableOpacity>
   );
@@ -185,6 +229,17 @@ const styles = StyleSheet.create({
   },
   roomHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   roomName: { fontSize: 16, fontWeight: '700', color: '#111827' },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  actionButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fef2f2',
+    borderWidth: 1,
+    borderColor: '#fee2e2',
+  },
   roomDesc: { marginTop: 6, fontSize: 14, color: '#4b5563' },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 },
   metaText: { fontSize: 13, color: '#6b7280' },

@@ -4,6 +4,22 @@ const Message = require('../models/Message');
 const ChatRoom = require('../models/ChatRoom');
 const { authenticate } = require('../middleware/auth');
 
+// GET /api/messages/unread/count - broj neprocitanih poruka za prijavljenog korisnika (svi vide sve sobe)
+router.get('/unread/count', authenticate, async (req, res) => {
+  try {
+    // Svi vide sve poruke; brojimo sve koje korisnik nije poslao i nije procitao
+    const unreadCount = await Message.countDocuments({
+      senderId: { $ne: req.user._id },
+      isRead: { $ne: req.user._id },
+    });
+
+    res.json({ success: true, count: unreadCount, data: unreadCount });
+  } catch (error) {
+    console.error('Greska pri dohvacanju neprocitanih poruka:', error);
+    res.status(500).json({ success: false, message: 'Greska pri dohvacanju neprocitanih poruka' });
+  }
+});
+
 // GET /api/messages/room/:roomId - poruke iz sobe
 router.get('/room/:roomId', authenticate, async (req, res) => {
   try {
@@ -14,13 +30,6 @@ router.get('/room/:roomId', authenticate, async (req, res) => {
     const room = await ChatRoom.findById(req.params.roomId);
     if (!room) {
       return res.status(404).json({ success: false, message: 'Chat soba nije pronadena' });
-    }
-
-    const userId = String(req.user._id);
-    if (!room.clanovi.map(String).includes(userId)) {
-      room.clanovi.push(userId);
-      room.azuriranDatum = new Date();
-      await room.save();
     }
 
     const messages = await Message.find({ chatRoomId: room._id })
@@ -54,13 +63,6 @@ router.post('/', authenticate, async (req, res) => {
     const room = await ChatRoom.findById(chatRoomId);
     if (!room) {
       return res.status(404).json({ success: false, message: 'Chat soba nije pronadena' });
-    }
-
-    const userId = String(req.user._id);
-    if (!room.clanovi.map(String).includes(userId)) {
-      room.clanovi.push(userId);
-      room.azuriranDatum = new Date();
-      await room.save();
     }
 
     const message = new Message({

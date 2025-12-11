@@ -6,6 +6,8 @@ const messageSchema = new mongoose.Schema({
   
   tekst: String,
   slika: String, // URL ili Base64
+
+  accentKey: { type: String },
   
   isRead: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   

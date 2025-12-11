@@ -68,6 +68,7 @@ router.post('/', authenticate, async (req, res) => {
     const chatRoomId = req.body.chatRoomId || req.body.chatRoom;
     const tekst = req.body.tekst || req.body.content || '';
     const slika = req.body.slika || req.body.imageUrl;
+    const accentKey = req.body.accentKey || req.body.colorKey;
 
     const room = await ChatRoom.findById(chatRoomId);
     if (!room) {
@@ -79,6 +80,7 @@ router.post('/', authenticate, async (req, res) => {
       senderId: req.user._id,
       tekst,
       slika,
+      accentKey,
     });
 
     await message.save();

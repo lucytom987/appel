@@ -72,77 +72,97 @@ export default function ChatRoomsScreen({ navigation }) {
       ?? item.members?.length
       ?? item.clanovi?.length
       ?? 0;
+    const initials = name.slice(0, 2).toUpperCase();
     return (
-    <TouchableOpacity
-      style={styles.roomCard}
-      onPress={() => navigation.navigate('ChatRoom', { room: item })}
-      activeOpacity={0.8}
-    >
-      <View style={styles.roomHeader}>
-        <Text style={styles.roomName}>{name}</Text>
-        <View style={styles.headerActions}>
-          {isDeleting ? (
-            <ActivityIndicator size="small" color="#ef4444" />
-          ) : (
-            <TouchableOpacity
-              onPress={() =>
-                Alert.alert(
-                  'Obriši chat sobu',
-                  `Sigurno želiš obrisati "${name}"? Sve poruke u toj sobi će se obrisati.`,
-                  [
-                    { text: 'Odustani', style: 'cancel' },
-                    {
-                      text: 'Obriši',
-                      style: 'destructive',
-                      onPress: async () => {
-                        setDeletingId(roomId);
-                        setRooms((prev) => prev.filter((r) => (r._id || r.id) !== roomId));
-                        try {
-                          await chatroomsAPI.delete(roomId);
-                          chatroomDB?.remove?.(roomId);
-                        } catch (e) {
-                          console.log('Delete room failed', e?.message);
-                          await loadRooms();
-                        } finally {
-                          setDeletingId(null);
-                        }
+      <TouchableOpacity
+        style={styles.roomCard}
+        onPress={() => navigation.navigate('ChatRoom', { room: item })}
+        activeOpacity={0.9}
+      >
+        <View style={styles.roomHeader}>
+          <View style={styles.roomLeft}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{initials}</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.roomName} numberOfLines={1}>{name}</Text>
+              <View style={styles.tagRow}>
+                <View style={styles.metaPill}>
+                  <Ionicons name="people-outline" size={14} color="#0f172a" />
+                  <Text style={styles.metaPillText}>{memberCount} članova</Text>
+                </View>
+                <View style={[styles.badge, isOnline ? styles.badgeOnline : styles.badgeOffline]}>
+                  <Text style={styles.badgeText}>{isOnline ? 'Online' : 'Offline'}</Text>
+                </View>
+              </View>
+            </View>
+          </View>
+          <View style={styles.headerActions}>
+            {isDeleting ? (
+              <ActivityIndicator size="small" color="#ef4444" />
+            ) : (
+              <TouchableOpacity
+                onPress={() =>
+                  Alert.alert(
+                    'Obriši chat sobu',
+                    `Sigurno želiš obrisati "${name}"? Sve poruke u toj sobi će se obrisati.`,
+                    [
+                      { text: 'Odustani', style: 'cancel' },
+                      {
+                        text: 'Obriši',
+                        style: 'destructive',
+                        onPress: async () => {
+                          setDeletingId(roomId);
+                          setRooms((prev) => prev.filter((r) => (r._id || r.id) !== roomId));
+                          try {
+                            await chatroomsAPI.delete(roomId);
+                            chatroomDB?.remove?.(roomId);
+                          } catch (e) {
+                            console.log('Delete room failed', e?.message);
+                            await loadRooms();
+                          } finally {
+                            setDeletingId(null);
+                          }
+                        },
                       },
-                    },
-                  ]
-                )
-              }
-              style={styles.actionButton}
-            >
-              <Ionicons name="trash-outline" size={20} color="#ef4444" />
-            </TouchableOpacity>
-          )}
-          <View style={[styles.badge, isOnline ? styles.badgeOnline : styles.badgeOffline]}>
-            <Text style={styles.badgeText}>{isOnline ? 'Online' : 'Offline'}</Text>
+                    ]
+                  )
+                }
+                style={styles.actionButton}
+              >
+                <Ionicons name="trash-outline" size={20} color="#ef4444" />
+              </TouchableOpacity>
+            )}
           </View>
         </View>
-      </View>
-      {desc ? <Text style={styles.roomDesc}>{desc}</Text> : null}
-      <View style={styles.metaRow}>
-        <Ionicons name="people-outline" size={16} color="#6b7280" />
-        <Text style={styles.metaText}>{memberCount} članova</Text>
-      </View>
-    </TouchableOpacity>
-  );
+
+        {desc ? <Text style={styles.roomDesc} numberOfLines={2}>{desc}</Text> : null}
+        <View style={styles.metaRow}>
+          <Ionicons name="time-outline" size={16} color="#475569" />
+          <Text style={styles.metaText}>Ažurirano nedavno</Text>
+        </View>
+      </TouchableOpacity>
+    );
   };
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={24} color="#111827" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle} numberOfLines={1}>Chat sobe</Text>
-        <View style={{ width: 24 }} />
+      <View style={styles.heroTop}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <Ionicons name="arrow-back" size={24} color="#0f172a" />
+          </TouchableOpacity>
+          <View style={{ flex: 1, marginLeft: 10 }}>
+            <Text style={styles.headerTitle} numberOfLines={1}>Chat sobe</Text>
+            <Text style={styles.headerSubtitle}>Brzi pristup razgovorima i timovima</Text>
+          </View>
+          <View style={{ width: 24 }} />
+        </View>
       </View>
 
       {loading ? (
         <View style={styles.loader}>
-          <ActivityIndicator size="large" color="#7c3aed" />
+          <ActivityIndicator size="large" color="#0ea5e9" />
           <Text style={styles.loaderText}>Učitavanje...</Text>
         </View>
       ) : (
@@ -205,52 +225,83 @@ export default function ChatRoomsScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8fafc' },
+  container: { flex: 1, backgroundColor: '#eef2f6' },
+  heroTop: {
+    backgroundColor: '#e0f2fe',
+    paddingBottom: 6,
+    paddingTop: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#dbeafe',
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 18,
+    paddingTop: 14,
     paddingBottom: 12,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
   },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: '#111827' },
-  listContent: { padding: 16 },
+  headerTitle: { fontSize: 20, fontWeight: '800', color: '#0f172a' },
+  headerSubtitle: { marginTop: 2, color: '#475569', fontSize: 13 },
+  listContent: { padding: 16, paddingBottom: 120 },
   roomCard: {
     backgroundColor: '#fff',
-    borderRadius: 12,
+    borderRadius: 14,
     padding: 14,
-    marginBottom: 12,
+    marginBottom: 14,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#e2e8f0',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
   },
-  roomHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  roomName: { fontSize: 16, fontWeight: '700', color: '#111827' },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  actionButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
+  roomHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  roomLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 10 },
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: '#0ea5e9',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#fef2f2',
-    borderWidth: 1,
-    borderColor: '#fee2e2',
   },
-  roomDesc: { marginTop: 6, fontSize: 14, color: '#4b5563' },
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 },
-  metaText: { fontSize: 13, color: '#6b7280' },
-  badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },
-  badgeOnline: { backgroundColor: '#ede9fe' },
+  avatarText: { color: '#0f172a', fontWeight: '800', fontSize: 14 },
+  roomName: { fontSize: 17, fontWeight: '800', color: '#0f172a' },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  actionButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff1f2',
+    borderWidth: 1,
+    borderColor: '#fecdd3',
+  },
+  tagRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
+  metaPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: '#e2f3ff',
+  },
+  metaPillText: { fontSize: 12, fontWeight: '700', color: '#0f172a' },
+  roomDesc: { marginTop: 10, fontSize: 14, color: '#475569', lineHeight: 20 },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12 },
+  metaText: { fontSize: 13, color: '#475569' },
+  badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
+  badgeOnline: { backgroundColor: '#dcfce7' },
   badgeOffline: { backgroundColor: '#fee2e2' },
   badgeText: { fontSize: 12, fontWeight: '700', color: '#0f172a' },
   loader: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  loaderText: { marginTop: 8, color: '#4b5563' },
+  loaderText: { marginTop: 8, color: '#475569' },
   empty: { alignItems: 'center', marginTop: 60 },
-  emptyText: { marginTop: 8, color: '#9ca3af', fontSize: 14 },
+  emptyText: { marginTop: 8, color: '#94a3b8', fontSize: 14 },
   formCard: {
     backgroundColor: '#fff',
     margin: 16,
@@ -262,8 +313,8 @@ const styles = StyleSheet.create({
   formTitle: { fontSize: 15, fontWeight: '700', color: '#111827', marginBottom: 8 },
   input: {
     borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 10,
+    borderColor: '#dbeafe',
+    borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 15,
@@ -271,12 +322,12 @@ const styles = StyleSheet.create({
   },
   createButton: {
     marginTop: 10,
-    backgroundColor: '#7c3aed',
+    backgroundColor: '#0ea5e9',
     paddingVertical: 12,
     borderRadius: 10,
     alignItems: 'center',
   },
-  createButtonDisabled: { backgroundColor: '#c4b5fd' },
+  createButtonDisabled: { backgroundColor: '#9bdcf7' },
   createButtonText: { color: '#fff', fontSize: 15, fontWeight: '700' },
   fab: {
     position: 'absolute',
@@ -285,7 +336,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#7c3aed',
+    backgroundColor: '#0ea5e9',
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',

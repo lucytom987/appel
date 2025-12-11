@@ -557,6 +557,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: 'bold',
   },
+  userPhone: {
     fontSize: 13,
     color: '#666',
     marginBottom: 12,

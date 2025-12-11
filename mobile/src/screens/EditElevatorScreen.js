@@ -188,9 +188,9 @@ export default function EditElevatorScreen({ navigation, route }) {
         });
 
         Alert.alert('Uspjeh', 'Dizalo uspješno ažurirano', [
-          { 
-            text: 'OK', 
-            onPress: () => navigation.navigate('Repairs') 
+          {
+            text: 'OK',
+            onPress: () => navigation.navigate('Elevators'),
           }
         ]);
       }
@@ -353,10 +353,10 @@ export default function EditElevatorScreen({ navigation, route }) {
     }
   };
 
-  // Hardverski back uvijek vodi na listu popravaka
+  // Hardverski back uvijek vodi na listu dizala
   useEffect(() => {
     const handler = () => {
-      navigation.navigate('Repairs');
+        navigation.navigate('Elevators');
       return true;
     };
     const sub = BackHandler.addEventListener('hardwareBackPress', handler);
@@ -367,7 +367,7 @@ export default function EditElevatorScreen({ navigation, route }) {
     <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.navigate('Repairs')}>
+        <TouchableOpacity onPress={() => navigation.navigate('Elevators')}>
           <Ionicons name="arrow-back" size={24} color="#1f2937" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Uredi dizalo</Text>

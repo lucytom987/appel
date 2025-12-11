@@ -1,4 +1,4 @@
-﻿import React, { useMemo, useState } from 'react';
+﻿import React, { useMemo, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  BackHandler,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -17,6 +18,7 @@ import { useAuth } from '../context/AuthContext';
 import { elevatorDB, repairDB } from '../database/db';
 import { repairsAPI } from '../services/api';
 import ms from '../utils/scale';
+import { useFocusEffect } from '@react-navigation/native';
 
 function formatName(person) {
   if (!person) return '';
@@ -78,6 +80,18 @@ const confirmDelete = (baseRepair, navigation, setSaving, isOnline) => {
 export default function EditRepairScreen({ route, navigation }) {
   const { repair } = route.params;
   const { user, isOnline } = useAuth();
+
+  // Hardverski back vraća na detalje popravka
+  useFocusEffect(
+    useCallback(() => {
+      const onBack = () => {
+        navigation.navigate('RepairDetails', { repair });
+        return true;
+      };
+      const sub = BackHandler.addEventListener('hardwareBackPress', onBack);
+      return () => sub.remove();
+    }, [navigation, repair])
+  );
 
   // UÄitaj svjeÅ¾i zapis ako postoji u lokalnoj bazi
   const baseRepair = useMemo(() => {
@@ -171,7 +185,7 @@ export default function EditRepairScreen({ route, navigation }) {
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+        <TouchableOpacity onPress={() => navigation.navigate('RepairDetails', { repair })}>
           <Ionicons name="arrow-back" size={24} color="#1f2937" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Uredi popravak</Text>

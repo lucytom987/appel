@@ -886,6 +886,7 @@ export const syncRepairsToServer = async () => {
         await repairsAPI.update(r.id, {
           elevatorId,
           status: r.status,
+          opisKvara: r.opisKvara,
           opisPopravka: r.opisPopravka,
           datumPopravka: r.datumPopravka,
           radniNalogPotpisan: Boolean(r.radniNalogPotpisan),

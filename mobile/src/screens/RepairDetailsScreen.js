@@ -1,9 +1,10 @@
-﻿import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert } from 'react-native';
+﻿import React, { useEffect, useState, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, BackHandler } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { elevatorDB, repairDB } from '../database/db';
 import { repairsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { useFocusEffect } from '@react-navigation/native';
 import ms from '../utils/scale';
 
 const statusLabel = (status) => {
@@ -26,6 +27,18 @@ export default function RepairDetailsScreen({ route, navigation }) {
   const { repair } = route.params;
   const [repairData, setRepairData] = useState(repair);
   const { user, isOnline } = useAuth();
+
+  // Na hardverski back vrati na listu popravaka
+  useFocusEffect(
+    useCallback(() => {
+      const onBack = () => {
+        navigation.navigate('Repairs');
+        return true;
+      };
+      const sub = BackHandler.addEventListener('hardwareBackPress', onBack);
+      return () => sub.remove();
+    }, [navigation])
+  );
 
   // UÄitaj svjeÅ¾e podatke iz lokalne baze (ukljuÄujuÄ‡i prijavio/kontakt)
   useEffect(() => {
@@ -92,7 +105,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+        <TouchableOpacity onPress={() => navigation.navigate('Repairs')}>
           <Ionicons name="arrow-back" size={24} color="#1f2937" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Detalji popravka</Text>

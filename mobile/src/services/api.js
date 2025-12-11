@@ -165,6 +165,7 @@ export const repairsAPI = {
   update: (id, data) =>
     api.put(`/repairs/${id}`, {
       status: data.status,
+      opisKvara: data.opisKvara || data.faultDescription,
       opisPopravka: data.opisPopravka || data.repairDescription,
       datumPopravka: data.datumPopravka || data.repairedDate,
       radniNalogPotpisan: typeof data.radniNalogPotpisan === 'boolean'

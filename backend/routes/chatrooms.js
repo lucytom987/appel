@@ -109,8 +109,8 @@ router.get('/:id', authenticate, async (req, res) => {
   }
 });
 
-// POST /api/chatrooms - kreiraj novu sobu
-router.post('/', authenticate, checkRole(['admin', 'menadzer']), async (req, res) => {
+// POST /api/chatrooms - kreiraj novu sobu (dostupno svim prijavljenim korisnicima)
+router.post('/', authenticate, async (req, res) => {
   try {
     const naziv = req.body.naziv || req.body.name;
     const opis = req.body.opis || req.body.description;
@@ -151,8 +151,8 @@ router.post('/', authenticate, checkRole(['admin', 'menadzer']), async (req, res
   }
 });
 
-// PUT /api/chatrooms/:id - ažuriranje
-router.put('/:id', authenticate, checkRole(['admin', 'menadzer']), async (req, res) => {
+// PUT /api/chatrooms/:id - ažuriranje (dostupno svim prijavljenim korisnicima)
+router.put('/:id', authenticate, async (req, res) => {
   try {
     const chatroom = await ChatRoom.findById(req.params.id);
     if (!chatroom) {

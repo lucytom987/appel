@@ -14,9 +14,10 @@ export default function ChatRoomsScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [newName, setNewName] = useState('');
   const [newDesc, setNewDesc] = useState('');
-  const [creating, setCreating] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+  const [editingRoom, setEditingRoom] = useState(null);
 
   const loadRooms = useCallback(async () => {
     setLoading(true);
@@ -44,23 +45,39 @@ export default function ChatRoomsScreen({ navigation }) {
     }, [loadRooms])
   );
 
-  const handleCreate = async () => {
+  const resetModal = () => {
+    setNewName('');
+    setNewDesc('');
+    setEditingRoom(null);
+    setShowModal(false);
+  };
+
+  const handleSaveRoom = async () => {
     if (!newName.trim()) return;
-    setCreating(true);
+    setSaving(true);
+    const payload = { name: newName.trim(), description: newDesc.trim() || undefined };
     try {
-      const res = await chatroomsAPI.create({ name: newName.trim(), description: newDesc.trim() || undefined });
-      const created = res.data?.data || res.data;
-      if (created) {
-        setRooms((prev) => [created, ...prev]);
-        chatroomDB?.insertOrReplace?.(created);
-        setNewName('');
-        setNewDesc('');
-        setShowModal(false);
+      if (editingRoom) {
+        const id = editingRoom._id || editingRoom.id;
+        const res = await chatroomsAPI.update(id, payload);
+        const updated = res.data?.data || res.data;
+        if (updated) {
+          setRooms((prev) => prev.map((r) => ((r._id || r.id) === id ? updated : r)));
+          chatroomDB?.insertOrReplace?.(updated);
+        }
+      } else {
+        const res = await chatroomsAPI.create(payload);
+        const created = res.data?.data || res.data;
+        if (created) {
+          setRooms((prev) => [created, ...prev]);
+          chatroomDB?.insertOrReplace?.(created);
+        }
       }
+      resetModal();
     } catch (e) {
-      console.log('Create room failed', e?.message);
+      console.log('Save room failed', e?.message);
     } finally {
-      setCreating(false);
+      setSaving(false);
     }
   };
 
@@ -116,6 +133,17 @@ export default function ChatRoomsScreen({ navigation }) {
             </View>
           </View>
           <View style={styles.headerActions}>
+            <TouchableOpacity
+              onPress={() => {
+                setEditingRoom(item);
+                setNewName(name);
+                setNewDesc(desc);
+                setShowModal(true);
+              }}
+              style={styles.actionButton}
+            >
+              <Ionicons name="pencil-outline" size={20} color="#0f172a" />
+            </TouchableOpacity>
             {isDeleting ? (
               <ActivityIndicator size="small" color="#ef4444" />
             ) : (
@@ -211,7 +239,7 @@ export default function ChatRoomsScreen({ navigation }) {
       <Modal visible={showModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
-            <Text style={styles.formTitle}>Nova soba</Text>
+            <Text style={styles.formTitle}>{editingRoom ? 'Uredi sobu' : 'Nova soba'}</Text>
             <TextInput
               style={styles.input}
               placeholder="Naziv sobe"
@@ -226,17 +254,17 @@ export default function ChatRoomsScreen({ navigation }) {
             />
             <View style={styles.modalActions}>
               <TouchableOpacity
-                style={[styles.createButton, (!newName.trim() || creating) && styles.createButtonDisabled]}
-                onPress={handleCreate}
-                disabled={!newName.trim() || creating}
+                style={[styles.createButton, (!newName.trim() || saving) && styles.createButtonDisabled]}
+                onPress={handleSaveRoom}
+                disabled={!newName.trim() || saving}
               >
-                {creating ? (
+                {saving ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  <Text style={styles.createButtonText}>Kreiraj</Text>
+                  <Text style={styles.createButtonText}>{editingRoom ? 'Spremi promjene' : 'Kreiraj'}</Text>
                 )}
               </TouchableOpacity>
-              <TouchableOpacity style={styles.cancelButton} onPress={() => setShowModal(false)}>
+              <TouchableOpacity style={styles.cancelButton} onPress={resetModal}>
                 <Text style={styles.cancelText}>Odustani</Text>
               </TouchableOpacity>
             </View>

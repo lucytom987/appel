@@ -13,7 +13,7 @@ const ALLOWED_CHECKLIST = [
   'cable_inspection',
 ];
 
-// Normalizira payload prije slanja da sprijeÄi validation/cast greÅ¡ke na backendu
+// Normalizira payload prije slanja da spriječi validation/cast greške na backendu
 const normalizeServicePayload = (s) => {
   const checklist = Array.isArray(s.checklist)
     ? s.checklist
@@ -50,7 +50,7 @@ const normalizeServicePayload = (s) => {
     sljedeciServis: s.sljedeciServis || undefined,
   };
 
-  // Izbaci undefined polja da ne Å¡aljemo prazne vrijednosti
+  // Izbaci undefined polja da ne šaljemo prazne vrijednosti
   Object.keys(payload).forEach((k) => payload[k] === undefined && delete payload[k]);
   return payload;
 };
@@ -164,7 +164,7 @@ const setLastFull = async (key) => {
   }
 };
 
-// Primaj full pull na iduÄ‡i sync (briÅ¡e lastSync/lastFull kljuÄeve)
+  // Primaj full pull na idući sync (briše lastSync/lastFull ključeve)
 const forceFullNextSync = async () => {
   const keys = [
     'lastSyncElevators',
@@ -356,7 +356,7 @@ export const syncElevatorsFromServer = async () => {
       }
     }
 
-    // Ako delta nije vratila niÅ¡ta, forsiraj jedan full pull
+    // Ako delta nije vratila ništa, forsiraj jedan full pull
     if (!shouldFullSync && fetched === 0) {
       try {
         if (SecureStore.deleteItemAsync) {
@@ -376,7 +376,7 @@ export const syncElevatorsFromServer = async () => {
     console.log(`Elevators synced: ${fetched} (total reported: ${total || fetched})`);
     return true;
   } catch (err) {
-    console.log('GreÅ¡ka sync elevators:', err.message);
+    console.log('Greška sync elevators:', err.message);
     return false;
   }
 };
@@ -580,7 +580,7 @@ export const syncServicesFromServer = async (forceFull = false) => {
       }
     }
 
-    // Ako je delta sync vratio 0 rezultata, pokuÅ¡aj jedan full sync (obrisi lastSyncServices)
+    // Ako je delta sync vratio 0 rezultata, pokušaj jedan full sync (obrisi lastSyncServices)
     if (!shouldFullSync && fetched === 0) {
       try {
         if (SecureStore.deleteItemAsync) {
@@ -601,7 +601,7 @@ export const syncServicesFromServer = async (forceFull = false) => {
     console.log(`Services synced: ${fetched} (total reported: ${total || fetched}), lokalno: ${localCount}`);
     return true;
   } catch (err) {
-    console.log('GreÅ¡ka sync services:', err.message);
+    console.log('Greška sync services:', err.message);
     return false;
   }
 };
@@ -610,7 +610,7 @@ export const syncServicesFromServer = async (forceFull = false) => {
 export const syncRepairsFromServer = async () => {
   if (!isOnline) return false;
   try {
-    const periodicFull = await shouldRunPeriodicFull('lastFullRepairs', 1); // ÄeÅ¡Ä‡i full sync da pokupimo brisanja (svakih ~1h)
+    const periodicFull = await shouldRunPeriodicFull('lastFullRepairs', 1); // češći full sync da pokupimo brisanja (svakih ~1h)
     const shouldFullSync = periodicFull || (() => {
       try {
         const existing = repairDB.getAll();
@@ -707,7 +707,7 @@ export const syncRepairsFromServer = async () => {
     console.log(`Repairs synced: ${fetched} (total reported: ${total || fetched})`);
     return true;
   } catch (err) {
-    console.log('GreÅ¡ka sync repairs:', err.message);
+    console.log('Greška sync repairs:', err.message);
     return false;
   }
 };
@@ -927,7 +927,7 @@ export const syncUsersFromServer = async () => {
     userDB.bulkInsert(res.data);
     return true;
   } catch (err) {
-    console.log('GreÅ¡ka sync users:', err.message);
+    console.log('Greška sync users:', err.message);
     return false;
   }
 };
@@ -973,7 +973,7 @@ export const syncAll = async () => {
     syncInProgress = false;
     return true;
   } catch (err) {
-    console.error('GreÅ¡ka pri full sync:', err);
+    console.error('Greška pri full sync:', err);
     syncInProgress = false;
     return false;
   }

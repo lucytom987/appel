@@ -93,7 +93,7 @@ export default function EditRepairScreen({ route, navigation }) {
     }, [navigation, repair])
   );
 
-  // UÄitaj svjeÅ¾i zapis ako postoji u lokalnoj bazi
+  // Učitaj svježi zapis ako postoji u lokalnoj bazi
   const baseRepair = useMemo(() => {
     const id = repair?._id || repair?.id;
     if (!id) return repair || {};
@@ -101,7 +101,7 @@ export default function EditRepairScreen({ route, navigation }) {
       const fresh = repairDB.getById(id);
       return fresh ? { ...repair, ...fresh } : repair;
     } catch (e) {
-      console.log('Ne mogu uÄitati popravak iz baze:', e?.message);
+      console.log('Ne mogu učitati popravak iz baze:', e?.message);
       return repair;
     }
   }, [repair]);
@@ -263,7 +263,7 @@ export default function EditRepairScreen({ route, navigation }) {
           </View>
 
           {showingSaveHint && (
-            <Text style={styles.hintText}>Backend nije bio dostupan, promjene su snimljene lokalno i sinkat Ä‡e se kasnije.</Text>
+            <Text style={styles.hintText}>Backend nije bio dostupan, promjene su snimljene lokalno i sinkat će se kasnije.</Text>
           )}
 
           <TouchableOpacity style={[styles.saveButton, saving && styles.saveButtonDisabled]} onPress={handleSave} disabled={saving}>
@@ -273,7 +273,7 @@ export default function EditRepairScreen({ route, navigation }) {
 
           <TouchableOpacity style={styles.deleteButton} onPress={() => confirmDelete(baseRepair, navigation, setSaving, isOnline)} disabled={saving}>
             <Ionicons name="trash" size={20} color="#b91c1c" />
-            <Text style={styles.deleteButtonText}>ObriÅ¡i popravak</Text>
+            <Text style={styles.deleteButtonText}>Obriši popravak</Text>
           </TouchableOpacity>
 
           <View style={{ height: 40 }} />

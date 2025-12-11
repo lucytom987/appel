@@ -18,6 +18,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import * as SecureStore from 'expo-secure-store';
 import { elevatorDB, serviceDB, repairDB } from '../database/db';
 import { syncAll } from '../services/syncService';
+import { messagesAPI } from '../services/api';
 import ms, { rf } from '../utils/scale';
 
 // Gauge geometry (semicircle)
@@ -33,6 +34,7 @@ export default function HomeScreen({ navigation }) {
   const { user, isOnline, logout } = useAuth();
   const [offlineDemo, setOfflineDemo] = useState(false);
   const serviceGauge = useRef(new Animated.Value(0));
+  const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
     (async () => {
@@ -54,13 +56,29 @@ export default function HomeScreen({ navigation }) {
   // Konvertiraj isOnline u boolean eksplicitno
   const online = Boolean(isOnline);
 
+  const fetchUnread = useCallback(async () => {
+    if (!online) {
+      setUnreadCount(0);
+      return;
+    }
+    try {
+      const res = await messagesAPI.getUnreadCount();
+      const count = res.data?.data?.count ?? res.data?.count ?? 0;
+      setUnreadCount(Number(count) || 0);
+    } catch (e) {
+      console.log('Unread count fetch failed', e?.message || e);
+    }
+  }, [online]);
+
   useEffect(() => {
     loadStats();
+    fetchUnread();
   }, []);
 
   useFocusEffect(
     useCallback(() => {
       loadStats();
+      fetchUnread();
     }, [])
   );
 
@@ -215,6 +233,7 @@ export default function HomeScreen({ navigation }) {
     setRefreshing(true);
     await syncAll();
     loadStats();
+    await fetchUnread();
     setRefreshing(false);
   };
 
@@ -242,7 +261,18 @@ export default function HomeScreen({ navigation }) {
             onPress={() => navigation.navigate('ChatRooms')}
             style={styles.headerButton}
           >
-            <Ionicons name="chatbubbles-outline" size={26} color="#666" />
+            <View>
+              <Ionicons
+                name="chatbubbles-outline"
+                size={26}
+                color={unreadCount > 0 ? '#ef4444' : '#666'}
+              />
+              {unreadCount > 0 && (
+                <View style={styles.unreadBadge}>
+                  <Text style={styles.unreadText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+                </View>
+              )}
+            </View>
           </TouchableOpacity>
           <TouchableOpacity onPress={logout}>
             <Ionicons name="log-out-outline" size={28} color="#666" />
@@ -645,5 +675,21 @@ const styles = StyleSheet.create({
     fontSize: rf(13, 11.5, 20),
     color: '#b91c1c',
     lineHeight: 20,
+  },
+  unreadBadge: {
+    position: 'absolute',
+    top: -6,
+    right: -10,
+    backgroundColor: '#ef4444',
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    minWidth: 20,
+    alignItems: 'center',
+  },
+  unreadText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
   },
 });

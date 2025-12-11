@@ -40,7 +40,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
     }, [navigation])
   );
 
-  // UÄitaj svjeÅ¾e podatke iz lokalne baze (ukljuÄujuÄ‡i prijavio/kontakt)
+  // Učitaj svježe podatke iz lokalne baze (uključujući prijavio/kontakt)
   useEffect(() => {
     const id = repair._id || repair.id;
     if (!id) return;

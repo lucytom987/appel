@@ -162,7 +162,6 @@ export default function ServicesListScreen({ navigation }) {
   // Ako u trenutno odabranom periodu nema servisa, automatski prebaci na najnoviji dostupni period
   useEffect(() => {
     if (!services.length) return;
-          removeClippedSubviews
     const hasInSelection = services.some((s) => {
       const d = parseDate(s.datum || s.serviceDate);
       return d && d.getMonth() === selectedMonth && d.getFullYear() === selectedYear;

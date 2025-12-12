@@ -11,8 +11,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function AboutScreen({ navigation }) {
-  const currentVersion = '1.2.0';
-  const currentBuild = '4';
+  const currentVersion = '1.2.1';
+  const currentBuild = '5';
   const [versionTapCount, setVersionTapCount] = React.useState(0);
 
   const handleVersionPress = () => {
@@ -105,9 +105,9 @@ export default function AboutScreen({ navigation }) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Trenutni status</Text>
           <Text style={styles.description}>
-            Verzija v{currentVersion} (build {currentBuild}) — 11.12.2025.
-            Fokus: chat poboljšanja (badge nepročitanih, automatsko označavanje pročitanih, brisanje soba briše i poruke),
-            svi vide broj članova bez dodavanja, uklonjen neispravan online indikator korisnika.
+            Verzija v{currentVersion} (build {currentBuild}) — 12.12.2025.
+            Fokus: dodatni serviseri na servisima (backend + UI), grupiranje servisiranih i neservisiranih po adresi uz stabilne ključeve,
+            otvaranje detalja dizala iz liste neserv. i fix render greške, Android back na Home izlazi iz app.
           </Text>
         </View>
 
@@ -115,6 +115,13 @@ export default function AboutScreen({ navigation }) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Povijest verzija</Text>
           <View style={styles.versionList}>
+            <View style={styles.versionItem}>
+              <Text style={styles.versionLabel}>v1.2.1 (build 5) • 12.12.2025</Text>
+              <Text style={styles.versionNotes}>
+                Dodatni serviseri (backend/model/rute + UI odabir kolega), grupiranje servisiranih i neservisiranih po adresi s stabilnim ID-jevima,
+                tap na neservisirana otvara detalje dizala, fix render error u listi servisa, Android back na Home izlazak.
+              </Text>
+            </View>
             <View style={styles.versionItem}>
               <Text style={styles.versionLabel}>v1.2.0 (build 4) • 11.12.2025</Text>
               <Text style={styles.versionNotes}>
@@ -223,7 +230,7 @@ export default function AboutScreen({ navigation }) {
             © 2025 APPEL • Elevator Management
           </Text>
           <Text style={styles.footerSubtext}>
-            Studeni 2025 • Android
+            Prosinac 2025 • Android
           </Text>
         </View>
 

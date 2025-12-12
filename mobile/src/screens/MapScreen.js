@@ -61,7 +61,7 @@ export default function MapScreen({ navigation }) {
 
   const getMarkerColors = (status) => {
     if (status === 'serviced') return { bubble: '#16a34a', arrow: '#16a34a' };
-    if (status === 'inactive') return { bubble: '#9ca3af', arrow: '#9ca3af' };
+    if (status === 'inactive') return { bubble: '#6b7280', arrow: '#6b7280' }; // gray pins instead of blue
     return { bubble: '#ef4444', arrow: '#ef4444' }; // not serviced
   };
 
@@ -362,7 +362,8 @@ export default function MapScreen({ navigation }) {
         {/* Elevator markers */}
         {elevators.map((elevator) => {
           const elevatorId = elevator.id || elevator._id;
-          const markerStatus = elevator.status === 'neaktivan'
+          const isInactive = elevator.status === 'neaktivan' || elevator.status === 'inactive';
+          const markerStatus = isInactive
             ? 'inactive'
             : (servicedThisMonth.has(elevatorId) ? 'serviced' : 'notServiced');
           const markerColors = getMarkerColors(markerStatus);
@@ -377,14 +378,9 @@ export default function MapScreen({ navigation }) {
               title={elevator.nazivStranke}
               description={`${elevator.ulica}, ${elevator.mjesto}`}
               onPress={() => handleMarkerPress(elevator)}
-            >
-              <View style={styles.markerContainer}>
-                <View style={[styles.markerBubble, { backgroundColor: markerColors.bubble }]}> 
-                  <Ionicons name="business" size={20} color="#fff" />
-                </View>
-                <View style={[styles.markerArrow, { borderTopColor: markerColors.arrow }]} />
-              </View>
-            </Marker>
+              pinColor={markerColors.bubble}
+              tracksViewChanges={false}
+            />
           );
         })}
       </MapView>
@@ -538,13 +534,17 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   markerContainer: {
+    width: 64,
+    height: 72,
     alignItems: 'center',
+    justifyContent: 'flex-start',
+    overflow: 'visible',
   },
   markerBubble: {
     backgroundColor: '#2563eb',
-    borderRadius: 20,
-    width: 40,
-    height: 40,
+    borderRadius: 15,
+    width: 30,
+    height: 30,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 3,
@@ -566,7 +566,7 @@ const styles = StyleSheet.create({
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
     borderTopColor: '#2563eb',
-    marginTop: -2,
+    marginTop: 6,
   },
   fabContainer: {
     position: 'absolute',

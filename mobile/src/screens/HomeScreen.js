@@ -10,6 +10,7 @@ import {
   Easing,
   ImageBackground,
   Platform,
+  BackHandler,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -81,6 +82,15 @@ export default function HomeScreen({ navigation }) {
     useCallback(() => {
       loadStats();
       fetchUnread();
+      // Na Home ekranu, hardverski Back na Androidu izlazi iz aplikacije
+      if (Platform.OS === 'android') {
+        const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+          BackHandler.exitApp();
+          return true; // spriječi default navigaciju
+        });
+        return () => sub.remove();
+      }
+      return undefined;
     }, [])
   );
 

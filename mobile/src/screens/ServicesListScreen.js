@@ -162,6 +162,7 @@ export default function ServicesListScreen({ navigation }) {
   // Ako u trenutno odabranom periodu nema servisa, automatski prebaci na najnoviji dostupni period
   useEffect(() => {
     if (!services.length) return;
+          removeClippedSubviews
     const hasInSelection = services.some((s) => {
       const d = parseDate(s.datum || s.serviceDate);
       return d && d.getMonth() === selectedMonth && d.getFullYear() === selectedYear;
@@ -246,7 +247,7 @@ export default function ServicesListScreen({ navigation }) {
   }, [filteredServices]);
 
   const dedupedServices = useMemo(() => {
-    // Za "serviced" zadrži samo najnoviji servis po dizalu u odabranom mjesecu
+    // Za "serviced" zadrži samo najnoviji servis po dizalu u odabranom mjesecu, grupirano po adresi
     if (filter === 'serviced') {
       const latestByElevator = new Map();
       safeFiltered.forEach((s) => {
@@ -262,10 +263,48 @@ export default function ServicesListScreen({ navigation }) {
           latestByElevator.set(elevatorId, s);
         }
       });
-      return Array.from(latestByElevator.values());
+
+      const byAddress = new Map();
+      Array.from(latestByElevator.values()).forEach((s) => {
+        const raw = s.elevatorId;
+        const elevatorId = normalizeElevatorId(raw);
+        let elevator = elevatorId ? elevatorDB.getById?.(elevatorId) : null;
+        if (!elevator && raw && typeof raw === 'object') {
+          elevator = raw;
+        }
+        const ulica = (elevator?.ulica || '').trim().toLowerCase();
+        const mjesto = (elevator?.mjesto || '').trim().toLowerCase();
+        const key = `${ulica}___${mjesto}`;
+        if (!byAddress.has(key)) {
+          const ensuredId = s._id || s.id || `${key}_${elevatorId || ''}`;
+          byAddress.set(key, { ...s, _id: ensuredId, id: ensuredId });
+        }
+      });
+
+      return Array.from(byAddress.values());
     }
 
-    // Za "notServiced" već dolazi jedan zapis po dizalu
+    if (filter === 'notServiced') {
+      // Za ne-servisirane: prikaži samo jednu stavku po adresi (ulica + mjesto)
+      const byAddress = new Map();
+      safeFiltered.forEach((s) => {
+        const raw = s.elevatorId;
+        const elevatorId = normalizeElevatorId(raw);
+        let elevator = elevatorId ? elevatorDB.getById?.(elevatorId) : null;
+        if (!elevator && raw && typeof raw === 'object') {
+          elevator = raw;
+        }
+        const ulica = (elevator?.ulica || '').trim().toLowerCase();
+        const mjesto = (elevator?.mjesto || '').trim().toLowerCase();
+        const key = `${ulica}___${mjesto}`; // group key by address
+        if (!byAddress.has(key)) {
+          const ensuredId = s._id || s.id || key;
+          byAddress.set(key, { ...s, _id: ensuredId, id: ensuredId });
+        }
+      });
+      return Array.from(byAddress.values());
+    }
+
     return safeFiltered;
   }, [safeFiltered, filter]);
 
@@ -315,10 +354,23 @@ export default function ServicesListScreen({ navigation }) {
 
     const napomeneText = item.napomene ? String(item.napomene) : '';
 
+    const elevatorId = normalizeElevatorId(item.elevatorId);
+    const elevator = elevatorId ? elevatorDB.getById?.(elevatorId) : null;
+
+    const handlePress = () => {
+      if (filter === 'notServiced') {
+        if (elevator) {
+          navigation.navigate('ElevatorDetails', { elevator });
+        }
+        return;
+      }
+      navigation.navigate('ServiceDetails', { service: item });
+    };
+
     return (
       <View style={styles.serviceCard}>
         <TouchableOpacity
-          onPress={() => navigation.navigate('ServiceDetails', { service: item })}
+          onPress={handlePress}
           style={styles.serviceContent}
         >
           <View style={styles.serviceHeader}>

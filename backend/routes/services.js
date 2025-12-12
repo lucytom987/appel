@@ -26,7 +26,12 @@ router.get('/', authenticate, async (req, res) => {
     if (!includeDeletedBool) filter.is_deleted = { $ne: true };
 
     if (elevatorId) filter.elevatorId = elevatorId;
-    if (technician) filter.serviserID = technician;
+    if (technician) {
+      filter.$or = [
+        { serviserID: technician },
+        { dodatniServiseri: technician },
+      ];
+    }
     if (updatedAfter) {
       const afterDate = new Date(updatedAfter);
       filter.$or = [
@@ -43,6 +48,7 @@ router.get('/', authenticate, async (req, res) => {
     const services = await Service.find(filter)
       .populate('elevatorId', 'brojUgovora nazivStranke ulica mjesto brojDizala')
       .populate('serviserID', 'ime prezime email')
+      .populate('dodatniServiseri', 'ime prezime email')
       .sort({ datum: -1 })
       .skip(parsedSkip)
       .limit(parsedLimit)
@@ -96,6 +102,7 @@ router.get('/:id', authenticate, async (req, res) => {
     const service = await Service.findOne({ _id: req.params.id, is_deleted: { $ne: true } })
       .populate('elevatorId', 'brojUgovora nazivStranke ulica mjesto brojDizala')
       .populate('serviserID', 'ime prezime email uloga')
+      .populate('dodatniServiseri', 'ime prezime email uloga')
       .lean();
 
     if (!service) {
@@ -123,8 +130,15 @@ router.post('/', authenticate, async (req, res) => {
     }
 
     const now = new Date();
+    const dodatniServiseri = Array.isArray(req.body.dodatniServiseri || req.body.additionalTechnicians)
+      ? (req.body.dodatniServiseri || req.body.additionalTechnicians).filter(Boolean)
+      : (req.body.kolegaId ? [req.body.kolegaId] : []);
+
+    const uniqueAssistants = [...new Set(dodatniServiseri.map(String))].filter((id) => String(id) !== String(req.user._id));
+
     const service = new Service({
       ...req.body,
+      dodatniServiseri: uniqueAssistants,
       elevatorId,
       serviserID: req.user._id,
       updated_at: now,
@@ -152,6 +166,7 @@ router.post('/', authenticate, async (req, res) => {
 
     await service.populate('elevatorId', 'brojUgovora nazivStranke ulica mjesto brojDizala');
     await service.populate('serviserID', 'ime prezime email');
+    await service.populate('dodatniServiseri', 'ime prezime email');
 
     res.status(201).json({ success: true, message: 'Servis kreiran', data: service });
   } catch (error) {
@@ -202,9 +217,15 @@ router.put('/:id', authenticate, async (req, res) => {
     }
 
     const now = new Date();
+    const dodatniServiseri = Array.isArray(req.body.dodatniServiseri || req.body.additionalTechnicians)
+      ? (req.body.dodatniServiseri || req.body.additionalTechnicians).filter(Boolean)
+      : (req.body.kolegaId ? [req.body.kolegaId] : existingService.dodatniServiseri || []);
+    const uniqueAssistants = [...new Set(dodatniServiseri.map(String))].filter((id) => String(id) !== String(existingService.serviserID));
+
     const updateData = {
       ...req.body,
       checklist,
+      dodatniServiseri: uniqueAssistants,
       // ne dozvoli promjenu vlasništva kroz body
       serviserID: existingService.serviserID,
       elevatorId: existingService.elevatorId,
@@ -219,7 +240,8 @@ router.put('/:id', authenticate, async (req, res) => {
       { new: true, runValidators: true }
     )
       .populate('elevatorId', 'brojUgovora nazivStranke brojDizala')
-      .populate('serviserID', 'ime prezime email');
+      .populate('serviserID', 'ime prezime email')
+      .populate('dodatniServiseri', 'ime prezime email');
 
     await logAction({
       korisnikId: req.user._id,

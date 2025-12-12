@@ -17,7 +17,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import * as SecureStore from 'expo-secure-store';
 import { useAuth } from '../context/AuthContext';
 import { serviceDB, elevatorDB } from '../database/db';
-import { servicesAPI } from '../services/api';
+import { servicesAPI, usersAPI } from '../services/api';
 
 export default function AddServiceScreen({ navigation, route }) {
   const { elevator } = route.params || {};
@@ -45,6 +45,9 @@ export default function AddServiceScreen({ navigation, route }) {
   const [applyToAll, setApplyToAll] = useState(false);
   const [includeElevators, setIncludeElevators] = useState({});
   const [perElevatorChecklist, setPerElevatorChecklist] = useState({});
+  const [korisnici, setKorisnici] = useState([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [showKolege, setShowKolege] = useState(false);
 
   // Konvertiraj isOnline u boolean
   const online = Boolean(isOnline);
@@ -55,6 +58,24 @@ export default function AddServiceScreen({ navigation, route }) {
       setIsOfflineDemo(Boolean(token && token.startsWith('offline_token_')));
     })();
   }, []);
+
+  React.useEffect(() => {
+    const fetchUsers = async () => {
+      if (!online) return;
+      setLoadingUsers(true);
+      try {
+        const res = await usersAPI.getAll();
+        const data = res.data?.data || res.data || [];
+        const filtered = (Array.isArray(data) ? data : []).filter((u) => (u._id || u.id) !== (user?._id || user?.id));
+        setKorisnici(filtered);
+      } catch (e) {
+        console.log('Load users failed', e?.message);
+      } finally {
+        setLoadingUsers(false);
+      }
+    };
+    fetchUsers();
+  }, [online, user]);
 
   const elevatorsOnAddress = React.useMemo(() => {
     const all = elevatorDB.getAll() || [];
@@ -105,6 +126,7 @@ export default function AddServiceScreen({ navigation, route }) {
       d.setMonth(d.getMonth() + intervalMjeseci);
       return d;
     })(),
+    kolegaId: null,
   });
 
   const baseChecklist = {
@@ -199,6 +221,7 @@ export default function AddServiceScreen({ navigation, route }) {
         imaNedostataka: false,
         nedostaci: [],
         sljedeciServis: formData.nextServiceDate.toISOString(),
+        dodatniServiseri: formData.kolegaId ? [formData.kolegaId] : [],
       };
 
       // Provjeri je li offline korisnik (demo korisnik)
@@ -233,6 +256,7 @@ export default function AddServiceScreen({ navigation, route }) {
               id: created._id || created.id,
               elevatorId: created.elevatorId || created.elevator || payload.elevatorId,
               serviserID: created.serviserID || created.performedBy || payload.serviserID,
+              dodatniServiseri: created.dodatniServiseri || payload.dodatniServiseri || [],
               datum: created.datum || created.serviceDate || payload.datum,
               checklist: created.checklist || payload.checklist,
               imaNedostataka: created.imaNedostataka ?? payload.imaNedostataka,
@@ -310,6 +334,57 @@ export default function AddServiceScreen({ navigation, route }) {
             {(elevator?.ulica || '')} • {(elevator?.mjesto || '')}
           </Text>
         </View>
+
+          {/* Kolega (opcionalno) */}
+          <View style={styles.section}>
+            <Text style={styles.label}>Dodaj kolegu (opcionalno)</Text>
+            <TouchableOpacity
+              style={styles.kolegaToggle}
+              onPress={() => setShowKolege((v) => !v)}
+            >
+              <Ionicons name={showKolege ? 'chevron-up' : 'chevron-down'} size={18} color="#0f172a" />
+              <Text style={styles.kolegaToggleText}>
+                {formData.kolegaId
+                  ? (() => {
+                      const found = korisnici.find((k) => (k._id || k.id) === formData.kolegaId);
+                      return found ? `${found.ime || ''} ${found.prezime || ''}`.trim() || 'Kolega odabran' : 'Kolega odabran';
+                    })()
+                  : 'Dodaj kolegu'}
+              </Text>
+            </TouchableOpacity>
+
+            {showKolege && (
+              loadingUsers ? (
+                <View style={styles.userRow}>
+                  <ActivityIndicator size="small" color="#0ea5e9" />
+                  <Text style={styles.userRowText}>Učitavanje...</Text>
+                </View>
+              ) : (
+                <ScrollView style={{ maxHeight: 180, marginTop: 8 }}>
+                  {korisnici.map((k) => {
+                    const id = k._id || k.id;
+                    const selected = formData.kolegaId === id;
+                    return (
+                      <TouchableOpacity
+                        key={id}
+                        style={[styles.userRow, selected && styles.userRowSelected]}
+                        onPress={() => {
+                          setFormData((prev) => ({ ...prev, kolegaId: selected ? null : id }));
+                          setShowKolege(false);
+                        }}
+                      >
+                        <Ionicons name={selected ? 'checkmark-circle' : 'ellipse-outline'} size={20} color={selected ? '#16a34a' : '#94a3b8'} />
+                        <Text style={styles.userRowText}>{(k.ime || '')} {(k.prezime || '')}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                  {korisnici.length === 0 && (
+                    <Text style={{ color: '#94a3b8', marginTop: 6 }}>Nema dostupnih korisnika.</Text>
+                  )}
+                </ScrollView>
+              )
+            )}
+          </View>
 
         {/* Offline warning */}
         {!online && !isOfflineDemo && (
@@ -504,6 +579,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#ef4444',
   },
+  userRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  userRowSelected: {
+    backgroundColor: '#ecfdf3',
+  },
+  userRowText: { color: '#111827', fontSize: 14 },
+  kolegaToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 10,
+  },
+  kolegaToggleText: { color: '#0f172a', fontWeight: '600', fontSize: 14 },
   section: {
     backgroundColor: '#fff',
     padding: 20,

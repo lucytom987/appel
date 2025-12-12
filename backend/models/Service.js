@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const serviceSchema = new mongoose.Schema({
   elevatorId: { type: mongoose.Schema.Types.ObjectId, ref: 'Elevator', required: true },
   serviserID: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  dodatniServiseri: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   
   datum: { type: Date, default: Date.now, required: true },
   
@@ -59,6 +60,7 @@ serviceSchema.pre('save', function (next) {
 
 serviceSchema.index({ elevatorId: 1, datum: -1 });
 serviceSchema.index({ serviserID: 1 });
+serviceSchema.index({ dodatniServiseri: 1 });
 serviceSchema.index({ updated_at: -1 });
 serviceSchema.index({ is_deleted: 1 });
 

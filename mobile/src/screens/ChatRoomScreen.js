@@ -35,6 +35,10 @@ export default function ChatRoomScreen({ route, navigation }) {
   const [expandedIds, setExpandedIds] = useState([]);
   const [actionsVisible, setActionsVisible] = useState(false);
   const [editVisible, setEditVisible] = useState(false);
+  const [editMessageVisible, setEditMessageVisible] = useState(false);
+  const [editMessageId, setEditMessageId] = useState(null);
+  const [editMessageText, setEditMessageText] = useState('');
+  const [savingMessage, setSavingMessage] = useState(false);
   const [editName, setEditName] = useState(room?.name || room?.title || room?.naziv || '');
   const [editDesc, setEditDesc] = useState(room?.description || room?.opis || '');
   const [savingRoom, setSavingRoom] = useState(false);
@@ -279,6 +283,53 @@ export default function ChatRoomScreen({ route, navigation }) {
     }
   };
 
+  const handleStartEditMessage = (msg) => {
+    if (!msg) return;
+    setEditMessageId(msg._id || msg.id);
+    setEditMessageText(msg.tekst || msg.content || '');
+    setEditMessageVisible(true);
+  };
+
+  const handleSaveMessageEdit = async () => {
+    const id = editMessageId;
+    const newText = (editMessageText || '').trim();
+    if (!id || !newText) {
+      setEditMessageVisible(false);
+      return;
+    }
+
+    setSavingMessage(true);
+    try {
+      let updatedMsg = null;
+      if (isOnline) {
+        try {
+          const res = await messagesAPI.update(id, { tekst: newText });
+          updatedMsg = normalizeMessage(res.data?.data || res.data);
+        } catch (err) {
+          console.log('Edit message failed (online), keeping local update', err?.message);
+        }
+      }
+
+      if (!updatedMsg) {
+        const existing = messages.find((m) => m._id === id || m.id === id);
+        updatedMsg = existing ? { ...existing, tekst: newText, synced: isOnline ? existing?.synced : 0 } : null;
+      }
+
+      if (updatedMsg) {
+        messageDB.insert?.({ ...updatedMsg, tekst: newText });
+        setMessages((prev) => prev.map((m) => {
+          const mid = m._id || m.id;
+          return mid === id ? { ...m, ...updatedMsg, tekst: newText } : m;
+        }));
+      }
+    } finally {
+      setSavingMessage(false);
+      setEditMessageVisible(false);
+      setEditMessageId(null);
+      setEditMessageText('');
+    }
+  };
+
   const formatDateHeading = useCallback((value) => {
     if (!value) return '';
     const date = value instanceof Date ? value : new Date(value);
@@ -376,10 +427,16 @@ export default function ChatRoomScreen({ route, navigation }) {
                 )}
               </View>
               {canDelete && (
-                <TouchableOpacity style={styles.deleteButton} onPress={() => handleDelete(msgId)}>
-                  <Ionicons name="trash-outline" size={16} color="#ef4444" />
-                  <Text style={[styles.deleteText, { color: '#0f172a' }]}>Obrisi</Text>
-                </TouchableOpacity>
+                <View style={styles.messageActionsRow}>
+                  <TouchableOpacity style={styles.editButton} onPress={() => handleStartEditMessage(msg)}>
+                    <Ionicons name="create-outline" size={16} color="#0ea5e9" />
+                    <Text style={[styles.deleteText, { color: '#0ea5e9' }]}>Uredi</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.deleteButton} onPress={() => handleDelete(msgId)}>
+                    <Ionicons name="trash-outline" size={16} color="#ef4444" />
+                    <Text style={[styles.deleteText, { color: '#0f172a' }]}>Obrisi</Text>
+                  </TouchableOpacity>
+                </View>
               )}
             </View>
           )}
@@ -524,6 +581,43 @@ export default function ChatRoomScreen({ route, navigation }) {
         </View>
       </Modal>
 
+      <Modal
+        visible={editMessageVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setEditMessageVisible(false)}
+      >
+        <View style={styles.editMessageOverlay}>
+          <View style={styles.editMessageCard}>
+            <View style={styles.editMessageHeader}>
+              <Text style={styles.editTitle}>Uredi poruku</Text>
+              <TouchableOpacity onPress={() => setEditMessageVisible(false)}>
+                <Ionicons name="close" size={22} color="#0f172a" />
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              style={styles.editMessageInput}
+              multiline
+              value={editMessageText}
+              onChangeText={setEditMessageText}
+              placeholder="Izmijeni tekst poruke"
+              placeholderTextColor="#94a3b8"
+            />
+            <TouchableOpacity
+              style={[styles.saveButton, (!editMessageText.trim() || savingMessage) && styles.saveButtonDisabled]}
+              onPress={handleSaveMessageEdit}
+              disabled={!editMessageText.trim() || savingMessage}
+            >
+              {savingMessage ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.saveButtonText}>Spremi</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
     </SafeAreaView>
   );
 }
@@ -624,6 +718,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   expandedMeta: { flexDirection: 'column', alignItems: 'flex-start' },
+  messageActionsRow: { flexDirection: 'row', gap: 8 },
+  editButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#0ea5e9',
+    backgroundColor: '#e0f2fe',
+  },
   deleteButton: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   deleteText: { fontWeight: '700', fontSize: 12 },
   inputBar: {
@@ -694,7 +800,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 16,
   },
+  editMessageOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    padding: 16,
+  },
   editCard: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 16,
+    gap: 10,
+  },
+  editMessageCard: {
     backgroundColor: '#fff',
     borderRadius: 14,
     padding: 16,
@@ -705,7 +823,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  editMessageHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   editTitle: { fontSize: 18, fontWeight: '800', color: '#0f172a' },
+  editMessageInput: {
+    minHeight: 80,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+    backgroundColor: '#f8fafc',
+    textAlignVertical: 'top',
+  },
   editInput: {
     borderWidth: 1,
     borderColor: '#e2e8f0',

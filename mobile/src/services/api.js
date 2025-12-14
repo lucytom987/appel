@@ -205,6 +205,7 @@ export const messagesAPI = {
       slika: data.slika || data.imageUrl,
     }),
   markAsRead: (id) => api.put(`/messages/${id}/read`),
+  update: (id, data) => api.put(`/messages/${id}`, { tekst: data.tekst || data.content }),
   delete: (id) => api.delete(`/messages/${id}`),
   getUnreadCount: () => api.get('/messages/unread/count'),
 };

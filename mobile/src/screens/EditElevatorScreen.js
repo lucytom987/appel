@@ -29,6 +29,23 @@ export default function EditElevatorScreen({ navigation, route }) {
   const [geocoding, setGeocoding] = useState(false);
   const [mapPickerVisible, setMapPickerVisible] = useState(false);
 
+  // Normaliziraj kontaktOsoba ako dolazi kao JSON string iz SQLite
+  const parsedKontakt = (() => {
+    if (!elevator?.kontaktOsoba) return {};
+    if (typeof elevator.kontaktOsoba === 'string') {
+      try {
+        return JSON.parse(elevator.kontaktOsoba);
+      } catch {
+        return {};
+      }
+    }
+    return elevator.kontaktOsoba || {};
+  })();
+
+  const initialCodes = Array.isArray(parsedKontakt.ulazneSifre) && parsedKontakt.ulazneSifre.length
+    ? parsedKontakt.ulazneSifre
+    : [parsedKontakt.ulaznaKoda || ''];
+
   // Konvertiraj isOnline u boolean
   const online = Boolean(isOnline);
 
@@ -42,10 +59,11 @@ export default function EditElevatorScreen({ navigation, route }) {
     
     // Kontakt osoba
     kontaktOsoba: {
-      imePrezime: elevator.kontaktOsoba?.imePrezime || '',
-      mobitel: elevator.kontaktOsoba?.mobitel || '',
-      email: elevator.kontaktOsoba?.email || '',
-      ulaznaKoda: elevator.kontaktOsoba?.ulaznaKoda || '',
+      imePrezime: parsedKontakt?.imePrezime || '',
+      mobitel: parsedKontakt?.mobitel || '',
+      email: parsedKontakt?.email || '',
+      ulaznaKoda: parsedKontakt?.ulaznaKoda || '',
+      ulazneSifre: initialCodes,
     },
 
     // GPS Koordinate
@@ -116,6 +134,42 @@ export default function EditElevatorScreen({ navigation, route }) {
     }));
   };
 
+  const addEntryCode = () => {
+    setFormData(prev => ({
+      ...prev,
+      kontaktOsoba: {
+        ...prev.kontaktOsoba,
+        ulazneSifre: [...(prev.kontaktOsoba.ulazneSifre || []), ''],
+      },
+    }));
+  };
+
+  const updateEntryCode = (index, value) => {
+    setFormData(prev => {
+      const list = [...(prev.kontaktOsoba.ulazneSifre || [])];
+      list[index] = value;
+      return {
+        ...prev,
+        kontaktOsoba: { ...prev.kontaktOsoba, ulazneSifre: list },
+      };
+    });
+  };
+
+  const removeEntryCode = (index) => {
+    setFormData(prev => {
+      const list = [...(prev.kontaktOsoba.ulazneSifre || [])];
+      if (list.length <= 1) {
+        list[0] = '';
+      } else {
+        list.splice(index, 1);
+      }
+      return {
+        ...prev,
+        kontaktOsoba: { ...prev.kontaktOsoba, ulazneSifre: list },
+      };
+    });
+  };
+
   const handleUpdate = async () => {
     // Validacija - broj ugovora više nije obavezan
     if (!formData.nazivStranke.trim()) {
@@ -144,7 +198,16 @@ export default function EditElevatorScreen({ navigation, route }) {
         ulica: formData.ulica,
         mjesto: formData.mjesto,
         brojDizala: formData.brojDizala,
-        kontaktOsoba: formData.kontaktOsoba,
+        kontaktOsoba: (() => {
+          const cleanCodes = (formData.kontaktOsoba.ulazneSifre || [])
+            .map((c) => (c || '').trim())
+            .filter(Boolean);
+          return {
+            ...formData.kontaktOsoba,
+            ulaznaKoda: cleanCodes[0] || formData.kontaktOsoba.ulaznaKoda || '',
+            ulazneSifre: cleanCodes,
+          };
+        })(),
         koordinate: {
           latitude: parseFloat(formData.koordinate.latitude) || 0,
           longitude: parseFloat(formData.koordinate.longitude) || 0,
@@ -512,16 +575,29 @@ export default function EditElevatorScreen({ navigation, route }) {
             autoCapitalize="none"
           />
 
-          <Text style={styles.label}>Ulazna šifra na zgradu</Text>
-          <TextInput
-            style={styles.input}
-            value={formData.kontaktOsoba.ulaznaKoda}
-            onChangeText={(text) => setFormData(prev => ({ 
-              ...prev, 
-              kontaktOsoba: { ...prev.kontaktOsoba, ulaznaKoda: text }
-            }))}
-            placeholder="npr. 1234#"
-          />
+          <Text style={styles.label}>Ulazne šifre (više ulaza)</Text>
+          <View style={styles.codeList}>
+            {(formData.kontaktOsoba.ulazneSifre || ['']).map((code, idx) => (
+              <View key={idx} style={styles.codeRow}>
+                <Text style={styles.codeIndex}>Ulaz {idx + 1}</Text>
+                <TextInput
+                  style={[styles.input, styles.codeInput]}
+                  value={code}
+                  onChangeText={(text) => updateEntryCode(idx, text)}
+                  placeholder="npr. 1234#"
+                />
+                {idx > 0 && (
+                  <TouchableOpacity onPress={() => removeEntryCode(idx)}>
+                    <Ionicons name="trash-outline" size={20} color="#ef4444" />
+                  </TouchableOpacity>
+                )}
+              </View>
+            ))}
+            <TouchableOpacity style={styles.addCodeButton} onPress={addEntryCode}>
+              <Ionicons name="add" size={18} color="#2563eb" />
+              <Text style={styles.addCodeText}>Dodaj ulaz</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Lokacija (GPS) */}
@@ -735,6 +811,34 @@ const styles = StyleSheet.create({
   textArea: {
     minHeight: 100,
     paddingTop: 12,
+  },
+  codeList: {
+    gap: 10,
+  },
+  codeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  codeIndex: {
+    width: 60,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  codeInput: {
+    flex: 1,
+  },
+  addCodeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 4,
+  },
+  addCodeText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#2563eb',
   },
   row: {
     flexDirection: 'row',

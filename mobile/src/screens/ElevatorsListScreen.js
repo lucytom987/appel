@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { elevatorDB } from '../database/db';
-import { syncAll } from '../services/syncService';
+import { syncAll, primeFullSync } from '../services/syncService';
 import { useAuth } from '../context/AuthContext';
 
 export default function ElevatorsListScreen({ navigation }) {
@@ -101,6 +101,7 @@ export default function ElevatorsListScreen({ navigation }) {
     }
 
     setRefreshing(true);
+    await primeFullSync();
     await syncAll();
     loadElevators();
     setRefreshing(false);

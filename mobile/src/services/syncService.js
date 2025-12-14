@@ -165,7 +165,7 @@ const setLastFull = async (key) => {
 };
 
   // Primaj full pull na idući sync (briše lastSync/lastFull ključeve)
-const forceFullNextSync = async () => {
+export const forceFullNextSync = async () => {
   const keys = [
     'lastSyncElevators',
     'lastSyncServices',
@@ -262,12 +262,12 @@ export const processSyncQueue = async () => {
   }
 };
 
-// Pull elevatori (delta)
-export const syncElevatorsFromServer = async () => {
+// Pull elevatori (delta, uz auto-recovery ako lokalni broj je manji od server total)
+export const syncElevatorsFromServer = async (forceFull = false) => {
   if (!isOnline) return false;
   try {
     const periodicFull = await shouldRunPeriodicFull('lastFullElevators', 6);
-    const shouldFullSync = periodicFull || (await shouldForceFullSync('lastSyncElevators', elevatorDB.getAll));
+    const shouldFullSync = forceFull || periodicFull || (await shouldForceFullSync('lastSyncElevators', elevatorDB.getAll));
     const last = shouldFullSync ? null : await getLastSync('lastSyncElevators');
 
     const baseParams = last ? { updatedAfter: last, includeDeleted: true } : { includeDeleted: true };
@@ -373,6 +373,14 @@ export const syncElevatorsFromServer = async () => {
     if (shouldFullSync) {
       await setLastFull('lastFullElevators');
     }
+
+    // Recovery: ako delta sync donese manje zapisa od server total, odradi još jedan full pull
+    const localCount = (elevatorDB.getAll?.() || []).length;
+    if (!forceFull && total && localCount < total) {
+      console.log(`Elevators local count (${localCount}) < server total (${total}); forcing full pull once`);
+      return syncElevatorsFromServer(true);
+    }
+
     console.log(`Elevators synced: ${fetched} (total reported: ${total || fetched})`);
     return true;
   } catch (err) {
@@ -932,6 +940,11 @@ export const syncUsersFromServer = async () => {
   }
 };
 
+// Public helper: force idući sync da bude full (čisti lastSync/lastFull ključeve)
+export const primeFullSync = async () => {
+  await forceFullNextSync();
+};
+
 // Master sync
 export const syncAll = async () => {
   if (syncInProgress) {
@@ -961,6 +974,13 @@ export const syncAll = async () => {
     await syncServicesToServer();
     await syncRepairsToServer();
     await syncElevatorsFromServer();
+    // Ako je broj lokalnih dizala neočekivano mali (npr. Expo dev s praznim cacheom), forsiraj jedan full pull
+    const localElevatorCount = (elevatorDB.getAll?.() || []).length;
+    if (localElevatorCount > 0 && localElevatorCount < 80) {
+      console.log(`Elevators count looks low (${localElevatorCount}), forcing one full pull retry`);
+      await forceFullNextSync();
+      await syncElevatorsFromServer(true);
+    }
     await syncServicesFromServer();
     await syncRepairsFromServer();
     await syncUsersFromServer();
@@ -1012,6 +1032,8 @@ export default {
   syncServicesToServer,
   syncRepairsToServer,
   processSyncQueue,
+  forceFullNextSync,
+  primeFullSync,
 };
 
 

@@ -46,6 +46,7 @@ export default function AddElevatorScreen({ navigation }) {
       mobitel: '',
       email: '',
       ulaznaKoda: '',
+      ulazneSifre: [''],
     },
 
     // GPS Koordinate - backend očekuje
@@ -117,6 +118,42 @@ export default function AddElevatorScreen({ navigation }) {
     }
   };
 
+  const addEntryCode = () => {
+    setFormData(prev => ({
+      ...prev,
+      kontaktOsoba: {
+        ...prev.kontaktOsoba,
+        ulazneSifre: [...(prev.kontaktOsoba.ulazneSifre || []), ''],
+      },
+    }));
+  };
+
+  const updateEntryCode = (index, value) => {
+    setFormData(prev => {
+      const list = [...(prev.kontaktOsoba.ulazneSifre || [])];
+      list[index] = value;
+      return {
+        ...prev,
+        kontaktOsoba: { ...prev.kontaktOsoba, ulazneSifre: list },
+      };
+    });
+  };
+
+  const removeEntryCode = (index) => {
+    setFormData(prev => {
+      const list = [...(prev.kontaktOsoba.ulazneSifre || [])];
+      if (list.length <= 1) {
+        list[0] = '';
+      } else {
+        list.splice(index, 1);
+      }
+      return {
+        ...prev,
+        kontaktOsoba: { ...prev.kontaktOsoba, ulazneSifre: list },
+      };
+    });
+  };
+
   const updateElevator = (id, field, value) => {
     setElevators(elevators.map(e => 
       e.id === id ? { ...e, [field]: value } : e
@@ -150,6 +187,10 @@ export default function AddElevatorScreen({ navigation }) {
     try {
       let successCount = 0;
 
+      const cleanEntryCodes = (formData.kontaktOsoba.ulazneSifre || [])
+        .map((c) => (c || '').trim())
+        .filter(Boolean);
+
       // Provjeri je li token offline token (demo korisnik)
       const token = await SecureStore.getItemAsync('userToken');
       const isOfflineUser = token && token.startsWith('offline_token_');
@@ -162,7 +203,11 @@ export default function AddElevatorScreen({ navigation }) {
           ulica: formData.ulica,
           mjesto: formData.mjesto,
           brojDizala: elevator.brojDizala,
-          kontaktOsoba: formData.kontaktOsoba,
+          kontaktOsoba: {
+            ...formData.kontaktOsoba,
+            ulaznaKoda: cleanEntryCodes[0] || formData.kontaktOsoba.ulaznaKoda || '',
+            ulazneSifre: cleanEntryCodes,
+          },
           intervalServisa: parseInt(elevator.intervalServisa) || 1,
           napomene: formData.napomene,
           koordinate: {
@@ -391,16 +436,29 @@ export default function AddElevatorScreen({ navigation }) {
             autoCapitalize="none"
           />
 
-          <Text style={styles.label}>Ulazna šifra na zgradu</Text>
-          <TextInput
-            style={styles.input}
-            value={formData.kontaktOsoba.ulaznaKoda}
-            onChangeText={(text) => setFormData(prev => ({ 
-              ...prev, 
-              kontaktOsoba: { ...prev.kontaktOsoba, ulaznaKoda: text }
-            }))}
-            placeholder="npr. 1234#"
-          />
+          <Text style={styles.label}>Ulazne šifre (više ulaza)</Text>
+          <View style={styles.codeList}>
+            {(formData.kontaktOsoba.ulazneSifre || ['']).map((code, idx) => (
+              <View key={idx} style={styles.codeRow}>
+                <Text style={styles.codeIndex}>Ulaz {idx + 1}</Text>
+                <TextInput
+                  style={[styles.input, styles.codeInput]}
+                  value={code}
+                  onChangeText={(text) => updateEntryCode(idx, text)}
+                  placeholder="npr. 1234#"
+                />
+                {idx > 0 && (
+                  <TouchableOpacity onPress={() => removeEntryCode(idx)}>
+                    <Ionicons name="trash-outline" size={20} color="#ef4444" />
+                  </TouchableOpacity>
+                )}
+              </View>
+            ))}
+            <TouchableOpacity style={styles.addCodeButton} onPress={addEntryCode}>
+              <Ionicons name="add" size={18} color="#2563eb" />
+              <Text style={styles.addCodeText}>Dodaj ulaz</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Lokacija (GPS) */}
@@ -604,6 +662,34 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#999',
     marginTop: 5,
+  },
+  codeList: {
+    gap: 10,
+  },
+  codeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  codeIndex: {
+    width: 60,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  codeInput: {
+    flex: 1,
+  },
+  addCodeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 4,
+  },
+  addCodeText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#2563eb',
   },
   monthSelector: {
     flexDirection: 'row',

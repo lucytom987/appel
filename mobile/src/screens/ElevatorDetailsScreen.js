@@ -312,9 +312,29 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
         {elevator.kontaktOsoba && elevator.kontaktOsoba.email && (
           <InfoRow icon="mail" label="E-mail" value={elevator.kontaktOsoba.email} />
         )}
-        {elevator.kontaktOsoba && elevator.kontaktOsoba.ulaznaKoda && (
-          <InfoRow icon="key" label="Ulazna šifra" value={elevator.kontaktOsoba.ulaznaKoda} />
-        )}
+        {(() => {
+          const codesArray = Array.isArray(elevator.kontaktOsoba?.ulazneSifre)
+            ? elevator.kontaktOsoba.ulazneSifre.filter(Boolean)
+            : [];
+          const single = elevator.kontaktOsoba?.ulaznaKoda;
+          const codes = codesArray.length ? codesArray : (single ? [single] : []);
+          if (!codes.length) return null;
+          return (
+            <View style={styles.codesBlock}>
+              <View style={styles.codesHeader}>
+                <Ionicons name="key" size={18} color="#10b981" />
+                <Text style={styles.codesTitle}>Ulazne šifre</Text>
+              </View>
+              <View style={styles.codesList}>
+                {codes.map((code, idx) => (
+                  <View key={idx} style={styles.codePill}>
+                    <Text style={styles.codePillText}>{code}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          );
+        })()}
       </View>
 
       <View style={styles.infoSection}>
@@ -897,6 +917,39 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#9ca3af',
     marginTop: 12,
+  },
+  codesBlock: {
+    marginTop: 8,
+    gap: 8,
+  },
+  codesHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  codesTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1f2937',
+  },
+  codesList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  codePill: {
+    backgroundColor: '#f0fdf4',
+    borderColor: '#10b981',
+    borderWidth: 1,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+  },
+  codePillText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#065f46',
+    letterSpacing: 1,
   },
   fabContainer: {
     position: 'absolute',

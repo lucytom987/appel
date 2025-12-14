@@ -36,6 +36,18 @@ export default function MapScreen({ navigation }) {
     return raw;
   };
 
+  const parseContact = (kontaktOsoba) => {
+    if (!kontaktOsoba) return {};
+    if (typeof kontaktOsoba === 'string') {
+      try {
+        return JSON.parse(kontaktOsoba);
+      } catch {
+        return {};
+      }
+    }
+    return kontaktOsoba;
+  };
+
   const getServicedIdsForCurrentMonth = () => {
     try {
       const now = new Date();
@@ -244,6 +256,19 @@ export default function MapScreen({ navigation }) {
     setSelectedElevator(groupAtLocation[0] || elevator);
   };
 
+  const getCodesForLocation = (coord) => {
+    const groupAtLocation = elevators.filter((e) => sameCoord(e.koordinate, coord));
+    const collected = groupAtLocation.flatMap((item) => {
+      const kontakt = parseContact(item.kontaktOsoba);
+      const list = Array.isArray(kontakt?.ulazneSifre)
+        ? kontakt.ulazneSifre.filter(Boolean)
+        : [];
+      if (list.length) return list;
+      return kontakt?.ulaznaKoda ? [kontakt.ulaznaKoda] : [];
+    });
+    return Array.from(new Set(collected));
+  };
+
   const centerOnUser = () => {
     if (userLocation && mapRef.current) {
       mapRef.current.animateToRegion({
@@ -444,10 +469,22 @@ export default function MapScreen({ navigation }) {
           <View style={styles.quickInfoSection}>
             <Ionicons name="key" size={28} color="#10b981" />
             <View style={styles.quickCodeBox}>
-              <Text style={styles.quickCodeLabel}>Ulazna šifra</Text>
-              <Text style={styles.quickCodeValue}>
-                {selectedElevator.kontaktOsoba?.ulaznaKoda || '—'}
-              </Text>
+              <Text style={styles.quickCodeLabel}>Ulazne šifre (svi ulazi)</Text>
+              {(() => {
+                const codes = getCodesForLocation(selectedElevator.koordinate);
+                if (!codes.length) {
+                  return <Text style={styles.quickCodeValue}>—</Text>;
+                }
+                return (
+                  <View style={styles.codeList}>
+                    {codes.map((code, idx) => (
+                      <View key={idx} style={styles.codePill}>
+                        <Text style={styles.codePillText}>{code}</Text>
+                      </View>
+                    ))}
+                  </View>
+                );
+              })()}
             </View>
           </View>
 
@@ -684,6 +721,25 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#10b981',
     letterSpacing: 2,
+  },
+  codeList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  codePill: {
+    backgroundColor: '#f0fdf4',
+    borderColor: '#10b981',
+    borderWidth: 1,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+  },
+  codePillText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#065f46',
+    letterSpacing: 1,
   },
   quickHintBig: {
     fontSize: 12,

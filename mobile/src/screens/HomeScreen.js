@@ -18,7 +18,7 @@ import { useAuth } from '../context/AuthContext';
 import { useFocusEffect } from '@react-navigation/native';
 import * as SecureStore from 'expo-secure-store';
 import { elevatorDB, serviceDB, repairDB } from '../database/db';
-import { syncAll } from '../services/syncService';
+import { syncAll, primeFullSync } from '../services/syncService';
 import { messagesAPI } from '../services/api';
 import ms, { rf } from '../utils/scale';
 
@@ -64,7 +64,8 @@ export default function HomeScreen({ navigation }) {
     }
     try {
       const res = await messagesAPI.getUnreadCount();
-      const payload = res.data || {};
+    await primeFullSync();
+    await syncAll();
       // Backend šalje { success, count, data } gdje su count i data jednaki
       const count = payload.count ?? payload.data ?? 0;
       setUnreadCount(Number(count) || 0);

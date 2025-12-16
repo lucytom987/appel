@@ -1,11 +1,30 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { elevatorDB, userDB } from '../database/db';
+import { useFocusEffect } from '@react-navigation/native';
+import { elevatorDB, userDB, serviceDB } from '../database/db';
 
 export default function ServiceDetailsScreen({ route, navigation }) {
-  const { service } = route.params;
-  const elevator = elevatorDB.getById(service.elevatorId);
+  const { service: routeService } = route.params;
+  const [service, setService] = useState(routeService);
+
+  const serviceId = routeService?._id || routeService?.id;
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!serviceId) return;
+      try {
+        const fresh = serviceDB.getById(serviceId);
+        if (fresh) {
+          setService((prev) => ({ ...prev, ...fresh }));
+        }
+      } catch (e) {
+        console.log('ServiceDetails refresh failed', e?.message);
+      }
+    }, [serviceId])
+  );
+
+  const elevator = elevatorDB.getById(service?.elevatorId);
 
   const checklistItems = Array.isArray(service.checklist) ? service.checklist : [];
 

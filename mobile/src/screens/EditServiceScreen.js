@@ -48,7 +48,7 @@ export default function EditServiceScreen({ route, navigation }) {
   useFocusEffect(
     useCallback(() => {
       const onBack = () => {
-        navigation.navigate('ServiceDetails', { service });
+        navigation.goBack();
         return true;
       };
       const backSub = BackHandler.addEventListener('hardwareBackPress', onBack);
@@ -202,13 +202,13 @@ export default function EditServiceScreen({ route, navigation }) {
       }
 
       Alert.alert('Spremljeno', 'Servis je ažuriran', [
-        { text: 'OK', onPress: () => navigation.navigate('ServiceDetails', { service: { ...freshService, ...payload } }) },
+        { text: 'OK', onPress: () => navigation.goBack() },
       ]);
     } catch (e) {
       console.log('Update service fallback lokalno', e?.message);
       serviceDB.update(serviceId, mergedLocal);
       Alert.alert('Spremanje lokalno', 'Promjene su spremljene offline i čekaju sync.', [
-        { text: 'OK', onPress: () => navigation.navigate('ServiceDetails', { service: mergedLocal }) },
+        { text: 'OK', onPress: () => navigation.goBack() },
       ]);
     } finally {
       setSaving(false);
@@ -220,7 +220,7 @@ export default function EditServiceScreen({ route, navigation }) {
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.navigate('ServiceDetails', { service })}>
+        <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color="#1f2937" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Uredi servis</Text>

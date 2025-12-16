@@ -16,7 +16,12 @@ export default function ServiceDetailsScreen({ route, navigation }) {
       try {
         const fresh = serviceDB.getById(serviceId);
         if (fresh) {
-          setService((prev) => ({ ...prev, ...fresh }));
+          setService((prev) => ({
+            ...prev,
+            ...fresh,
+            // Zadrži dodatne servisere iz stanja ako ih lokalni zapis nema
+            dodatniServiseri: fresh.dodatniServiseri ?? prev?.dodatniServiseri,
+          }));
         }
       } catch (e) {
         console.log('ServiceDetails refresh failed', e?.message);
@@ -111,7 +116,7 @@ export default function ServiceDetailsScreen({ route, navigation }) {
           <Ionicons name="arrow-back" size={24} color="#1f2937" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Detalji servisa</Text>
-        <TouchableOpacity onPress={() => navigation.navigate('EditService', { service })}>
+        <TouchableOpacity onPress={() => navigation.navigate('EditService', { service, onSave: (updated) => setService(updated) })}>
           <Ionicons name="create-outline" size={22} color="#2563eb" />
         </TouchableOpacity>
       </View>

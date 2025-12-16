@@ -42,7 +42,7 @@ const checklistLabels = {
 };
 
 export default function EditServiceScreen({ route, navigation }) {
-  const { service } = route.params;
+  const { service, onSave } = route.params;
   const { user, isOnline } = useAuth();
 
   useFocusEffect(
@@ -201,12 +201,16 @@ export default function EditServiceScreen({ route, navigation }) {
         serviceDB.update(serviceId, mergedLocal);
       }
 
+      const updatedLocal = { ...freshService, ...payload };
+      onSave?.(updatedLocal);
       Alert.alert('Spremljeno', 'Servis je ažuriran', [
         { text: 'OK', onPress: () => navigation.goBack() },
       ]);
     } catch (e) {
       console.log('Update service fallback lokalno', e?.message);
       serviceDB.update(serviceId, mergedLocal);
+      const updatedLocal = { ...freshService, ...payload };
+      onSave?.(updatedLocal);
       Alert.alert('Spremanje lokalno', 'Promjene su spremljene offline i čekaju sync.', [
         { text: 'OK', onPress: () => navigation.goBack() },
       ]);

@@ -7,7 +7,12 @@ const ROLE_ALIASES = {
   manager: 'menadzer',
 };
 
-const normalizeRole = (role) => ROLE_ALIASES[role] || role;
+// Normalizira rolu u lowercase i zamjenjuje legacy alias
+const normalizeRole = (role) => {
+  if (!role) return role;
+  const lower = String(role).toLowerCase();
+  return ROLE_ALIASES[lower] || lower;
+};
 
 // Middleware za JWT autentifikaciju
 const auth = async (req, res, next) => {

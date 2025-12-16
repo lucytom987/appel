@@ -17,6 +17,17 @@ router.get('/', authenticate, checkRole(['admin']), async (req, res) => {
   }
 });
 
+// GET /api/users/lite - Ograničeni popis (serviser/menadžer/admin)
+router.get('/lite', authenticate, checkRole(['admin', 'menadzer', 'serviser']), async (req, res) => {
+  try {
+    const users = await User.find({}, 'ime prezime uloga aktivan email telefon').sort({ prezime: 1, ime: 1 }).lean();
+    res.json(users);
+  } catch (error) {
+    console.error('❌ Greška pri dohvaćanju korisnika (lite):', error);
+    res.status(500).json({ message: 'Greška pri dohvaćanju korisnika' });
+  }
+});
+
 // GET /api/users/:id - Detalji korisnika (admin only)
 router.get('/:id', authenticate, checkRole(['admin']), async (req, res) => {
   try {

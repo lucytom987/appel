@@ -45,6 +45,46 @@ export default function ServiceDetailsScreen({ route, navigation }) {
     return String(raw);
   })();
 
+  const dodatniServiseriValue = (() => {
+    const rawList = service?.dodatniServiseri || service?.additionalServicers || service?.helpers;
+    if (!rawList || (Array.isArray(rawList) && rawList.length === 0)) return '-';
+
+    const ids = Array.isArray(rawList) ? rawList : [rawList];
+    const labels = ids
+      .map((raw) => {
+        if (!raw) return null;
+        if (typeof raw === 'object') {
+          const ime = raw.ime || raw.firstName || '';
+          const prezime = raw.prezime || raw.lastName || '';
+          const full = `${ime} ${prezime}`.trim();
+          if (full) return full;
+          const id = raw._id || raw.id;
+          if (id) {
+            const found = userDB.getById(id);
+            if (found) {
+              const f = `${found.ime || found.firstName || ''} ${found.prezime || found.lastName || ''}`.trim();
+              if (f) return f;
+              if (found.email) return found.email;
+            }
+          }
+          return null;
+        }
+        const idStr = String(raw);
+        const found = userDB.getById(idStr);
+        if (found) {
+          const full = `${found.ime || found.firstName || ''} ${found.prezime || found.lastName || ''}`.trim();
+          if (full) return full;
+          if (found.email) return found.email;
+        }
+        return idStr.length > 8 ? `${idStr.slice(0, 8)}…` : idStr;
+      })
+      .filter(Boolean);
+
+    if (!labels.length) return '-';
+    const uniq = Array.from(new Set(labels));
+    return uniq.join(', ');
+  })();
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -85,6 +125,7 @@ export default function ServiceDetailsScreen({ route, navigation }) {
             />
           )}
           <DetailRow label="Serviser" value={serviserValue} />
+          <DetailRow label="Dodatni serviseri" value={dodatniServiseriValue} />
         </View>
 
         {!!service?.napomene && (

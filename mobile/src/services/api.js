@@ -131,6 +131,7 @@ export const servicesAPI = {
 // Users API - Admin Management
 export const usersAPI = {
   getAll: () => api.get('/users'),
+  getLite: () => api.get('/users/lite'),
   getOne: (id) => api.get(`/users/${id}`),
   create: (data) => api.post('/users', data),
   update: (id, data) => api.put(`/users/${id}`, data),

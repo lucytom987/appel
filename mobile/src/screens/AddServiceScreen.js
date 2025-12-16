@@ -16,7 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as SecureStore from 'expo-secure-store';
 import { useAuth } from '../context/AuthContext';
-import { serviceDB, elevatorDB } from '../database/db';
+import { serviceDB, elevatorDB, userDB } from '../database/db';
 import { servicesAPI, usersAPI } from '../services/api';
 
 export default function AddServiceScreen({ navigation, route }) {
@@ -61,15 +61,29 @@ export default function AddServiceScreen({ navigation, route }) {
 
   React.useEffect(() => {
     const fetchUsers = async () => {
-      if (!online) return;
       setLoadingUsers(true);
+      const filterOutCurrent = (arr = []) => (Array.isArray(arr) ? arr : []).filter(
+        (u) => (u._id || u.id) !== (user?._id || user?.id)
+      );
       try {
-        const res = await usersAPI.getAll();
-        const data = res.data?.data || res.data || [];
-        const filtered = (Array.isArray(data) ? data : []).filter((u) => (u._id || u.id) !== (user?._id || user?.id));
-        setKorisnici(filtered);
+        if (online) {
+          const res = await usersAPI.getLite();
+          const data = res.data?.data || res.data || [];
+          const filtered = filterOutCurrent(data);
+          try {
+            userDB.bulkInsert(filtered);
+          } catch (cacheErr) {
+            console.log('Cache users failed', cacheErr?.message);
+          }
+          setKorisnici(filtered);
+        } else {
+          const localUsers = filterOutCurrent(userDB.getAll());
+          setKorisnici(localUsers);
+        }
       } catch (e) {
         console.log('Load users failed', e?.message);
+        const localUsers = filterOutCurrent(userDB.getAll());
+        setKorisnici(localUsers);
       } finally {
         setLoadingUsers(false);
       }

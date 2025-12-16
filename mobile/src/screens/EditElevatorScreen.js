@@ -56,6 +56,7 @@ export default function EditElevatorScreen({ navigation, route }) {
     ulica: elevator.ulica || '',
     mjesto: elevator.mjesto || '',
     brojDizala: elevator.brojDizala || '',
+    tip: elevator.tip || elevator.tipObjekta || 'stambeno',
     
     // Kontakt osoba
     kontaktOsoba: {
@@ -85,6 +86,11 @@ export default function EditElevatorScreen({ navigation, route }) {
   const statusOptions = [
     { value: 'aktivan', label: 'Aktivno', color: '#10b981' },
     { value: 'neaktivan', label: 'Neaktivno', color: '#6b7280' },
+  ];
+
+  const tipOptions = [
+    { value: 'stambeno', label: 'Stambeno' },
+    { value: 'privreda', label: 'Privreda' },
   ];
 
   // Geocoding - pretvorba adrese u GPS koordinate
@@ -198,6 +204,7 @@ export default function EditElevatorScreen({ navigation, route }) {
         ulica: formData.ulica,
         mjesto: formData.mjesto,
         brojDizala: formData.brojDizala,
+        tip: formData.tip || 'stambeno',
         kontaktOsoba: (() => {
           const cleanCodes = (formData.kontaktOsoba.ulazneSifre || [])
             .map((c) => (c || '').trim())
@@ -493,6 +500,20 @@ export default function EditElevatorScreen({ navigation, route }) {
         {/* Osnovno */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Osnovno</Text>
+          <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+            {tipOptions.map((opt) => {
+              const active = formData.tip === opt.value;
+              return (
+                <TouchableOpacity
+                  key={opt.value}
+                  style={[styles.statusButton, active && { backgroundColor: '#2563eb', borderColor: '#2563eb' }]}
+                  onPress={() => setFormData((prev) => ({ ...prev, tip: opt.value }))}
+                >
+                  <Text style={[styles.statusButtonText, active && styles.statusButtonTextActive]}>{opt.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
           
           <Text style={styles.label}>Broj ugovora *</Text>
           <TextInput

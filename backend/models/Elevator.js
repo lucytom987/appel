@@ -7,6 +7,13 @@ const elevatorSchema = new mongoose.Schema({
   ulica: { type: String, required: true },
   mjesto: { type: String, required: true },
   brojDizala: { type: String, required: true },
+
+  // Tip objekta: stambeno ili privreda
+  tip: {
+    type: String,
+    enum: ['stambeno', 'privreda'],
+    default: 'stambeno'
+  },
   
   // Kontakt osoba
   kontaktOsoba: {

@@ -114,8 +114,21 @@ export default function ElevatorsListScreen({ navigation }) {
     >
       <View style={styles.elevatorHeader}>
         <View style={styles.elevatorInfo}>
-          <Text style={styles.buildingCode}>{item.ulica}, {item.mjesto}</Text>
-          <Text style={styles.address}>{item.nazivStranke}</Text>
+          {(() => {
+            const tip = item.tip || item.tipObjekta;
+            const primary = tip === 'privreda'
+              ? (item.nazivStranke || `${item.ulica || ''}, ${item.mjesto || ''}`)
+              : `${item.ulica || ''}, ${item.mjesto || ''}`;
+            const secondary = tip === 'privreda'
+              ? `${item.ulica || ''}${item.mjesto ? `, ${item.mjesto}` : ''}`
+              : (item.nazivStranke || '');
+            return (
+              <>
+                <Text style={styles.buildingCode}>{primary}</Text>
+                {!!secondary && <Text style={styles.address}>{secondary}</Text>}
+              </>
+            );
+          })()}
         </View>
       </View>
 

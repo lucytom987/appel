@@ -39,6 +39,7 @@ export default function AddElevatorScreen({ navigation }) {
     nazivStranke: '',
     ulica: '',
     mjesto: '',
+    tip: 'stambeno',
     
     // Kontakt osoba
     kontaktOsoba: {
@@ -203,6 +204,7 @@ export default function AddElevatorScreen({ navigation }) {
           ulica: formData.ulica,
           mjesto: formData.mjesto,
           brojDizala: elevator.brojDizala,
+          tip: formData.tip || 'stambeno',
           kontaktOsoba: {
             ...formData.kontaktOsoba,
             ulaznaKoda: cleanEntryCodes[0] || formData.kontaktOsoba.ulaznaKoda || '',
@@ -309,6 +311,23 @@ export default function AddElevatorScreen({ navigation }) {
         {/* Osnovno */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Osnovno</Text>
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+              {[
+                { value: 'stambeno', label: 'Stambeno' },
+                { value: 'privreda', label: 'Privreda' },
+              ].map((opt) => {
+                const active = formData.tip === opt.value;
+                return (
+                  <TouchableOpacity
+                    key={opt.value}
+                    style={[styles.chip, active && styles.chipActive]}
+                    onPress={() => setFormData((prev) => ({ ...prev, tip: opt.value }))}
+                  >
+                    <Text style={[styles.chipText, active && styles.chipTextActive]}>{opt.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           
           <Text style={styles.label}>Broj ugovora</Text>
           <TextInput
@@ -742,6 +761,26 @@ const styles = StyleSheet.create({
     color: '#666',
   },
   typeButtonTextActive: {
+    color: '#fff',
+  },
+  chip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#fff',
+  },
+  chipActive: {
+    backgroundColor: '#2563eb',
+    borderColor: '#2563eb',
+  },
+  chipText: {
+    fontSize: 14,
+    color: '#0f172a',
+    fontWeight: '600',
+  },
+  chipTextActive: {
     color: '#fff',
   },
   submitButton: {

@@ -4,7 +4,7 @@ import * as SQLite from 'expo-sqlite';
 const db = SQLite.openDatabaseSync('appel.db');
 
 // Database version
-const DB_VERSION = 11; // Add elevator soft-delete/audit columns
+const DB_VERSION = 12; // Add elevator tip (stambeno/privreda)
 
 // Provjeri verziju baze i migriraj ako je potrebno
 const checkAndMigrate = () => {
@@ -94,6 +94,7 @@ export const initDatabase = () => {
         ulica TEXT,
         mjesto TEXT,
         brojDizala TEXT,
+        tip TEXT,
         kontaktOsoba TEXT,
         koordinate_lat REAL,
         koordinate_lng REAL,
@@ -306,9 +307,9 @@ export const elevatorDB = {
     const syncedFlag = syncStatus === 'synced' ? 1 : 0;
     const result = db.runSync(
       `INSERT INTO elevators (id, brojUgovora, nazivStranke, ulica, mjesto, brojDizala, 
-       kontaktOsoba, koordinate_lat, koordinate_lng, status, 
+       tip, kontaktOsoba, koordinate_lat, koordinate_lng, status, 
        intervalServisa, zadnjiServis, sljedeciServis, napomene, is_deleted, deleted_at, updated_by, updated_at, sync_status, synced) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         elevator.id || elevator._id,
         elevator.brojUgovora,
@@ -316,6 +317,7 @@ export const elevatorDB = {
         elevator.ulica,
         elevator.mjesto,
         elevator.brojDizala,
+        elevator.tip || elevator.tipObjekta || 'stambeno',
         JSON.stringify(elevator.kontaktOsoba || {}),
         elevator.koordinate?.latitude,
         elevator.koordinate?.longitude,
@@ -340,7 +342,7 @@ export const elevatorDB = {
     const syncedFlag = syncStatus === 'synced' ? 1 : 0;
     return db.runSync(
       `UPDATE elevators SET brojUgovora=?, nazivStranke=?, ulica=?, mjesto=?, brojDizala=?, 
-       kontaktOsoba=?, koordinate_lat=?, koordinate_lng=?, 
+       tip=?, kontaktOsoba=?, koordinate_lat=?, koordinate_lng=?, 
        status=?, intervalServisa=?, zadnjiServis=?, sljedeciServis=?, napomene=?, 
        is_deleted=?, deleted_at=?, updated_by=?, updated_at=?, sync_status=?, synced=? WHERE id=?`,
       [
@@ -349,6 +351,7 @@ export const elevatorDB = {
         elevator.ulica,
         elevator.mjesto,
         elevator.brojDizala,
+        elevator.tip || elevator.tipObjekta || 'stambeno',
         JSON.stringify(elevator.kontaktOsoba || {}),
         elevator.koordinate?.latitude,
         elevator.koordinate?.longitude,

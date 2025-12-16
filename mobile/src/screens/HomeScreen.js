@@ -64,9 +64,8 @@ export default function HomeScreen({ navigation }) {
     }
     try {
       const res = await messagesAPI.getUnreadCount();
-    await primeFullSync();
-    await syncAll();
       // Backend šalje { success, count, data } gdje su count i data jednaki
+      const payload = res?.data || {};
       const count = payload.count ?? payload.data ?? 0;
       setUnreadCount(Number(count) || 0);
     } catch (e) {

@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  BackHandler,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -50,11 +51,9 @@ export default function EditServiceScreen({ route, navigation }) {
         navigation.navigate('ServiceDetails', { service });
         return true;
       };
-      const sub = navigation.addListener?.('beforeRemove', () => {});
       const backSub = BackHandler.addEventListener('hardwareBackPress', onBack);
       return () => {
         backSub.remove();
-        if (sub?.remove) sub.remove();
       };
     }, [navigation, service])
   );

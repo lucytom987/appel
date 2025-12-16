@@ -14,6 +14,7 @@ import EditElevatorScreen from '../screens/EditElevatorScreen';
 import ServicesListScreen from '../screens/ServicesListScreen';
 import AddServiceScreen from '../screens/AddServiceScreen';
 import ServiceDetailsScreen from '../screens/ServiceDetailsScreen';
+import EditServiceScreen from '../screens/EditServiceScreen';
 import RepairsListScreen from '../screens/RepairsListScreen';
 import AddRepairScreen from '../screens/AddRepairScreen';
 import RepairDetailsScreen from '../screens/RepairDetailsScreen';
@@ -51,6 +52,7 @@ export default function Navigation() {
             <Stack.Screen name="EditElevator" component={EditElevatorScreen} />
             <Stack.Screen name="Services" component={ServicesListScreen} />
             <Stack.Screen name="ServiceDetails" component={ServiceDetailsScreen} />
+            <Stack.Screen name="EditService" component={EditServiceScreen} />
             <Stack.Screen name="AddService" component={AddServiceScreen} />
             <Stack.Screen name="Repairs" component={RepairsListScreen} />
             <Stack.Screen name="RepairDetails" component={RepairDetailsScreen} />

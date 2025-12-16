@@ -374,7 +374,7 @@ export default function AddServiceScreen({ navigation, route }) {
                   <Text style={styles.userRowText}>Učitavanje...</Text>
                 </View>
               ) : (
-                <ScrollView style={{ maxHeight: 180, marginTop: 8 }}>
+                <ScrollView style={{ maxHeight: 320, marginTop: 8 }}>
                   {korisnici.map((k) => {
                     const id = k._id || k.id;
                     const selected = formData.kolegaId === id;

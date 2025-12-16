@@ -92,7 +92,9 @@ export default function ServiceDetailsScreen({ route, navigation }) {
           <Ionicons name="arrow-back" size={24} color="#1f2937" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Detalji servisa</Text>
-        <View style={{ width: 24 }} />
+        <TouchableOpacity onPress={() => navigation.navigate('EditService', { service })}>
+          <Ionicons name="create-outline" size={22} color="#2563eb" />
+        </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.content}>

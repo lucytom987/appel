@@ -117,6 +117,7 @@ export const initDatabase = () => {
         id TEXT PRIMARY KEY,
         elevatorId TEXT,
         serviserID TEXT,
+        dodatniServiseri TEXT,
         datum TEXT,
         checklist TEXT,
         imaNedostataka INTEGER DEFAULT 0,
@@ -233,6 +234,7 @@ export const initDatabase = () => {
     try { db.execSync('ALTER TABLE repairs ADD COLUMN deleted_at TEXT;'); } catch (e) {}
     try { db.execSync('ALTER TABLE repairs ADD COLUMN updated_by TEXT;'); } catch (e) {}
     try { db.execSync('ALTER TABLE repairs ADD COLUMN sync_status TEXT DEFAULT "synced";'); } catch (e) {}
+    try { db.execSync('ALTER TABLE services ADD COLUMN dodatniServiseri TEXT;'); } catch (e) {}
     try { db.execSync('ALTER TABLE services ADD COLUMN is_deleted INTEGER DEFAULT 0;'); } catch (e) {}
     try { db.execSync('ALTER TABLE services ADD COLUMN deleted_at TEXT;'); } catch (e) {}
     try { db.execSync('ALTER TABLE services ADD COLUMN updated_by TEXT;'); } catch (e) {}
@@ -440,6 +442,7 @@ export const serviceDB = {
     }
     return services.map(s => ({
       ...s,
+      dodatniServiseri: typeof s.dodatniServiseri === 'string' ? JSON.parse(s.dodatniServiseri || '[]') : (s.dodatniServiseri || []),
       checklist: typeof s.checklist === 'string' ? JSON.parse(s.checklist || '[]') : (s.checklist || []),
       nedostaci: typeof s.nedostaci === 'string' ? JSON.parse(s.nedostaci || '[]') : (s.nedostaci || [])
     }));
@@ -449,6 +452,7 @@ export const serviceDB = {
     const service = db.getFirstSync('SELECT * FROM services WHERE id = ?', [id]);
     if (service) {
       service.checklist = typeof service.checklist === 'string' ? JSON.parse(service.checklist || '[]') : (service.checklist || []);
+      service.dodatniServiseri = typeof service.dodatniServiseri === 'string' ? JSON.parse(service.dodatniServiseri || '[]') : (service.dodatniServiseri || []);
       service.nedostaci = typeof service.nedostaci === 'string' ? JSON.parse(service.nedostaci || '[]') : (service.nedostaci || []);
     }
     return service;
@@ -473,14 +477,15 @@ export const serviceDB = {
       elevatorId = elevatorId._id || elevatorId.id || '';
     }
     return db.runSync(
-      `INSERT INTO services (id, elevatorId, serviserID, datum, checklist, 
+      `INSERT INTO services (id, elevatorId, serviserID, dodatniServiseri, datum, checklist, 
        imaNedostataka, nedostaci, napomene, sljedeciServis, kreiranDatum, azuriranDatum, 
        is_deleted, deleted_at, updated_by, updated_at, sync_status, synced) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         elevatorId,
         serviserID,
+        JSON.stringify(service.dodatniServiseri || []),
         service.datum,
         JSON.stringify(service.checklist || []),
         service.imaNedostataka ? 1 : 0,
@@ -511,10 +516,11 @@ export const serviceDB = {
       || (service.synced === undefined ? 'dirty' : (service.synced ? 'synced' : 'dirty'));
     const syncedFlag = syncStatus === 'synced' ? 1 : 0;
     return db.runSync(
-      `UPDATE services SET serviserID=?, datum=?, checklist=?, imaNedostataka=?, 
+      `UPDATE services SET serviserID=?, dodatniServiseri=?, datum=?, checklist=?, imaNedostataka=?, 
        nedostaci=?, napomene=?, sljedeciServis=?, azuriranDatum=?, is_deleted=?, deleted_at=?, updated_by=?, updated_at=?, sync_status=?, synced=? WHERE id=?`,
       [
         serviserID,
+        JSON.stringify(service.dodatniServiseri || []),
         service.datum,
         JSON.stringify(service.checklist || []),
         service.imaNedostataka ? 1 : 0,
@@ -547,6 +553,7 @@ export const serviceDB = {
       const services = db.getAllSync('SELECT * FROM services WHERE sync_status IN ("dirty","pending_delete") OR synced = 0');
       return services.map(s => ({
         ...s,
+        dodatniServiseri: typeof s.dodatniServiseri === 'string' ? JSON.parse(s.dodatniServiseri || '[]') : (s.dodatniServiseri || []),
         checklist: typeof s.checklist === 'string' ? JSON.parse(s.checklist || '[]') : (s.checklist || []),
         nedostaci: typeof s.nedostaci === 'string' ? JSON.parse(s.nedostaci || '[]') : (s.nedostaci || [])
       }));

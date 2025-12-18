@@ -48,6 +48,18 @@ const normalizeElevatorId = (raw) => {
   return raw;
 };
 
+const buildElevatorDisplay = (rawElevator) => {
+  const tip = rawElevator?.tip || rawElevator?.tipObjekta;
+  const address = [rawElevator?.ulica, rawElevator?.mjesto].filter(Boolean).join(', ').trim();
+  const name = rawElevator?.nazivStranke || '';
+  const primary = tip === 'privreda'
+    ? (name || address || 'Nepoznato dizalo')
+    : (address || name || 'Nepoznato dizalo');
+  const secondary = tip === 'privreda' ? address : name;
+  const extra = rawElevator?.brojDizala ? `Dizalo: ${rawElevator.brojDizala}` : '';
+  return { primary, secondary, extra };
+};
+
 const isInactiveElevator = (rawElevatorId) => {
   const elevatorId = normalizeElevatorId(rawElevatorId);
   let elevator = elevatorId ? elevatorDB.getById?.(elevatorId) : null;
@@ -60,30 +72,26 @@ const isInactiveElevator = (rawElevatorId) => {
   return elevator?.status === 'neaktivan';
 };
 
-const buildAddressLabel = (service) => {
-  if (!service) return 'Nepoznata adresa';
-  const raw = service.elevatorId;
+const resolveElevatorForService = (service) => {
+  const raw = service?.elevatorId;
   const elevatorId = typeof raw === 'object' && raw !== null ? raw._id || raw.id : raw;
-  let elevator = elevatorId ? elevatorDB.getById(elevatorId) : null;
+  let elevator = elevatorId ? elevatorDB.getById?.(elevatorId) : null;
 
-  if (!elevator && typeof raw === 'object' && raw) {
+  if (!elevator && raw && typeof raw === 'object') {
     elevator = {
       brojDizala: raw.brojDizala || undefined,
       nazivStranke: raw.nazivStranke || 'Nepoznato dizalo',
       ulica: raw.ulica || '',
       mjesto: raw.mjesto || '',
+      tip: raw.tip || raw.tipObjekta,
     };
   }
 
   if (!elevator) {
-    elevator = { ulica: '', mjesto: '' };
+    elevator = { nazivStranke: 'Nepoznato dizalo', ulica: '', mjesto: '' };
   }
 
-  const address = elevator.ulica || elevator.mjesto
-    ? `${elevator.ulica || ''}${elevator.mjesto ? `, ${elevator.mjesto}` : ''}`
-    : '';
-
-  return address || 'Nepoznata adresa';
+  return elevator;
 };
 
 export default function ServicesListScreen({ navigation }) {
@@ -340,7 +348,8 @@ export default function ServicesListScreen({ navigation }) {
       ? Math.ceil((sljedeciServisDate - new Date()) / (1000 * 60 * 60 * 24))
       : null;
 
-    const addressLabel = buildAddressLabel(item);
+    const elevator = resolveElevatorForService(item);
+    const display = buildElevatorDisplay(elevator);
     const dateLabel = formatDateLabel(serviceDate);
 
     const showNextBadge = daysUntilNext !== null;
@@ -354,12 +363,12 @@ export default function ServicesListScreen({ navigation }) {
     const napomeneText = item.napomene ? String(item.napomene) : '';
 
     const elevatorId = normalizeElevatorId(item.elevatorId);
-    const elevator = elevatorId ? elevatorDB.getById?.(elevatorId) : null;
+    const elevatorFull = elevatorId ? elevatorDB.getById?.(elevatorId) : null;
 
     const handlePress = () => {
       if (filter === 'notServiced') {
-        if (elevator) {
-          navigation.navigate('ElevatorDetails', { elevator });
+        if (elevatorFull) {
+          navigation.navigate('ElevatorDetails', { elevator: elevatorFull });
         }
         return;
       }
@@ -374,7 +383,13 @@ export default function ServicesListScreen({ navigation }) {
         >
           <View style={styles.serviceHeader}>
             <View style={styles.serviceInfo}>
-              <Text style={styles.elevatorName}>{addressLabel}</Text>
+              <Text style={styles.elevatorName} numberOfLines={1}>{display.primary}</Text>
+              {!!display.secondary && (
+                <Text style={styles.elevatorSub} numberOfLines={1}>{display.secondary}</Text>
+              )}
+              {!!display.extra && (
+                <Text style={styles.elevatorSub} numberOfLines={1}>{display.extra}</Text>
+              )}
             </View>
 
             <View style={styles.serviceMeta}>
@@ -762,6 +777,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1f2937',
     marginBottom: 2,
+  },
+  elevatorSub: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#6b7280',
   },
   serviceMeta: {
     flexDirection: 'row',

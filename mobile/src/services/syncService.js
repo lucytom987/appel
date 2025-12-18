@@ -15,6 +15,12 @@ const ALLOWED_CHECKLIST = [
 
 // Normalizira payload prije slanja da spriječi validation/cast greške na backendu
 const normalizeServicePayload = (s) => {
+  const dodatniServiseri = Array.isArray(s.dodatniServiseri)
+    ? s.dodatniServiseri
+        .map((ds) => (typeof ds === 'object' ? ds?._id || ds?.id : ds))
+        .filter(Boolean)
+    : [];
+
   const checklist = Array.isArray(s.checklist)
     ? s.checklist
         .filter((item) => ALLOWED_CHECKLIST.includes(item?.stavka))
@@ -43,6 +49,7 @@ const normalizeServicePayload = (s) => {
   const payload = {
     elevatorId: s.elevatorId,
     datum: s.datum,
+    dodatniServiseri,
     checklist,
     imaNedostataka: Boolean(s.imaNedostataka),
     nedostaci,
@@ -547,6 +554,7 @@ export const syncServicesFromServer = async (forceFull = false) => {
           id: s._id,
           elevatorId: s.elevatorId?._id || s.elevatorId,
           serviserID: s.serviserID?._id || s.serviserID,
+          dodatniServiseri: s.dodatniServiseri || [],
           datum: s.datum,
           checklist: s.checklist || [],
           imaNedostataka: s.imaNedostataka,

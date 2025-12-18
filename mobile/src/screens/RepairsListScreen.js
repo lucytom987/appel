@@ -22,6 +22,18 @@ const safeText = (value, fallback = '') => {
   }
 };
 
+const buildElevatorDisplay = (elevator) => {
+  const tip = elevator?.tip || elevator?.tipObjekta;
+  const address = [safeText(elevator?.ulica), safeText(elevator?.mjesto)].filter(Boolean).join(', ').trim();
+  const name = safeText(elevator?.nazivStranke);
+  const primary = tip === 'privreda'
+    ? (name || address || 'Nepoznato dizalo')
+    : (address || name || 'Nepoznato dizalo');
+  const secondary = tip === 'privreda' ? address : name;
+  const extra = safeText(elevator?.brojDizala) ? `Dizalo: ${safeText(elevator?.brojDizala)}` : '';
+  return { primary, secondary, extra };
+};
+
 export default function RepairsListScreen({ navigation }) {
   const [repairs, setRepairs] = useState([]);
   const [filteredRepairs, setFilteredRepairs] = useState([]);
@@ -160,10 +172,7 @@ export default function RepairsListScreen({ navigation }) {
       };
     }
 
-    const elevatorAddress = elevator.ulica || elevator.mjesto
-      ? `${safeText(elevator.ulica)}${elevator.mjesto ? `, ${safeText(elevator.mjesto)}` : ''}`
-      : 'Adresa nije dostupna';
-    const elevatorLabel = `${elevatorAddress}${elevator.brojDizala ? ` • ${safeText(elevator.brojDizala)}` : ''}`;
+    const display = buildElevatorDisplay(elevator);
 
     const opisKvara = safeText(item.opisKvara, 'Bez opisa');
     const isSigned = Boolean(item.radniNalogPotpisan);
@@ -178,7 +187,13 @@ export default function RepairsListScreen({ navigation }) {
         <View style={styles.repairContent}>
           <View style={styles.headerRow}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.elevatorName} numberOfLines={1}>{elevatorLabel}</Text>
+              <Text style={styles.elevatorName} numberOfLines={1}>{display.primary}</Text>
+              {!!display.secondary && (
+                <Text style={styles.elevatorSub} numberOfLines={1}>{display.secondary}</Text>
+              )}
+              {!!display.extra && (
+                <Text style={styles.elevatorSub} numberOfLines={1}>{display.extra}</Text>
+              )}
             </View>
             <View style={styles.iconRow}>
               <Ionicons
@@ -342,6 +357,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#111827',
     marginTop: 2,
+  },
+  elevatorSub: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#6b7280',
   },
   iconRow: {
     flexDirection: 'row',

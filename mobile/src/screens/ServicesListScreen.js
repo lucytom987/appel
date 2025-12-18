@@ -56,8 +56,7 @@ const buildElevatorDisplay = (rawElevator) => {
     ? (name || address || 'Nepoznato dizalo')
     : (address || name || 'Nepoznato dizalo');
   const secondary = tip === 'privreda' ? address : name;
-  const extra = rawElevator?.brojDizala ? `Dizalo: ${rawElevator.brojDizala}` : '';
-  return { primary, secondary, extra };
+  return { primary, secondary };
 };
 
 const isInactiveElevator = (rawElevatorId) => {
@@ -366,13 +365,11 @@ export default function ServicesListScreen({ navigation }) {
     const elevatorFull = elevatorId ? elevatorDB.getById?.(elevatorId) : null;
 
     const handlePress = () => {
-      if (filter === 'notServiced') {
-        if (elevatorFull) {
-          navigation.navigate('ElevatorDetails', { elevator: elevatorFull });
-        }
-        return;
+      // Otvaraj detalje dizala i na karticama servisiranih
+      const fallbackElevator = elevatorFull || (elevatorId ? { ...elevator, id: elevatorId } : elevator);
+      if (fallbackElevator) {
+        navigation.navigate('ElevatorDetails', { elevator: fallbackElevator });
       }
-      navigation.navigate('ServiceDetails', { service: item });
     };
 
     return (
@@ -386,9 +383,6 @@ export default function ServicesListScreen({ navigation }) {
               <Text style={styles.elevatorName} numberOfLines={1}>{display.primary}</Text>
               {!!display.secondary && (
                 <Text style={styles.elevatorSub} numberOfLines={1}>{display.secondary}</Text>
-              )}
-              {!!display.extra && (
-                <Text style={styles.elevatorSub} numberOfLines={1}>{display.extra}</Text>
               )}
             </View>
 

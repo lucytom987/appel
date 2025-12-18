@@ -4,7 +4,7 @@ import * as SQLite from 'expo-sqlite';
 const db = SQLite.openDatabaseSync('appel.db');
 
 // Database version
-const DB_VERSION = 12; // Add elevator tip (stambeno/privreda)
+const DB_VERSION = 13; // Add elevator tip + godišnji pregled datumsko polje
 
 // Provjeri verziju baze i migriraj ako je potrebno
 const checkAndMigrate = () => {
@@ -100,6 +100,7 @@ export const initDatabase = () => {
         koordinate_lng REAL,
         status TEXT DEFAULT 'aktivan',
         intervalServisa INTEGER DEFAULT 1,
+        godisnjiPregled TEXT,
         zadnjiServis TEXT,
         sljedeciServis TEXT,
         napomene TEXT,
@@ -308,8 +309,8 @@ export const elevatorDB = {
     const result = db.runSync(
       `INSERT INTO elevators (id, brojUgovora, nazivStranke, ulica, mjesto, brojDizala, 
        tip, kontaktOsoba, koordinate_lat, koordinate_lng, status, 
-       intervalServisa, zadnjiServis, sljedeciServis, napomene, is_deleted, deleted_at, updated_by, updated_at, sync_status, synced) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       intervalServisa, godisnjiPregled, zadnjiServis, sljedeciServis, napomene, is_deleted, deleted_at, updated_by, updated_at, sync_status, synced) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         elevator.id || elevator._id,
         elevator.brojUgovora,
@@ -323,6 +324,7 @@ export const elevatorDB = {
         elevator.koordinate?.longitude,
         elevator.status || 'aktivan',
         elevator.intervalServisa || 1,
+        elevator.godisnjiPregled,
         elevator.zadnjiServis,
         elevator.sljedeciServis,
         elevator.napomene,
@@ -343,7 +345,7 @@ export const elevatorDB = {
     return db.runSync(
       `UPDATE elevators SET brojUgovora=?, nazivStranke=?, ulica=?, mjesto=?, brojDizala=?, 
        tip=?, kontaktOsoba=?, koordinate_lat=?, koordinate_lng=?, 
-       status=?, intervalServisa=?, zadnjiServis=?, sljedeciServis=?, napomene=?, 
+       status=?, intervalServisa=?, godisnjiPregled=?, zadnjiServis=?, sljedeciServis=?, napomene=?, 
        is_deleted=?, deleted_at=?, updated_by=?, updated_at=?, sync_status=?, synced=? WHERE id=?`,
       [
         elevator.brojUgovora,
@@ -357,6 +359,7 @@ export const elevatorDB = {
         elevator.koordinate?.longitude,
         elevator.status,
         elevator.intervalServisa || 1,
+        elevator.godisnjiPregled,
         elevator.zadnjiServis,
         elevator.sljedeciServis,
         elevator.napomene,

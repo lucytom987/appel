@@ -310,9 +310,11 @@ export const syncElevatorsFromServer = async (forceFull = false) => {
           koordinate: e.koordinate,
           status: e.status,
           intervalServisa: e.intervalServisa,
+          godisnjiPregled: e.godisnjiPregled,
           zadnjiServis: e.zadnjiServis,
           sljedeciServis: e.sljedeciServis,
           napomene: e.napomene,
+          tip: e.tip,
           updated_at: e.updated_at || e.azuriranDatum || e.updatedAt,
           updated_by: e.updated_by,
           is_deleted: e.is_deleted,
@@ -396,6 +398,12 @@ export const syncElevatorsToServer = async () => {
   if (!unsynced.length) return true;
   console.log(`Push elevators: ${unsynced.length}`);
 
+  const normalizeDate = (value) => {
+    if (!value) return undefined;
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? undefined : d.toISOString();
+  };
+
   for (const e of unsynced) {
     try {
       const localId = String(e.id || '');
@@ -424,9 +432,11 @@ export const syncElevatorsToServer = async () => {
         },
         status: e.status,
         intervalServisa: e.intervalServisa,
+        godisnjiPregled: normalizeDate(e.godisnjiPregled),
         zadnjiServis: e.zadnjiServis,
         sljedeciServis: e.sljedeciServis,
         napomene: e.napomene,
+        tip: e.tip,
         is_deleted: e.is_deleted,
         deleted_at: e.deleted_at,
       };

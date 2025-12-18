@@ -19,18 +19,21 @@ import { useAuth } from '../context/AuthContext';
 import LocationPickerModal from '../components/LocationPickerModal';
 import { elevatorDB } from '../database/db';
 import { elevatorsAPI } from '../services/api';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 export default function AddElevatorScreen({ navigation }) {
   const { isOnline } = useAuth();
   const [loading, setLoading] = useState(false);
   const [geocoding, setGeocoding] = useState(false);
   const [mapPickerVisible, setMapPickerVisible] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [activeDateElevatorId, setActiveDateElevatorId] = useState(null);
 
   // Konvertiraj isOnline u boolean
   const online = Boolean(isOnline);
 
   const [elevators, setElevators] = useState([
-    { id: 1, brojDizala: '', intervalServisa: '1' }
+    { id: 1, brojDizala: '', intervalServisa: '1', godisnjiPregled: '' }
   ]);
 
   const [formData, setFormData] = useState({
@@ -62,7 +65,7 @@ export default function AddElevatorScreen({ navigation }) {
 
   const addElevator = () => {
     const newId = elevators.length > 0 ? Math.max(...elevators.map(e => e.id)) + 1 : 1;
-    setElevators([...elevators, { id: newId, brojDizala: '', intervalServisa: '1' }]);
+    setElevators([...elevators, { id: newId, brojDizala: '', intervalServisa: '1', godisnjiPregled: '' }]);
   };
 
   // Geocoding - pretvorba adrese u GPS koordinate
@@ -161,6 +164,25 @@ export default function AddElevatorScreen({ navigation }) {
     ));
   };
 
+  const formatDate = (value) => {
+    if (!value) return '';
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? '' : d.toISOString().split('T')[0];
+  };
+
+  const handleAnnualDateChange = (event, selectedDate) => {
+    if (event?.type === 'dismissed') {
+      setShowDatePicker(false);
+      return;
+    }
+    setShowDatePicker(false);
+    const safeDate = selectedDate || new Date();
+    const iso = safeDate.toISOString().split('T')[0];
+    if (activeDateElevatorId !== null) {
+      updateElevator(activeDateElevatorId, 'godisnjiPregled', iso);
+    }
+  };
+
   const handleSubmit = async () => {
     // Validacija - broj ugovora više nije obavezan
     if (!formData.nazivStranke.trim()) {
@@ -188,6 +210,12 @@ export default function AddElevatorScreen({ navigation }) {
     try {
       let successCount = 0;
 
+      const normalizeDate = (value) => {
+        if (!value) return undefined;
+        const d = new Date(value);
+        return Number.isNaN(d.getTime()) ? undefined : d.toISOString();
+      };
+
       const cleanEntryCodes = (formData.kontaktOsoba.ulazneSifre || [])
         .map((c) => (c || '').trim())
         .filter(Boolean);
@@ -211,6 +239,7 @@ export default function AddElevatorScreen({ navigation }) {
             ulazneSifre: cleanEntryCodes,
           },
           intervalServisa: parseInt(elevator.intervalServisa) || 1,
+          godisnjiPregled: normalizeDate(elevator.godisnjiPregled),
           napomene: formData.napomene,
           koordinate: {
             latitude: parseFloat(formData.koordinate.latitude) || 0,
@@ -411,6 +440,29 @@ export default function AddElevatorScreen({ navigation }) {
                 ))}
               </View>
               <Text style={styles.hint}>Odaberite broj mjeseci (zadano: 1 mjesec)</Text>
+
+              <Text style={styles.label}>Godišnji pregled</Text>
+              <View style={styles.dateRow}>
+                <TextInput
+                  style={[styles.input, styles.dateInput]}
+                  value={formatDate(elevator.godisnjiPregled)}
+                  onChangeText={(text) => updateElevator(elevator.id, 'godisnjiPregled', text)}
+                  placeholder="YYYY-MM-DD"
+                  autoCapitalize="none"
+                  keyboardType="numbers-and-punctuation"
+                />
+                <TouchableOpacity
+                  style={styles.datePickerButton}
+                  onPress={() => {
+                    setActiveDateElevatorId(elevator.id);
+                    setShowDatePicker(true);
+                  }}
+                >
+                  <Ionicons name="calendar-outline" size={18} color="#1f2937" />
+                  <Text style={styles.datePickerButtonText}>Odaberi</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.hint}>Datum godišnjeg pregleda inspektorata.</Text>
             </View>
           ))}
         </View>
@@ -587,6 +639,19 @@ export default function AddElevatorScreen({ navigation }) {
       </ScrollView>
       </KeyboardAvoidingView>
 
+      {showDatePicker && (
+        <DateTimePicker
+          value={(() => {
+            const active = elevators.find((e) => e.id === activeDateElevatorId);
+            const d = active?.godisnjiPregled ? new Date(active.godisnjiPregled) : new Date();
+            return Number.isNaN(d.getTime()) ? new Date() : d;
+          })()}
+          mode="date"
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          onChange={handleAnnualDateChange}
+        />
+      )}
+
       {/* Location Picker Modal */}
       <LocationPickerModal
         visible={mapPickerVisible}
@@ -737,6 +802,28 @@ const styles = StyleSheet.create({
   },
   monthButtonTextActive: {
     color: '#fff',
+  },
+  dateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 6,
+  },
+  dateInput: {
+    flex: 1,
+  },
+  datePickerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#e5e7eb',
+    borderRadius: 10,
+  },
+  datePickerButtonText: {
+    fontWeight: '600',
+    color: '#1f2937',
   },
   typeButtons: {
     flexDirection: 'row',

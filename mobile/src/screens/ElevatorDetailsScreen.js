@@ -339,6 +339,18 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
 
       <View style={styles.infoSection}>
         <Text style={styles.sectionTitle}>Servisiranje</Text>
+
+        {(() => {
+          const annual = parseDateSafe(elevator.godisnjiPregled);
+          if (!annual) return null;
+          return (
+            <InfoRow
+              icon="calendar-outline"
+              label="Godišnji pregled"
+              value={annual.toLocaleDateString('hr-HR')}
+            />
+          );
+        })()}
         
         {elevator.zadnjiServis && (
           <InfoRow

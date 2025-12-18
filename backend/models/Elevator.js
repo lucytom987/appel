@@ -38,6 +38,7 @@ const elevatorSchema = new mongoose.Schema({
   
   // Servisiranje
   intervalServisa: { type: Number, default: 1 }, // mjeseci
+  godisnjiPregled: { type: Date },
   zadnjiServis: Date,
   sljedeciServis: Date,
   

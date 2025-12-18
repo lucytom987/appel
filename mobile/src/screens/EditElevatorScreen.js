@@ -20,6 +20,7 @@ import { useAuth } from '../context/AuthContext';
 import LocationPickerModal from '../components/LocationPickerModal';
 import { elevatorDB, serviceDB, repairDB } from '../database/db';
 import { elevatorsAPI, servicesAPI, repairsAPI } from '../services/api';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 export default function EditElevatorScreen({ navigation, route }) {
   const { elevator } = route.params;
@@ -28,6 +29,7 @@ export default function EditElevatorScreen({ navigation, route }) {
   const [deleting, setDeleting] = useState(false);
   const [geocoding, setGeocoding] = useState(false);
   const [mapPickerVisible, setMapPickerVisible] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
   // Normaliziraj kontaktOsoba ako dolazi kao JSON string iz SQLite
   const parsedKontakt = (() => {
@@ -78,6 +80,7 @@ export default function EditElevatorScreen({ navigation, route }) {
     
     // Servisiranje
     intervalServisa: elevator.intervalServisa?.toString() || '1',
+    godisnjiPregled: elevator.godisnjiPregled || '',
     
     // Napomene
     napomene: elevator.napomene || '',
@@ -176,6 +179,28 @@ export default function EditElevatorScreen({ navigation, route }) {
     });
   };
 
+  const formatDate = (value) => {
+    if (!value) return '';
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? '' : d.toISOString().split('T')[0];
+  };
+
+  const normalizeDate = (value) => {
+    if (!value) return undefined;
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? undefined : d.toISOString();
+  };
+
+  const handleAnnualDateChange = (event, selectedDate) => {
+    if (event?.type === 'dismissed') {
+      setShowDatePicker(false);
+      return;
+    }
+    setShowDatePicker(false);
+    const iso = (selectedDate || new Date()).toISOString().split('T')[0];
+    setFormData(prev => ({ ...prev, godisnjiPregled: iso }));
+  };
+
   const handleUpdate = async () => {
     // Validacija - broj ugovora više nije obavezan
     if (!formData.nazivStranke.trim()) {
@@ -221,6 +246,7 @@ export default function EditElevatorScreen({ navigation, route }) {
         },
         status: formData.status,
         intervalServisa: parseInt(formData.intervalServisa) || 1,
+        godisnjiPregled: normalizeDate(formData.godisnjiPregled),
         napomene: formData.napomene,
       };
 
@@ -716,6 +742,26 @@ export default function EditElevatorScreen({ navigation, route }) {
             ))}
           </View>
           <Text style={styles.hint}>Odaberite broj mjeseci (zadano: 1 mjesec)</Text>
+
+          <Text style={styles.label}>Godišnji pregled</Text>
+          <View style={styles.dateRow}>
+            <TextInput
+              style={[styles.input, styles.dateInput]}
+              value={formatDate(formData.godisnjiPregled)}
+              onChangeText={(text) => setFormData(prev => ({ ...prev, godisnjiPregled: text }))}
+              placeholder="YYYY-MM-DD"
+              autoCapitalize="none"
+              keyboardType="numbers-and-punctuation"
+            />
+            <TouchableOpacity
+              style={styles.datePickerButton}
+              onPress={() => setShowDatePicker(true)}
+            >
+              <Ionicons name="calendar-outline" size={18} color="#1f2937" />
+              <Text style={styles.datePickerButtonText}>Odaberi</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.hint}>Datum godišnjeg pregleda inspektorata.</Text>
         </View>
 
         {/* Napomene */}
@@ -752,6 +798,18 @@ export default function EditElevatorScreen({ navigation, route }) {
         <View style={{ height: 40 }} />
       </ScrollView>
       </KeyboardAvoidingView>
+
+      {showDatePicker && (
+        <DateTimePicker
+          value={(() => {
+            const d = formData.godisnjiPregled ? new Date(formData.godisnjiPregled) : new Date();
+            return Number.isNaN(d.getTime()) ? new Date() : d;
+          })()}
+          mode="date"
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          onChange={handleAnnualDateChange}
+        />
+      )}
 
       {/* Location Picker Modal */}
       <LocationPickerModal
@@ -903,6 +961,28 @@ const styles = StyleSheet.create({
   },
   monthButtonTextActive: {
     color: '#fff',
+  },
+  dateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 6,
+  },
+  dateInput: {
+    flex: 1,
+  },
+  datePickerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#e5e7eb',
+    borderRadius: 10,
+  },
+  datePickerButtonText: {
+    fontWeight: '600',
+    color: '#1f2937',
   },
   typeButtons: {
     flexDirection: 'row',

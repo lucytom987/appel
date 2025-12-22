@@ -23,6 +23,7 @@ export default function AddRepairScreen({ navigation, route }) {
   const { user, isOnline } = useAuth();
   const [isOfflineDemo, setIsOfflineDemo] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [isTrebaloBi, setIsTrebaloBi] = useState(false);
 
   // Konvertiraj isOnline u boolean
   const online = Boolean(isOnline);
@@ -61,6 +62,17 @@ export default function AddRepairScreen({ navigation, route }) {
       pozivateljTelefon: prev.pozivateljTelefon || '',
     }));
   }, [defaultReporter.name, defaultReporter.phone]);
+
+  // Kada se odabere "Trebalo bi", auto-popuni tko prijavljuje
+  React.useEffect(() => {
+    if (!isTrebaloBi) return;
+    if (!defaultReporter.name) return;
+    setFormData((prev) => ({
+      ...prev,
+      pozivatelj: prev.pozivatelj || defaultReporter.name,
+      primioPoziv: prev.primioPoziv || defaultReporter.name,
+    }));
+  }, [isTrebaloBi, defaultReporter.name]);
 
   if (!selectedElevator && elevators.length === 0) {
     return (
@@ -111,6 +123,7 @@ export default function AddRepairScreen({ navigation, route }) {
         prijavio: reporterName,
         kontaktTelefon: reporterPhone,
         primioPoziv: receiverName,
+        trebaloBi: isTrebaloBi,
       };
 
       // Provjeri je li offline korisnik (demo korisnik)
@@ -179,7 +192,7 @@ export default function AddRepairScreen({ navigation, route }) {
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color="#1f2937" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Novi hitni popravak</Text>
+          <Text style={styles.headerTitle}>{isTrebaloBi ? 'Nova stavka "Trebalo bi"' : 'Novi hitni popravak'}</Text>
         <View style={{ width: 24 }} />
       </View>
 
@@ -189,6 +202,28 @@ export default function AddRepairScreen({ navigation, route }) {
         keyboardVerticalOffset={100}
       >
         <ScrollView style={styles.content}>
+        {/* Vrsta prijave: popravak ili "trebalo bi" */}
+        <View style={styles.toggleRow}>
+          <TouchableOpacity
+            style={[styles.typeToggle, !isTrebaloBi && styles.typeToggleActive]}
+            onPress={() => setIsTrebaloBi(false)}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.typeToggleText, !isTrebaloBi && styles.typeToggleTextActive]}>
+              Popravak
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.typeToggle, isTrebaloBi && styles.typeToggleActiveAlt]}
+            onPress={() => setIsTrebaloBi(true)}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.typeToggleText, isTrebaloBi && styles.typeToggleTextActiveAlt]}>
+              Trebalo bi
+            </Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Offline warning */}
         {!online && !isOfflineDemo && (
           <View style={styles.offlineWarning}>
@@ -201,16 +236,21 @@ export default function AddRepairScreen({ navigation, route }) {
 
         {/* Opis kvara */}
         <View style={styles.section}>
-          <Text style={styles.label}>Opis kvara *</Text>
+          <Text style={styles.label}>{isTrebaloBi ? 'Opis problema *' : 'Opis kvara *'}</Text>
           <TextInput
             style={[styles.input, styles.textArea]}
             value={formData.opis}
             onChangeText={(text) => setFormData(prev => ({ ...prev, opis: text }))}
-            placeholder="Detaljno opišite kvar..."
+            placeholder={isTrebaloBi ? 'Što treba napraviti / nabaviti...' : 'Detaljno opišite kvar...'}
             multiline
             numberOfLines={4}
             textAlignVertical="top"
           />
+          {isTrebaloBi && !!defaultReporter.name && (
+            <Text style={styles.helperText}>
+              Prijavljuje: {defaultReporter.name}
+            </Text>
+          )}
         </View>
 
         {/* Pozivatelj */}
@@ -244,7 +284,7 @@ export default function AddRepairScreen({ navigation, route }) {
           ) : (
             <>
               <Ionicons name="checkmark-circle" size={24} color="#fff" />
-              <Text style={styles.submitButtonText}>Logiraj popravak</Text>
+              <Text style={styles.submitButtonText}>{isTrebaloBi ? 'Spremi "trebalo bi"' : 'Logiraj popravak'}</Text>
             </>
           )}
         </TouchableOpacity>
@@ -304,6 +344,45 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1f2937',
     marginBottom: 10,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    gap: 10,
+    padding: 20,
+    paddingBottom: 10,
+  },
+  typeToggle: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    backgroundColor: '#fff',
+    alignItems: 'center',
+  },
+  typeToggleActive: {
+    backgroundColor: '#dcfce7',
+    borderColor: '#10b981',
+  },
+  typeToggleActiveAlt: {
+    backgroundColor: '#ffedd5',
+    borderColor: '#f59e0b',
+  },
+  typeToggleText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#4b5563',
+  },
+  typeToggleTextActive: {
+    color: '#065f46',
+  },
+  typeToggleTextActiveAlt: {
+    color: '#b45309',
+  },
+  helperText: {
+    marginTop: 8,
+    fontSize: 12,
+    color: '#6b7280',
   },
   input: {
     backgroundColor: '#f9fafb',

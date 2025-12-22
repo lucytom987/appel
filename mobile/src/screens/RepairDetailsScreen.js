@@ -7,19 +7,15 @@ import { useAuth } from '../context/AuthContext';
 import { useFocusEffect } from '@react-navigation/native';
 import ms from '../utils/scale';
 
-const statusLabel = (status) => {
-  switch (status) {
-    case 'pending': return 'Prijavljen';
-    case 'in_progress': return 'U tijeku';
-    case 'completed': return 'Završeno';
-    default: return status;
-  }
+const statusLabel = (repair) => {
+  if (repair.trebaloBi) return 'Trebalo bi';
+  if (repair.status === 'completed') return 'Završeno';
+  return 'Prijavljen';
 };
 
 const statusColor = (repair) => {
-  const status = repair.status;
-  if (status === 'completed') return '#10b981';
-  if (status === 'in_progress') return '#f59e0b';
+  if (repair.trebaloBi) return '#f59e0b';
+  if (repair.status === 'completed') return '#10b981';
   return '#ef4444';
 };
 
@@ -61,14 +57,34 @@ export default function RepairDetailsScreen({ route, navigation }) {
 
   const [opisKvara, setOpisKvara] = useState(repairData.opisKvara || '');
   const [opisPopravka, setOpisPopravka] = useState(repairData.opisPopravka || '');
-  const [status, setStatus] = useState(repairData.status || 'pending');
+  const [isTrebaloBi, setIsTrebaloBi] = useState(
+    Boolean(
+      repairData.trebaloBi ||
+      repairData.trebalo_bi ||
+      repairData.category === 'trebaloBi' || repairData.category === 'trebalo_bi' || repairData.category === 'trebalo-bi' || repairData.category === 'trebalo' ||
+      repairData.type === 'trebaloBi' || repairData.type === 'trebalo_bi' || repairData.type === 'trebalo-bi' || repairData.type === 'trebalo' ||
+      repairData.status === 'in_progress' ||
+      repairData.status === 'u tijeku' ||
+      repairData.status === 'u_tijeku'
+    )
+  );
+  const [status, setStatus] = useState(repairData.status === 'completed' ? 'completed' : 'pending');
   const [radniNalogPotpisan, setRadniNalogPotpisan] = useState(Boolean(repairData.radniNalogPotpisan));
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    setStatus(repairData.status || 'pending');
+    setIsTrebaloBi(Boolean(
+      repairData.trebaloBi ||
+      repairData.trebalo_bi ||
+      repairData.category === 'trebaloBi' || repairData.category === 'trebalo_bi' || repairData.category === 'trebalo-bi' || repairData.category === 'trebalo' ||
+      repairData.type === 'trebaloBi' || repairData.type === 'trebalo_bi' || repairData.type === 'trebalo-bi' || repairData.type === 'trebalo' ||
+      repairData.status === 'in_progress' ||
+      repairData.status === 'u tijeku' ||
+      repairData.status === 'u_tijeku'
+    ));
+    setStatus(repairData.status === 'completed' ? 'completed' : 'pending');
     setRadniNalogPotpisan(Boolean(repairData.radniNalogPotpisan));
-  }, [repairData.status, repairData.radniNalogPotpisan]);
+  }, [repairData.trebaloBi, repairData.status, repairData.radniNalogPotpisan, repairData.category, repairData.type]);
 
   const handleSave = async () => {
     const id = repairData._id || repairData.id;
@@ -76,6 +92,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
       opisKvara,
       opisPopravka,
       status,
+      trebaloBi: isTrebaloBi,
       radniNalogPotpisan,
       updated_at: Date.now(),
     };
@@ -114,7 +131,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
 
       <ScrollView style={styles.content}>
         <View style={styles.elevatorHero}>
-          <View style={[styles.elevatorBadgeLarge, { borderColor: statusColor({ status }) }]}>
+          <View style={[styles.elevatorBadgeLarge, { borderColor: statusColor({ status, trebaloBi: isTrebaloBi }) }]}>
             <Text style={styles.elevatorBadgeLargeText}>{elevator?.brojDizala || 'Dizalo'}</Text>
           </View>
         </View>
@@ -146,7 +163,6 @@ export default function RepairDetailsScreen({ route, navigation }) {
           <View style={styles.statusChoiceRow}>
             {[
               { label: 'Prijavljen', value: 'pending', color: '#ef4444' },
-              { label: 'U tijeku', value: 'in_progress', color: '#f59e0b' },
               { label: 'Završeno', value: 'completed', color: '#10b981' },
             ].map((opt) => {
               const active = status === opt.value;

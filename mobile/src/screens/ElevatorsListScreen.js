@@ -134,32 +134,40 @@ export default function ElevatorsListScreen({ navigation }) {
 
       <View style={styles.elevatorDetails}>
         <View style={styles.detailRow}>
-          <Ionicons name="barcode-outline" size={16} color="#6b7280" />
-          <Text style={styles.detailText}>Dizalo: {item.brojDizala}</Text>
-        </View>
-        <View style={styles.syncRow}>
-          <View style={[
-            styles.syncBadge,
-            item.sync_status === 'synced' || item.synced ? styles.syncBadgeOk
-              : item.sync_status === 'pending_delete' ? styles.syncBadgeDelete
-              : styles.syncBadgeDirty
-          ]}>
-            <Ionicons
-              name={
-                item.sync_status === 'pending_delete' ? 'trash-outline'
-                  : (item.sync_status === 'synced' || item.synced) ? 'cloud-done-outline'
-                  : 'cloud-offline-outline'
-              }
-              size={14}
-              color="#fff"
-            />
-            <Text style={styles.syncBadgeText}>
-              {item.sync_status === 'pending_delete'
-                ? 'čeka brisanje'
-                : (item.sync_status === 'synced' || item.synced) ? 'sinkronizirano'
-                : 'čeka sync'}
-            </Text>
+          <View style={styles.detailLeft}>
+            <Ionicons name="barcode-outline" size={16} color="#6b7280" />
+            <Text style={styles.detailText}>Dizalo: {item.brojDizala}</Text>
           </View>
+          {(() => {
+            const isSynced = item.sync_status === 'synced' || item.synced;
+            const isPendingDelete = item.sync_status === 'pending_delete';
+            const syncLabel = isPendingDelete ? 'čeka brisanje' : (isSynced ? '' : 'čeka sync');
+
+            return (
+              <View style={[
+                styles.syncBadge,
+                isSynced && styles.syncBadgeCompact,
+                isSynced ? styles.syncBadgeOk
+                  : isPendingDelete ? styles.syncBadgeDelete
+                  : styles.syncBadgeDirty,
+              ]}>
+                <Ionicons
+                  name={
+                    isPendingDelete ? 'trash-outline'
+                      : isSynced ? 'cloud-done-outline'
+                      : 'cloud-offline-outline'
+                  }
+                  size={14}
+                  color="#fff"
+                />
+                {syncLabel ? (
+                  <Text style={styles.syncBadgeText}>
+                    {syncLabel}
+                  </Text>
+                ) : null}
+              </View>
+            );
+          })()}
         </View>
       </View>
 
@@ -173,22 +181,22 @@ export default function ElevatorsListScreen({ navigation }) {
   return (
     <View style={styles.container}>
       {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.navigate('Home')} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color="#111827" />
-          </TouchableOpacity>
-          <Text style={styles.title}>Dizala</Text>
-          <TouchableOpacity
-            style={[styles.filterChip, isActiveFilter ? styles.filterChipActive : styles.filterChipInactive]}
-            onPress={() => setFilter(isActiveFilter ? 'neaktivan' : 'aktivan')}
-            activeOpacity={0.8}
-          >
-            <View style={[styles.chipDot, { backgroundColor: isActiveFilter ? '#10b981' : '#6b7280' }]} />
-            <Text style={styles.chipText}>
-              {isActiveFilter ? `Aktivna · ${activeCount}` : `Neaktivna · ${inactiveCount}`}
-            </Text>
-          </TouchableOpacity>
-        </View>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.navigate('Home')} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color="#111827" />
+        </TouchableOpacity>
+        <Text style={styles.title}>Dizala</Text>
+        <TouchableOpacity
+          style={[styles.filterChip, isActiveFilter ? styles.filterChipActive : styles.filterChipInactive]}
+          onPress={() => setFilter(isActiveFilter ? 'neaktivan' : 'aktivan')}
+          activeOpacity={0.8}
+        >
+          <View style={[styles.chipDot, { backgroundColor: isActiveFilter ? '#10b981' : '#6b7280' }]} />
+          <Text style={styles.chipText}>
+            {isActiveFilter ? `Aktivna · ${activeCount}` : `Neaktivna · ${inactiveCount}`}
+          </Text>
+        </TouchableOpacity>
+      </View>
 
       {/* Search */}
       <View style={styles.searchContainer}>
@@ -330,7 +338,7 @@ const styles = StyleSheet.create({
   elevatorHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     marginBottom: 12,
   },
   elevatorInfo: {
@@ -364,6 +372,12 @@ const styles = StyleSheet.create({
   detailRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  detailLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
   },
   detailText: {
@@ -371,7 +385,6 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     fontWeight: '600',
   },
-  syncRow: { flexDirection: 'row', marginTop: 6 },
   syncBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -379,6 +392,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
+  },
+  syncBadgeCompact: {
+    paddingHorizontal: 8,
+    gap: 0,
   },
   syncBadgeOk: { backgroundColor: '#10b981' },
   syncBadgeDirty: { backgroundColor: '#f59e0b' },

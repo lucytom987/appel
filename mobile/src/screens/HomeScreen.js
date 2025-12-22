@@ -48,7 +48,7 @@ export default function HomeScreen({ navigation }) {
     servicedElevatorsThisMonth: 0,
     servicesThisMonth: 0,
     repairsPending: 0,
-    repairsInProgress: 0,
+    repairsTrebaloBi: 0,
     repairsCompleted: 0,
     repairsUrgent: 0,
   });
@@ -119,7 +119,6 @@ export default function HomeScreen({ navigation }) {
         if (!s) return 'pending';
         const lower = String(s).toLowerCase();
         if (lower === 'cek' || lower === 'čekanje' || lower === 'pending') return 'pending';
-        if (lower === 'u tijeku' || lower === 'u_tijeku' || lower === 'in_progress') return 'in_progress';
         if (lower === 'završen' || lower === 'zavrsen' || lower === 'completed') return 'completed';
         return s;
       };
@@ -211,13 +210,21 @@ export default function HomeScreen({ navigation }) {
       // Popravci po statusu
       const statusCounts = uniqueRepairs.reduce(
         (acc, r) => {
+          const rawLower = String(r.status || '').toLowerCase();
+          const rawType = String(r.type || r.category || '').toLowerCase();
           const status = normalizeStatus(r.status);
-          if (status === 'pending') acc.pending += 1;
-          else if (status === 'in_progress') acc.inProgress += 1;
+          const isTrebaloBi = Boolean(
+            r.trebaloBi || r.trebalo_bi || r.trebaloBI || r.trebalobi ||
+            rawType === 'trebalobi' || rawType === 'trebalo_bi' || rawType === 'trebalo-bi' || rawType === 'trebalo' ||
+            rawLower === 'in_progress' || rawLower === 'u tijeku' || rawLower === 'u_tijeku'
+          );
+
+          if (isTrebaloBi) acc.trebaloBi += 1;
+          else if (status === 'pending') acc.pending += 1;
           else if (status === 'completed') acc.completed += 1;
           return acc;
         },
-        { pending: 0, inProgress: 0, completed: 0 }
+        { pending: 0, trebaloBi: 0, completed: 0 }
       );
 
       setStats({
@@ -225,7 +232,7 @@ export default function HomeScreen({ navigation }) {
         servicedElevatorsThisMonth,
         servicesThisMonth: thisMonth.length,
         repairsPending: statusCounts.pending,
-        repairsInProgress: statusCounts.inProgress,
+        repairsTrebaloBi: statusCounts.trebaloBi,
         repairsCompleted: statusCounts.completed,
         repairsUrgent: 0, // U novoj shemi nema priority polja
       });
@@ -236,6 +243,8 @@ export default function HomeScreen({ navigation }) {
         servicedElevatorsThisMonth: 0,
         servicesThisMonth: 0,
         repairsPending: 0,
+        repairsTrebaloBi: 0,
+        repairsCompleted: 0,
         repairsUrgent: 0,
       });
     }
@@ -372,7 +381,7 @@ export default function HomeScreen({ navigation }) {
                 ČEKANJE: <Text style={styles.repairsPending}>{stats.repairsPending}</Text>
               </Text>
               <Text style={styles.repairsSubLabel}>
-                U TIJEKU: <Text style={styles.repairsInProgress}>{stats.repairsInProgress}</Text>
+                TREBALO BI: <Text style={styles.repairsTrebaloBi}>{stats.repairsTrebaloBi}</Text>
               </Text>
               <Text style={styles.repairsSubLabel}>
                 ZAVRŠENO: <Text style={styles.repairsCompleted}>{stats.repairsCompleted}</Text>
@@ -538,7 +547,7 @@ const styles = StyleSheet.create({
   repairsPending: {
     color: '#ef4444',
   },
-  repairsInProgress: {
+  repairsTrebaloBi: {
     color: '#f59e0b',
   },
   repairsCompleted: {

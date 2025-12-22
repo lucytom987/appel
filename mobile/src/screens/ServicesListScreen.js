@@ -97,6 +97,7 @@ export default function ServicesListScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const [services, setServices] = useState([]);
   const [filteredServices, setFilteredServices] = useState([]);
+  const [annualOccurrences, setAnnualOccurrences] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState('serviced');
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
@@ -107,7 +108,8 @@ export default function ServicesListScreen({ navigation }) {
 
   const monthsByYear = useMemo(() => {
     const map = new Map();
-    services.forEach((s) => {
+    const source = filter === 'annual' ? annualOccurrences : services;
+    source.forEach((s) => {
       const d = parseDate(s.datum || s.serviceDate);
       if (!d) return;
       const y = d.getFullYear();
@@ -116,20 +118,21 @@ export default function ServicesListScreen({ navigation }) {
       map.get(y).add(m);
     });
     return map;
-  }, [services]);
+  }, [services, annualOccurrences, filter]);
 
   const availableYears = useMemo(() => {
     const years = new Set();
     const nowYear = new Date().getFullYear();
     years.add(nowYear);
-    services.forEach((s) => {
+    const source = filter === 'annual' ? annualOccurrences : services;
+    source.forEach((s) => {
       const d = parseDate(s.datum || s.serviceDate);
       if (d) years.add(d.getFullYear());
     });
     const arr = Array.from(years);
     arr.sort((a, b) => b - a);
     return arr;
-  }, [services]);
+  }, [services, annualOccurrences, filter]);
 
   const availableMonthsForTempYear = useMemo(() => {
     const set = monthsByYear.get(tempYear);
@@ -162,12 +165,62 @@ export default function ServicesListScreen({ navigation }) {
     }
   }, []);
 
+  const refreshAnnualOccurrences = useCallback(() => {
+    try {
+      const elevators = elevatorDB.getAll?.() || [];
+      const start = new Date();
+      const monthStart = new Date(start.getFullYear(), start.getMonth(), 1);
+      const horizon = new Date(monthStart);
+      horizon.setMonth(horizon.getMonth() + 18); // sljedećih ~18 mjeseci
+
+      const items = [];
+
+      elevators.forEach((e) => {
+        const base = parseDate(e.godisnjiPregled);
+        if (!base) return;
+
+        let due = new Date(base);
+        while (due < monthStart) {
+          due.setFullYear(due.getFullYear() + 1);
+        }
+
+        while (due <= horizon) {
+          const dueIso = due.toISOString();
+          items.push({
+            id: `annual_${e.id}_${dueIso}`,
+            _id: `annual_${e.id}_${dueIso}`,
+            elevatorId: e.id,
+            datum: dueIso,
+            napomene: 'Godišnji pregled',
+            synced: 1,
+          });
+          due = new Date(due);
+          due.setFullYear(due.getFullYear() + 1);
+        }
+      });
+
+      items.sort((a, b) => {
+        const ad = parseDate(a.datum);
+        const bd = parseDate(b.datum);
+        return (ad?.getTime() || 0) - (bd?.getTime() || 0);
+      });
+
+      setAnnualOccurrences(items);
+    } catch (e) {
+      console.error('Greška pri izračunu godišnjih pregleda:', e);
+      setAnnualOccurrences([]);
+    }
+  }, []);
+
   useEffect(() => {
     loadServices();
-  }, [loadServices]);
+    refreshAnnualOccurrences();
+  }, [loadServices, refreshAnnualOccurrences]);
 
   // Ako u trenutno odabranom periodu nema servisa, automatski prebaci na najnoviji dostupni period
+  // Ne preskači korisnički odabir za godišnje preglede (annual)
   useEffect(() => {
+    if (filter === 'annual') return; // ne diraj izbor u GP modu
     if (!services.length) return;
     const hasInSelection = services.some((s) => {
       const d = parseDate(s.datum || s.serviceDate);
@@ -181,9 +234,19 @@ export default function ServicesListScreen({ navigation }) {
         setSelectedYear(d.getFullYear());
       }
     }
-  }, [services, selectedMonth, selectedYear]);
+  }, [services, selectedMonth, selectedYear, filter]);
 
   const applyFilter = useCallback(() => {
+    if (filter === 'annual') {
+      const annualForPeriod = annualOccurrences.filter((item) => {
+        const d = parseDate(item.datum || item.serviceDate);
+        if (!d) return false;
+        return d.getMonth() === selectedMonth && d.getFullYear() === selectedYear;
+      });
+      setFilteredServices(annualForPeriod);
+      return;
+    }
+
     let filtered = Array.isArray(services) ? services : [];
 
     // Izbaci servise vezane uz neaktivna dizala
@@ -241,7 +304,7 @@ export default function ServicesListScreen({ navigation }) {
     });
 
     setFilteredServices(filtered);
-  }, [services, filter, selectedMonth, selectedYear]);
+  }, [services, filter, selectedMonth, selectedYear, annualOccurrences]);
 
   useEffect(() => {
     applyFilter();
@@ -311,6 +374,10 @@ export default function ServicesListScreen({ navigation }) {
       return Array.from(byAddress.values());
     }
 
+    if (filter === 'annual') {
+      return safeFiltered;
+    }
+
     return safeFiltered;
   }, [safeFiltered, filter]);
 
@@ -319,12 +386,13 @@ export default function ServicesListScreen({ navigation }) {
     try {
       await syncAll();
       loadServices();
+      refreshAnnualOccurrences();
     } catch (e) {
       console.error('Greška pri syncu servisa:', e);
     } finally {
       setRefreshing(false);
     }
-  }, [loadServices]);
+  }, [loadServices, refreshAnnualOccurrences]);
 
   const renderServiceItem = ({ item }) => {
     if (!item || typeof item !== 'object') {
@@ -359,7 +427,10 @@ export default function ServicesListScreen({ navigation }) {
           ? 'Prekoračeno'
           : `${daysUntilNext}d`;
 
-    const napomeneText = item.napomene ? String(item.napomene) : '';
+    let napomeneText = item.napomene ? String(item.napomene) : '';
+    if (filter === 'annual' && napomeneText.toLowerCase() === 'godišnji pregled') {
+      napomeneText = '';
+    }
 
     const elevatorId = normalizeElevatorId(item.elevatorId);
     const elevatorFull = elevatorId ? elevatorDB.getById?.(elevatorId) : null;
@@ -439,20 +510,47 @@ export default function ServicesListScreen({ navigation }) {
         style={[
           styles.header,
           {
-            paddingTop: insets.top + 12,
+            paddingTop: insets.top + 8,
             paddingBottom: 12,
-            paddingHorizontal: 16,
+            paddingHorizontal: 14,
           },
         ]}
       >
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color="#1f2937" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Servisi</Text>
+        <View style={styles.headerCenter}>
+          <TouchableOpacity
+            style={[
+              styles.headerToggle,
+              filter === 'serviced' && styles.headerToggleGreen,
+              filter === 'notServiced' && styles.headerToggleRed,
+            ]}
+            onPress={() => setFilter((prev) => (prev === 'serviced' ? 'notServiced' : 'serviced'))}
+          >
+            <Text
+              style={[
+                styles.headerToggleText,
+                filter === 'serviced' && styles.headerToggleTextGreen,
+                filter === 'notServiced' && styles.headerToggleTextRed,
+              ]}
+            >
+              {filter === 'notServiced' ? 'Neservisirani' : 'Servisirani'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.headerAnnualPill, filter === 'annual' && styles.headerAnnualPillActive]}
+            onPress={() => setFilter('annual')}
+          >
+            <Text style={[styles.headerAnnualText, filter === 'annual' && styles.headerAnnualTextActive]}>
+              Godišnji pregled
+            </Text>
+          </TouchableOpacity>
+        </View>
         <View style={{ width: 24 }} />
       </View>
 
-      <View style={styles.summaryBar}>
+      <View style={[styles.summaryBar, styles.summaryBarColumn]}>
         <TouchableOpacity
           style={[styles.summaryPill, styles.summaryPillPressable]}
           onPress={() => {
@@ -463,28 +561,6 @@ export default function ServicesListScreen({ navigation }) {
         >
           <Ionicons name="calendar-outline" size={18} color="#0f172a" />
           <Text style={styles.summaryDateText}>{MONTHS[selectedMonth]} {selectedYear}</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.summaryPill,
-            filter === 'serviced' ? styles.summaryPillGreen : styles.summaryPillOrange,
-          ]}
-          onPress={() => setFilter((prev) => (prev === 'serviced' ? 'notServiced' : 'serviced'))}
-        >
-          <Ionicons
-            name={filter === 'serviced' ? 'checkmark-circle' : 'alert-circle'}
-            size={18}
-            color={filter === 'serviced' ? '#065f46' : '#b45309'}
-          />
-          <Text
-            style={[
-              styles.summaryTextEmphasis,
-              filter === 'serviced' ? styles.summaryTextGreen : styles.summaryTextOrange,
-            ]}
-          >
-            {filter === 'serviced' ? 'Servisirana' : 'Neservisirana'}
-          </Text>
         </TouchableOpacity>
       </View>
 
@@ -595,12 +671,59 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    backgroundColor: '#f9fafb',
+  },
+  headerCenter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerToggle: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
     backgroundColor: '#fff',
   },
-  headerTitle: {
-    fontSize: 17,
+  headerToggleGreen: {
+    borderColor: '#15803d',
+    backgroundColor: '#dcfce7',
+  },
+  headerToggleRed: {
+    borderColor: '#dc2626',
+    backgroundColor: '#fecdd3',
+  },
+  headerToggleText: {
+    fontSize: 14,
     fontWeight: '700',
-    color: '#111827',
+    color: '#1f2937',
+  },
+  headerToggleTextGreen: {
+    color: '#065f46',
+  },
+  headerToggleTextRed: {
+    color: '#7f1d1d',
+  },
+  headerAnnualPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#c7d2fe',
+    backgroundColor: '#fff',
+  },
+  headerAnnualPillActive: {
+    borderColor: '#1d4ed8',
+    backgroundColor: '#dbeafe',
+  },
+  headerAnnualText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1f2937',
+  },
+  headerAnnualTextActive: {
+    color: '#1d4ed8',
   },
   pickerOverlay: {
     flex: 1,
@@ -645,29 +768,36 @@ const styles = StyleSheet.create({
     color: '#111827',
   },
   summaryBar: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 12,
+    justifyContent: 'center',
+    paddingHorizontal: 14,
     paddingVertical: 8,
-    backgroundColor: '#fff',
+    backgroundColor: '#f9fafb',
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
-    gap: 8,
+    gap: 10,
+  },
+  summaryBarColumn: {
+    gap: 10,
   },
   summaryPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 14,
+    justifyContent: 'center',
+    paddingHorizontal: 20,
     paddingVertical: 10,
-    backgroundColor: '#e0f2fe',
-    borderRadius: 999,
+    minHeight: 44,
+    backgroundColor: '#fff',
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#cbd5e1',
   },
   summaryPillPressable: {
-    flex: 1,
+    flex: 0,
+    width: 'auto',
+    alignSelf: 'center',
   },
   summaryPillGreen: {
     backgroundColor: '#dcfce7',
@@ -676,6 +806,10 @@ const styles = StyleSheet.create({
   summaryPillOrange: {
     backgroundColor: '#ffedd5',
     borderColor: '#fed7aa',
+  },
+  summaryPillBlue: {
+    backgroundColor: '#e0e7ff',
+    borderColor: '#c7d2fe',
   },
   summaryText: {
     fontSize: 13,
@@ -688,16 +822,19 @@ const styles = StyleSheet.create({
     color: '#0f172a',
   },
   summaryDateText: {
-    fontSize: 19,
+    fontSize: 18,
     fontWeight: '700',
     color: '#0f172a',
-    letterSpacing: 0.2,
+    textAlign: 'center',
   },
   summaryTextGreen: {
     color: '#065f46',
   },
   summaryTextOrange: {
     color: '#b45309',
+  },
+  summaryTextBlue: {
+    color: '#1d4ed8',
   },
   periodCard: {
     backgroundColor: '#fff',
@@ -739,6 +876,7 @@ const styles = StyleSheet.create({
   listContent: {
     padding: 12,
     flexGrow: 1,
+    paddingTop: 20,
   },
   serviceCard: {
     flexDirection: 'row',

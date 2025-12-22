@@ -72,7 +72,7 @@ export default function AboutScreen({ navigation }) {
             </View>
             <View style={styles.featureItem}>
               <Ionicons name="construct" size={20} color="#2563eb" />
-              <Text style={styles.featureText}>Popravci: statusi (prijavljen/u tijeku/završen), potpis naloga, opis popravka, prijavio i kontakt.</Text>
+              <Text style={styles.featureText}>Popravci: statusi (prijavljen/završen) i posebna lista "trebalo bi", potpis naloga, opis popravka, prijavio i kontakt.</Text>
             </View>
             <View style={styles.featureItem}>
               <Ionicons name="briefcase" size={20} color="#2563eb" />

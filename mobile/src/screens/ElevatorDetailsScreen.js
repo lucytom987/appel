@@ -502,6 +502,16 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
           const dateLabel = parsedDate ? parsedDate.toLocaleDateString('hr-HR') : '-';
           const key = repair._id || repair.id || repair.localId || `rep_${index}`;
           
+          const isTrebaloBi = Boolean(
+            repair.trebaloBi ||
+            repair.trebalo_bi ||
+            repair.category === 'trebaloBi' || repair.category === 'trebalo_bi' || repair.category === 'trebalo-bi' || repair.category === 'trebalo' ||
+            repair.type === 'trebaloBi' || repair.type === 'trebalo_bi' || repair.type === 'trebalo-bi' || repair.type === 'trebalo' ||
+            repair.status === 'in_progress' ||
+            repair.status === 'u tijeku' ||
+            repair.status === 'u_tijeku'
+          );
+
           return (
             <TouchableOpacity
               key={key}
@@ -517,14 +527,14 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
                   {
                     backgroundColor:
                       repair.status === 'završen' || repair.status === 'completed' ? '#10b981' :
-                      repair.status === 'u tijeku' || repair.status === 'in_progress' ? '#f59e0b' : '#ef4444'
+                      isTrebaloBi ? '#f59e0b' : '#ef4444'
                   }
                 ]}>
                   <Text style={styles.historyBadgeText}>{
                     repair.status === 'završen' || repair.status === 'completed'
                       ? 'Završeno'
-                      : repair.status === 'u tijeku' || repair.status === 'in_progress'
-                        ? 'U tijeku'
+                      : isTrebaloBi
+                        ? 'Trebalo bi'
                         : 'Na čekanju'
                   }</Text>
                 </View>

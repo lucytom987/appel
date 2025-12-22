@@ -144,6 +144,7 @@ export const initDatabase = () => {
         datumPopravka TEXT,
         opisKvara TEXT,
         opisPopravka TEXT,
+        trebaloBi INTEGER DEFAULT 0,
         status TEXT DEFAULT 'pending',
         radniNalogPotpisan INTEGER DEFAULT 0,
         popravkaUPotpunosti INTEGER DEFAULT 0,
@@ -230,6 +231,7 @@ export const initDatabase = () => {
 
     // Dodaj nove kolone na repairs/services ako nedostaju (idempotent)
     try { db.execSync('ALTER TABLE repairs ADD COLUMN primioPoziv TEXT;'); } catch (e) {}
+    try { db.execSync('ALTER TABLE repairs ADD COLUMN trebaloBi INTEGER DEFAULT 0;'); } catch (e) {}
     try { db.execSync('ALTER TABLE repairs ADD COLUMN is_deleted INTEGER DEFAULT 0;'); } catch (e) {}
     try { db.execSync('ALTER TABLE repairs ADD COLUMN deleted_at TEXT;'); } catch (e) {}
     try { db.execSync('ALTER TABLE repairs ADD COLUMN updated_by TEXT;'); } catch (e) {}
@@ -308,6 +310,8 @@ export const elevatorDB = {
   insert: (elevator) => {
     const syncStatus = elevator.sync_status || 'synced';
     const syncedFlag = syncStatus === 'synced' ? 1 : 0;
+    
+    
     const result = db.runSync(
       `INSERT INTO elevators (id, brojUgovora, nazivStranke, ulica, mjesto, brojDizala, 
        tip, kontaktOsoba, koordinate_lat, koordinate_lng, status, 
@@ -344,6 +348,7 @@ export const elevatorDB = {
   update: (id, elevator) => {
     const syncStatus = elevator.sync_status || (elevator.synced === 1 ? 'synced' : 'dirty');
     const syncedFlag = syncStatus === 'synced' ? 1 : 0;
+    
     return db.runSync(
       `UPDATE elevators SET brojUgovora=?, nazivStranke=?, ulica=?, mjesto=?, brojDizala=?, 
        tip=?, kontaktOsoba=?, koordinate_lat=?, koordinate_lng=?, 
@@ -463,6 +468,7 @@ export const serviceDB = {
     const syncStatus = service.sync_status
       || (String(id).startsWith('local_') ? 'dirty' : 'synced');
     const syncedFlag = syncStatus === 'synced' ? 1 : 0;
+    
     // Normaliziraj serviserID u čitljivo ime (ako je objekt)
     let serviserID = service.serviserID;
     if (serviserID && typeof serviserID === 'object') {
@@ -515,6 +521,7 @@ export const serviceDB = {
     const syncStatus = service.sync_status
       || (service.synced === undefined ? 'dirty' : (service.synced ? 'synced' : 'dirty'));
     const syncedFlag = syncStatus === 'synced' ? 1 : 0;
+    
     return db.runSync(
       `UPDATE services SET serviserID=?, dodatniServiseri=?, datum=?, checklist=?, imaNedostataka=?, 
        nedostaci=?, napomene=?, sljedeciServis=?, azuriranDatum=?, is_deleted=?, deleted_at=?, updated_by=?, updated_at=?, sync_status=?, synced=? WHERE id=?`,
@@ -579,6 +586,33 @@ export const serviceDB = {
   },
 };
 
+// Pomoćne funkcije za "trebalo bi" flag
+const normalizeTrebaloBiFlag = (repair) => {
+  if (!repair) return 0;
+  const rawStatus = String(repair.status || '').toLowerCase();
+  const wasInProgress = rawStatus === 'in_progress' || rawStatus === 'u tijeku' || rawStatus === 'u_tijeku';
+  const rawType = String(repair.type || repair.category || '').toLowerCase();
+  const rawFlag = repair.trebaloBi ?? repair.trebalo_bi ?? repair.trebaloBI ?? repair.trebalobi;
+
+  if (rawFlag !== undefined && rawFlag !== null) {
+    return rawFlag ? 1 : 0;
+  }
+
+  if (['trebalobi', 'trebalo_bi', 'trebalo-bi', 'trebalo'].includes(rawType)) return 1;
+  if (wasInProgress) return 1;
+  return 0;
+};
+
+const toBoolean = (value) => {
+  if (value === null || value === undefined) return false;
+  if (value === true || value === false) return value;
+  if (typeof value === 'number') return value !== 0;
+  if (typeof value === 'string') {
+    return ['1', 'true', 'yes'].includes(value.toLowerCase());
+  }
+  return Boolean(value);
+};
+
 // CRUD operacije za Repairs
 export const repairDB = {
   getAll: (elevatorId = null) => {
@@ -590,18 +624,23 @@ export const repairDB = {
     }
     return repairs.map(r => ({
       ...r,
+      trebaloBi: toBoolean(r.trebaloBi),
       // Repair model doesn't have nested JSON fields, but keep consistent
     }));
   },
   
   getById: (id) => {
-    return db.getFirstSync('SELECT * FROM repairs WHERE id = ?', [id]);
+    const repair = db.getFirstSync('SELECT * FROM repairs WHERE id = ?', [id]);
+    return repair ? { ...repair, trebaloBi: toBoolean(repair.trebaloBi) } : null;
   },
   
   insert: (repair) => {
     const id = repair.id || repair._id || `local_${Date.now()}`;
     const syncStatus = repair.sync_status || (String(id).startsWith('local_') ? 'dirty' : 'synced');
     const syncedFlag = syncStatus === 'synced' ? 1 : 0;
+    const flag = normalizeTrebaloBiFlag(repair);
+    
+    
     // Normaliziraj reference kako bi spremili čisti ID umjesto objekta
     let elevatorId = repair.elevatorId || repair.elevator;
     if (elevatorId && typeof elevatorId === 'object') {
@@ -615,10 +654,10 @@ export const repairDB = {
 
     return db.runSync(
       `INSERT INTO repairs (id, elevatorId, serviserID, datumPrijave, datumPopravka, 
-       opisKvara, opisPopravka, status, radniNalogPotpisan, popravkaUPotpunosti, 
+       opisKvara, opisPopravka, trebaloBi, status, radniNalogPotpisan, popravkaUPotpunosti, 
        napomene, prijavio, kontaktTelefon, primioPoziv, kreiranDatum, azuriranDatum, 
        is_deleted, deleted_at, updated_by, updated_at, sync_status, synced) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         elevatorId,
@@ -627,6 +666,7 @@ export const repairDB = {
         repair.datumPopravka,
         repair.opisKvara,
         repair.opisPopravka,
+        flag,
         repair.status || 'pending',
         repair.radniNalogPotpisan ? 1 : 0,
         repair.popravkaUPotpunosti ? 1 : 0,
@@ -651,6 +691,8 @@ export const repairDB = {
     const syncStatus = repair.sync_status
       || (repair.synced === undefined ? 'dirty' : (repair.synced ? 'synced' : 'dirty'));
     const syncedFlag = syncStatus === 'synced' ? 1 : 0;
+    const flag = normalizeTrebaloBiFlag(repair);
+    
     let serviserID = repair.serviserID;
     if (serviserID && typeof serviserID === 'object') {
       serviserID = serviserID._id || serviserID.id || '';
@@ -663,7 +705,7 @@ export const repairDB = {
 
     return db.runSync(
       `UPDATE repairs SET elevatorId=?, serviserID=?, datumPrijave=?, datumPopravka=?, opisKvara=?, 
-       opisPopravka=?, status=?, radniNalogPotpisan=?, popravkaUPotpunosti=?, 
+       opisPopravka=?, trebaloBi=?, status=?, radniNalogPotpisan=?, popravkaUPotpunosti=?, 
        napomene=?, prijavio=?, kontaktTelefon=?, primioPoziv=?, azuriranDatum=?, is_deleted=?, deleted_at=?, updated_by=?, updated_at=?, sync_status=?, synced=? WHERE id=?`,
       [
         elevatorId,
@@ -672,6 +714,7 @@ export const repairDB = {
         repair.datumPopravka,
         repair.opisKvara,
         repair.opisPopravka,
+        flag,
         repair.status,
         repair.radniNalogPotpisan ? 1 : 0,
         repair.popravkaUPotpunosti ? 1 : 0,
@@ -962,6 +1005,3 @@ export const cleanupOrphans = () => {
 };
 
 export default db;
-
-
-

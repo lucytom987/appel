@@ -11,8 +11,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function AboutScreen({ navigation }) {
-  const currentVersion = '1.2.1';
-  const currentBuild = '5';
+  const currentVersion = '1.3';
+  const currentBuild = '6';
   const [versionTapCount, setVersionTapCount] = React.useState(0);
 
   const handleVersionPress = () => {
@@ -101,76 +101,7 @@ export default function AboutScreen({ navigation }) {
           </View>
         </View>
 
-        {/* Build History */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Trenutni status</Text>
-          <Text style={styles.description}>
-            Verzija v{currentVersion} (build {currentBuild}) — 12.12.2025.
-            Fokus: dodatni serviseri na servisima (backend + UI), grupiranje servisiranih i neservisiranih po adresi uz stabilne ključeve,
-            otvaranje detalja dizala iz liste neserv. i fix render greške, Android back na Home izlazi iz app.
-          </Text>
-        </View>
-
-        {/* Version history */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Povijest verzija</Text>
-          <View style={styles.versionList}>
-            <View style={styles.versionItem}>
-              <Text style={styles.versionLabel}>v1.2.1 (build 5) • 12.12.2025</Text>
-              <Text style={styles.versionNotes}>
-                Dodatni serviseri (backend/model/rute + UI odabir kolega), grupiranje servisiranih i neservisiranih po adresi s stabilnim ID-jevima,
-                tap na neservisirana otvara detalje dizala, fix render error u listi servisa, Android back na Home izlazak.
-              </Text>
-            </View>
-            <View style={styles.versionItem}>
-              <Text style={styles.versionLabel}>v1.2.0 (build 4) • 11.12.2025</Text>
-              <Text style={styles.versionNotes}>
-                Chat: badge nepročitanih i označavanje pročitanih, brisanje sobe briše i poruke, svi vide broj članova, uklonjen neispravan online indikator korisnika.
-              </Text>
-            </View>
-            <View style={styles.versionItem}>
-              <Text style={styles.versionLabel}>v1.1.0 (build 3) • 9.12.2025</Text>
-              <Text style={styles.versionNotes}>
-                Filtriranje obrisanih/duplikata u statistikama popravaka, blaži zoom pri lociranju na karti,
-                back na popravke/home, nova lista dizala (adresa prva, header čip), pretraga po kontakt osobi.
-              </Text>
-            </View>
-            <View style={styles.versionItem}>
-              <Text style={styles.versionLabel}>v1.0.6 (build 7) • 22.11.2025</Text>
-              <Text style={styles.versionNotes}>
-                SafeArea/KeyboardAvoiding na glavnim ekranima, UX poboljšanja.
-              </Text>
-            </View>
-            <View style={styles.versionItem}>
-              <Text style={styles.versionLabel}>v1.0.5 (build 6) • 22.11.2025</Text>
-              <Text style={styles.versionNotes}>
-                Brza kartica na karti, optimizacija učitavanja karte i centriranja.
-              </Text>
-            </View>
-            <View style={styles.versionItem}>
-              <Text style={styles.versionLabel}>v1.0.4 (build 5) • 22.11.2025</Text>
-              <Text style={styles.versionNotes}>
-                Geocoding i map picker za dizala, GPS UI poboljšanja.
-              </Text>
-            </View>
-            <View style={styles.versionItem}>
-              <Text style={styles.versionLabel}>v1.0.3 (build 4) • 21.11.2025</Text>
-              <Text style={styles.versionNotes}>Google Maps integracija i vizualizacija dizala.</Text>
-            </View>
-            <View style={styles.versionItem}>
-              <Text style={styles.versionLabel}>v1.0.2 (build 3) • 21.11.2025</Text>
-              <Text style={styles.versionNotes}>Checklist overhaul za servise.</Text>
-            </View>
-            <View style={styles.versionItem}>
-              <Text style={styles.versionLabel}>v1.0.1 (build 2) • 20.11.2025</Text>
-              <Text style={styles.versionNotes}>Password toggle fix, opcionalni broj ugovora.</Text>
-            </View>
-            <View style={styles.versionItem}>
-              <Text style={styles.versionLabel}>v1.0.0 (build 1) • 20.11.2025</Text>
-              <Text style={styles.versionNotes}>Inicijalni production build.</Text>
-            </View>
-          </View>
-        </View>
+        {/* Removed current status + version history per request */}
 
         {/* Tech Stack */}
         <View style={styles.section}>

@@ -19,6 +19,9 @@ import RepairsListScreen from '../screens/RepairsListScreen';
 import AddRepairScreen from '../screens/AddRepairScreen';
 import RepairDetailsScreen from '../screens/RepairDetailsScreen';
 import EditRepairScreen from '../screens/EditRepairScreen';
+import AddTrebaloBiScreen from '../screens/AddTrebaloBiScreen';
+import TrebaloBiDetailsScreen from '../screens/TrebaloBiDetailsScreen';
+import EditTrebaloBiScreen from '../screens/EditTrebaloBiScreen';
 import ChatRoomsScreen from '../screens/ChatRoomsScreen';
 import ChatRoomScreen from '../screens/ChatRoomScreen';
 import UserManagementScreen from '../screens/UserManagementScreen';
@@ -58,6 +61,9 @@ export default function Navigation() {
             <Stack.Screen name="RepairDetails" component={RepairDetailsScreen} />
             <Stack.Screen name="EditRepair" component={EditRepairScreen} />
             <Stack.Screen name="AddRepair" component={AddRepairScreen} />
+            <Stack.Screen name="AddTrebaloBi" component={AddTrebaloBiScreen} />
+            <Stack.Screen name="TrebaloBiDetails" component={TrebaloBiDetailsScreen} />
+            <Stack.Screen name="EditTrebaloBi" component={EditTrebaloBiScreen} />
             <Stack.Screen name="ChatRooms" component={ChatRoomsScreen} />
             <Stack.Screen name="ChatRoom" component={ChatRoomScreen} />
             <Stack.Screen name="UserManagement" component={UserManagementScreen} />

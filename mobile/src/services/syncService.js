@@ -62,6 +62,19 @@ const normalizeServicePayload = (s) => {
   return payload;
 };
 
+// Uniformno detektiraj "trebalo bi" oznaku preko raznih polja/aliasa
+const detectTrebaloBi = (repair) => {
+  if (!repair) return false;
+  const rawType = String(repair.type || repair.category || '').toLowerCase();
+  const rawStatus = String(repair.status || '').toLowerCase();
+  const wasInProgress = rawStatus === 'in_progress' || rawStatus === 'u tijeku' || rawStatus === 'u_tijeku';
+  return Boolean(
+    repair.trebaloBi || repair.trebalo_bi || repair.trebaloBI || repair.trebalobi ||
+    ['trebalobi', 'trebalo_bi', 'trebalo-bi', 'trebalo'].includes(rawType) ||
+    wasInProgress
+  );
+};
+
 const explainError = (err) => {
   const status = err?.response?.status;
   const data = err?.response?.data;
@@ -666,47 +679,49 @@ export const syncRepairsFromServer = async () => {
       total = res.data.total || serverRepairs.length;
 
       serverRepairs.forEach((r) => {
-      const elevatorId = r.elevatorId?._id || r.elevatorId?.id || r.elevator || r.elevatorId;
-      const serviserID = r.serviserID?._id || r.serviserID?.id || r.serviserID;
-      const local = repairDB.getById?.(r._id);
-      const serverUpdated = toMs(r.updated_at || r.azuriranDatum || r.updatedAt || r.kreiranDatum);
-      const localUpdated = local ? toMs(local.updated_at || local.azuriranDatum) : 0;
-      const localDirty = local && (local.sync_status === 'dirty' || local.synced === 0);
+        const elevatorId = r.elevatorId?._id || r.elevatorId?.id || r.elevator || r.elevatorId;
+        const serviserID = r.serviserID?._id || r.serviserID?.id || r.serviserID;
+        const local = repairDB.getById?.(r._id);
+        const serverUpdated = toMs(r.updated_at || r.azuriranDatum || r.updatedAt || r.kreiranDatum);
+        const localUpdated = local ? toMs(local.updated_at || local.azuriranDatum) : 0;
+        const localDirty = local && (local.sync_status === 'dirty' || local.synced === 0);
+        const flag = detectTrebaloBi(r);
 
-      if (localDirty && localUpdated > serverUpdated) {
-        return; // lokalna promjena novija
-      }
+        if (localDirty && localUpdated > serverUpdated) {
+          return; // lokalna promjena novija
+        }
 
-      const payload = {
-        id: r._id,
-        elevatorId,
-        serviserID,
-        datumPrijave: r.datumPrijave,
-        datumPopravka: r.datumPopravka,
-        opisKvara: r.opisKvara,
-        opisPopravka: r.opisPopravka,
-        status: r.status,
-        radniNalogPotpisan: r.radniNalogPotpisan,
-        popravkaUPotpunosti: r.popravkaUPotpunosti,
-        napomene: r.napomene,
-        kreiranDatum: r.kreiranDatum || r.createdAt,
-        azuriranDatum: r.azuriranDatum || r.updatedAt,
-        prijavio: r.prijavio,
-        kontaktTelefon: r.kontaktTelefon,
-        primioPoziv: r.primioPoziv,
-        updated_at: r.updated_at || r.azuriranDatum || r.updatedAt,
-        updated_by: r.updated_by,
-        is_deleted: r.is_deleted,
-        deleted_at: r.deleted_at,
-        sync_status: 'synced',
-        synced: 1,
-      };
+        const payload = {
+          id: r._id,
+          elevatorId,
+          serviserID,
+          datumPrijave: r.datumPrijave,
+          datumPopravka: r.datumPopravka,
+          opisKvara: r.opisKvara,
+          opisPopravka: r.opisPopravka,
+          trebaloBi: flag,
+          status: r.status,
+          radniNalogPotpisan: r.radniNalogPotpisan,
+          popravkaUPotpunosti: r.popravkaUPotpunosti,
+          napomene: r.napomene,
+          kreiranDatum: r.kreiranDatum || r.createdAt,
+          azuriranDatum: r.azuriranDatum || r.updatedAt,
+          prijavio: r.prijavio,
+          kontaktTelefon: r.kontaktTelefon,
+          primioPoziv: r.primioPoziv,
+          updated_at: r.updated_at || r.azuriranDatum || r.updatedAt,
+          updated_by: r.updated_by,
+          is_deleted: r.is_deleted,
+          deleted_at: r.deleted_at,
+          sync_status: 'synced',
+          synced: 1,
+        };
 
-      try {
-        repairDB.insert(payload);
-      } catch {
-        repairDB.update(r._id, payload);
-      }
+        try {
+          repairDB.insert(payload);
+        } catch {
+          repairDB.update(r._id, payload);
+        }
       });
 
       fetched += serverRepairs.length;
@@ -832,6 +847,7 @@ export const syncRepairsToServer = async () => {
     const serviserID = (typeof r.serviserID === 'object') ? (r.serviserID._id || r.serviserID.id) : r.serviserID;
     const localId = String(r.id || '');
     const pendingDelete = isPendingDelete(r);
+    const flag = detectTrebaloBi(r);
     try {
       if (localId.startsWith('local_')) {
         if (pendingDelete) {
@@ -845,6 +861,7 @@ export const syncRepairsToServer = async () => {
           opisPopravka: r.opisPopravka,
           datumPrijave: r.datumPrijave,
           datumPopravka: r.datumPopravka,
+          trebaloBi: flag,
           radniNalogPotpisan: Boolean(r.radniNalogPotpisan),
           popravkaUPotpunosti: Boolean(r.popravkaUPotpunosti),
           napomene: r.napomene,
@@ -885,19 +902,20 @@ export const syncRepairsToServer = async () => {
           }
         } catch (fetchErr) {
           const status = fetchErr?.response?.status || fetchErr?.status;
-          if (status === 404) {
-            console.log('Server nema repair, kreiram ponovo', r.id);
-            const res = await repairsAPI.create({
-              elevatorId,
-              status: r.status,
-              opisKvara: r.opisKvara,
-              opisPopravka: r.opisPopravka,
-              datumPrijave: r.datumPrijave,
-              datumPopravka: r.datumPopravka,
-              radniNalogPotpisan: Boolean(r.radniNalogPotpisan),
-              popravkaUPotpunosti: Boolean(r.popravkaUPotpunosti),
-              napomene: r.napomene,
-              prijavio: r.prijavio,
+            if (status === 404) {
+              console.log('Server nema repair, kreiram ponovo', r.id);
+              const res = await repairsAPI.create({
+                elevatorId,
+                status: r.status,
+                opisKvara: r.opisKvara,
+                opisPopravka: r.opisPopravka,
+                datumPrijave: r.datumPrijave,
+                datumPopravka: r.datumPopravka,
+                trebaloBi: flag,
+                radniNalogPotpisan: Boolean(r.radniNalogPotpisan),
+                popravkaUPotpunosti: Boolean(r.popravkaUPotpunosti),
+                napomene: r.napomene,
+                prijavio: r.prijavio,
               kontaktTelefon: r.kontaktTelefon,
               primioPoziv: r.primioPoziv,
               serviserID,
@@ -915,6 +933,7 @@ export const syncRepairsToServer = async () => {
           opisKvara: r.opisKvara,
           opisPopravka: r.opisPopravka,
           datumPopravka: r.datumPopravka,
+          trebaloBi: flag,
           radniNalogPotpisan: Boolean(r.radniNalogPotpisan),
           popravkaUPotpunosti: Boolean(r.popravkaUPotpunosti),
           napomene: r.napomene,
@@ -1053,13 +1072,6 @@ export default {
   forceFullNextSync,
   primeFullSync,
 };
-
-
-
-
-
-
-
 
 
 

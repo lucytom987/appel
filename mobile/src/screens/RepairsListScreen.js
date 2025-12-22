@@ -230,13 +230,15 @@ export default function RepairsListScreen({ navigation }) {
     const display = buildElevatorDisplay(elevator);
 
     const opisKvara = safeText(item.opisKvara, 'Bez opisa');
-    const isSigned = Boolean(item.radniNalogPotpisan);
     const isSynced = Boolean(item.synced);
+
+    const isTrebalo = Boolean(item.trebaloBi);
+    const isResolvedTrebalo = isTrebalo && item.status === 'completed';
 
     return (
       <TouchableOpacity
         style={[styles.repairCard, { borderColor: getStatusColor(item) }]}
-        onPress={() => navigation.navigate('RepairDetails', { repair: item })}
+        onPress={() => navigation.navigate(isTrebalo ? 'TrebaloBiDetails' : 'RepairDetails', { repair: item })}
         activeOpacity={0.8}
       >
         <View style={styles.repairContent}>
@@ -252,9 +254,9 @@ export default function RepairsListScreen({ navigation }) {
             </View>
             <View style={styles.iconRow}>
               <Ionicons
-                name={isSigned ? 'document-text-outline' : 'document-outline'}
+                name={isTrebalo ? (isResolvedTrebalo ? 'checkbox' : 'square-outline') : (item.radniNalogPotpisan ? 'document-text-outline' : 'document-outline')}
                 size={18}
-                color={isSigned ? '#16a34a' : '#9ca3af'}
+                color={isTrebalo ? (isResolvedTrebalo ? '#16a34a' : '#f59e0b') : (item.radniNalogPotpisan ? '#16a34a' : '#9ca3af')}
                 style={{ marginRight: 8 }}
               />
               <Ionicons

@@ -130,12 +130,25 @@ router.post('/', authenticate, async (req, res) => {
       return res.status(404).json({ success: false, message: 'Dizalo nije pronađeno' });
     }
 
+    // Legacy cleanup: ukloni polje "flag" ako dolazi iz starog klijenta
+    if (Object.prototype.hasOwnProperty.call(req.body, 'flag')) {
+      delete req.body.flag;
+    }
+
+    const trebFlag = Boolean(
+      req.body.trebaloBi ||
+      req.body.trebalo_bi ||
+      req.body.category === 'trebalo_bi' ||
+      req.body.type === 'trebalo_bi'
+    );
+
     const now = new Date();
     const repair = new Repair({
       ...req.body,
       elevatorId: req.body.elevatorId || req.body.elevator,
       serviserID: req.user._id,
       status: req.body.status || 'pending',
+      trebaloBi: trebFlag,
       datumPrijave: req.body.datumPrijave || now,
       updated_at: now,
       updated_by: req.user._id,
@@ -177,6 +190,18 @@ router.put('/:id', authenticate, checkRole(['serviser', 'menadzer', 'admin']), a
       return res.status(404).json({ success: false, message: 'Popravak je obrisan' });
     }
 
+    // Legacy cleanup: ukloni polje "flag" ako dolazi iz starog klijenta
+    if (Object.prototype.hasOwnProperty.call(req.body, 'flag')) {
+      delete req.body.flag;
+    }
+
+    const trebFlag = (() => {
+      if (typeof req.body.trebaloBi === 'boolean') return req.body.trebaloBi;
+      if (typeof req.body.trebalo_bi === 'boolean') return req.body.trebalo_bi;
+      if (req.body.category === 'trebalo_bi' || req.body.type === 'trebalo_bi') return true;
+      return existing.trebaloBi;
+    })();
+
     // ako se zaključuje popravak
     if (req.body.status === 'completed' && existing.status !== 'completed') {
       req.body.datumPopravka = req.body.datumPopravka || new Date();
@@ -184,11 +209,17 @@ router.put('/:id', authenticate, checkRole(['serviser', 'menadzer', 'admin']), a
 
     const now = new Date();
 
-    const repair = await Repair.findByIdAndUpdate(
-      req.params.id,
-      { ...req.body, azuriranDatum: now, updated_at: now, updated_by: req.user._id },
-      { new: true, runValidators: true }
-    )
+    const updatePayload = {
+      ...req.body,
+      elevatorId: req.body.elevatorId || req.body.elevator || existing.elevatorId,
+      serviserID: req.body.serviserID || existing.serviserID,
+      trebaloBi: trebFlag,
+      azuriranDatum: now,
+      updated_at: now,
+      updated_by: req.user._id,
+    };
+
+    const repair = await Repair.findByIdAndUpdate(req.params.id, updatePayload, { new: true, runValidators: true })
       .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala')
       .populate('serviserID', 'ime prezime email');
 

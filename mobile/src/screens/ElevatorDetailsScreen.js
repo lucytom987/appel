@@ -222,6 +222,10 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
     navigation.navigate('AddRepair', { elevator });
   };
 
+  const handleAddTrebaloBi = () => {
+    navigation.navigate('AddTrebaloBi', { elevator });
+  };
+
   const handleDeleteService = (service) => {
     const backendId = service?._id || service?.id;
     if (!backendId) {
@@ -261,40 +265,6 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
 
   const renderInfoTab = () => (
     <View style={styles.tabContent}>
-      <View style={styles.infoSection}>
-        <Text style={styles.sectionTitle}>Osnovno</Text>
-        <InfoRow icon="document-text" label="Broj ugovora" value={String(elevator.brojUgovora || '')} />
-        <InfoRow icon="briefcase" label="Naziv stranke" value={String(elevator.nazivStranke || '')} />
-        <InfoRow icon="location" label="Ulica" value={String(elevator.ulica || '')} />
-        <InfoRow icon="business-outline" label="Mjesto" value={String(elevator.mjesto || '')} />
-      </View>
-
-      {groupElevators.length > 0 && (
-        <View style={styles.infoSection}>
-          <Text style={styles.sectionTitle}>Dizala na adresi ({groupElevators.length})</Text>
-          <View style={styles.elevatorsInline}>
-            {groupElevators.map(e => {
-              const active = e.id === elevator.id || e._id === elevator.id;
-              return (
-                <TouchableOpacity
-                  key={e.id}
-                  disabled={active}
-                  style={[styles.elevatorBadge, active && styles.elevatorBadgeActive]}
-                  onPress={() => {
-                    if (!active) {
-                      navigation.navigate('ElevatorDetails', { elevator: e });
-                    }
-                  }}
-                >
-                  <Text style={[styles.elevatorBadgeText, active && styles.elevatorBadgeTextActive]}>{e.brojDizala || '?'}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
-      )}
-
-
       <View style={styles.infoSection}>
         <Text style={styles.sectionTitle}>Kontakt osoba</Text>
         
@@ -516,7 +486,7 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
             <TouchableOpacity
               key={key}
               style={styles.historyCard}
-              onPress={() => navigation.navigate('RepairDetails', { repair })}
+              onPress={() => navigation.navigate(isTrebaloBi ? 'TrebaloBiDetails' : 'RepairDetails', { repair })}
             >
               <View style={styles.historyHeader}>
                 <Text style={styles.historyDate}>
@@ -553,32 +523,52 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
     <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#111827" />
-        </TouchableOpacity>
-        <View style={styles.headerInfo}>
-          <View style={styles.headerTitleRow}>
-            <Text style={styles.headerTitle}>{String(elevator.nazivStranke || 'Dizalo')}</Text>
-            {elevator.brojDizala ? (
-              <View style={styles.headerNumberBadge}>
-                <Text style={styles.headerNumberText}>{elevator.brojDizala}</Text>
-              </View>
-            ) : null}
-          </View>
-          <Text style={styles.headerSubtitle}>{String(elevator.ulica || '')}, {String(elevator.mjesto || '')}</Text>
-        </View>
-        <View style={styles.headerRight}>
-          <TouchableOpacity 
-            onPress={() => navigation.navigate('EditElevator', { elevator })}
-            style={styles.editButton}
-          >
-            <Ionicons name="create-outline" size={24} color="#2563eb" />
+        <View style={styles.headerTopRow}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color="#111827" />
           </TouchableOpacity>
-          <View style={[styles.headerStatus, { backgroundColor: getStatusColor(elevator.status) }]}>
-            <Text style={styles.headerStatusText}>{getStatusLabel(elevator.status)}</Text>
+          <View style={styles.headerActions}>
+            <TouchableOpacity 
+              onPress={() => navigation.navigate('EditElevator', { elevator })}
+              style={styles.editButton}
+            >
+              <Ionicons name="create-outline" size={24} color="#2563eb" />
+            </TouchableOpacity>
+            <View style={[styles.headerStatus, { backgroundColor: getStatusColor(elevator.status) }]}>
+              <Text style={styles.headerStatusText}>{getStatusLabel(elevator.status)}</Text>
+            </View>
           </View>
+        </View>
+
+        <View style={styles.heroBlock}>
+          <Text style={styles.heroContract}>{elevator.brojUgovora || 'Bez ugovora'}</Text>
+          <Text style={styles.heroName} numberOfLines={2}>{elevator.nazivStranke || 'Naziv nije postavljen'}</Text>
+          <Text style={styles.heroAddress} numberOfLines={2}>
+            {[elevator.ulica, elevator.mjesto].filter(Boolean).join(', ') || 'Adresa nije postavljena'}
+          </Text>
         </View>
       </View>
+
+      {groupElevators.length > 0 && (
+        <View style={styles.groupBlock}>
+          <Text style={styles.sectionTitle}>Dizala na adresi ({groupElevators.length})</Text>
+          <View style={styles.elevatorsInline}>
+            {groupElevators.map((e) => {
+              const active = e.id === elevator.id || e._id === elevator.id;
+              return (
+                <TouchableOpacity
+                  key={e.id}
+                  disabled={active}
+                  style={[styles.elevatorBadge, active && styles.elevatorBadgeActive]}
+                  onPress={() => !active && navigation.navigate('ElevatorDetails', { elevator: e })}
+                >
+                  <Text style={[styles.elevatorBadgeText, active && styles.elevatorBadgeTextActive]}>{e.brojDizala || '?'}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+      )}
 
       {/* Tabs */}
       <View style={styles.tabs}>
@@ -620,6 +610,9 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
 
       {/* Floating Action Buttons */}
       <View style={[styles.fabContainer, { bottom: Math.max(insets.bottom + 12, 20) }]}>
+        <TouchableOpacity style={[styles.fab, styles.fabTrebalo]} onPress={handleAddTrebaloBi}>
+          <Ionicons name="bulb" size={24} color="#fff" />
+        </TouchableOpacity>
         <TouchableOpacity style={[styles.fab, styles.fabSecondary]} onPress={handleReportFault}>
           <Ionicons name="construct" size={24} color="#fff" />
         </TouchableOpacity>
@@ -656,50 +649,22 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: '#fff',
     paddingTop: 52,
-    paddingBottom: 12,
+    paddingBottom: 16,
     paddingHorizontal: 18,
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
+    flexDirection: 'column',
+    gap: 10,
+  },
+  headerTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
   },
   backButton: {
     marginRight: 10,
   },
-  headerInfo: {
-    flex: 1,
-  },
-  headerTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  headerTitle: {
-    fontSize: 19,
-    fontWeight: '800',
-    color: '#111827',
-  },
-  headerNumberBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 10,
-    backgroundColor: '#eef2ff',
-    borderWidth: 1,
-    borderColor: '#e0e7ff',
-  },
-  headerNumberText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#1f2937',
-  },
-  headerSubtitle: {
-    fontSize: 15,
-    color: '#6b7280',
-    fontWeight: '600',
-    marginTop: 2,
-  },
-  headerRight: {
+  headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
@@ -716,6 +681,58 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#fff',
     fontWeight: '600',
+  },
+  heroBlock: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  heroContract: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0f172a',
+    marginBottom: 6,
+  },
+  heroName: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: '#0f172a',
+  },
+  heroAddress: {
+    marginTop: 6,
+    fontSize: 15,
+    color: '#475569',
+  },
+  heroNumbersRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 10,
+  },
+  numberBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  numberBadgeText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  groupBlock: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 14,
+    marginHorizontal: 18,
+    marginTop: 8,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
   },
   tabs: {
     flexDirection: 'row',
@@ -995,6 +1012,12 @@ const styles = StyleSheet.create({
   },
   fabSecondary: {
     backgroundColor: '#ef4444',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+  },
+  fabTrebalo: {
+    backgroundColor: '#f59e0b',
     width: 48,
     height: 48,
     borderRadius: 24,

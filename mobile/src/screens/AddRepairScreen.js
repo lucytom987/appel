@@ -147,11 +147,12 @@ export default function AddRepairScreen({ navigation, route }) {
         try {
           const response = await repairsAPI.create(repairData);
 
-          // Spremi u lokalnu bazu
-          const created = response.data?.data || response.data;
+          // Spremi u lokalnu bazu (osiguraj "trebalo bi" flag i offline kompatibilnost)
+          const created = response.data?.data || response.data || {};
           repairDB.insert({
             id: created._id || created.id,
             ...created,
+            trebaloBi: typeof created.trebaloBi === 'boolean' ? created.trebaloBi : isTrebaloBi,
             synced: true,
           });
 

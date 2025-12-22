@@ -152,6 +152,12 @@ export const repairsAPI = {
       datumPopravka: data.datumPopravka || data.repairedDate,
       opisKvara: data.opisKvara || data.faultDescription,
       opisPopravka: data.opisPopravka || data.repairDescription,
+      // Označi "trebalo bi" ako klijent šalje bilo koji flag/alias
+      trebaloBi: Boolean(
+        data.trebaloBi || data.trebalo_bi || data.trebalobi || data.trebaloBI ||
+        data.category === 'trebalo_bi' || data.category === 'trebalo-bi' || data.category === 'trebaloBi' || data.category === 'trebalo' ||
+        data.type === 'trebalo_bi' || data.type === 'trebalo-bi' || data.type === 'trebaloBi' || data.type === 'trebalo'
+      ),
       radniNalogPotpisan: typeof data.radniNalogPotpisan === 'boolean'
         ? data.radniNalogPotpisan
         : (typeof data.workOrderSigned === 'boolean' ? data.workOrderSigned : false),
@@ -169,6 +175,7 @@ export const repairsAPI = {
       opisKvara: data.opisKvara || data.faultDescription,
       opisPopravka: data.opisPopravka || data.repairDescription,
       datumPopravka: data.datumPopravka || data.repairedDate,
+      trebaloBi: typeof data.trebaloBi === 'boolean' ? data.trebaloBi : undefined,
       radniNalogPotpisan: typeof data.radniNalogPotpisan === 'boolean'
         ? data.radniNalogPotpisan
         : (typeof data.workOrderSigned === 'boolean' ? data.workOrderSigned : undefined),

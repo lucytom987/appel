@@ -16,6 +16,9 @@ const repairSchema = new mongoose.Schema({
     default: 'pending'
   },
 
+  // Oznaka za "trebalo bi" stavke (ne hitni kvar)
+  trebaloBi: { type: Boolean, default: false },
+
   radniNalogPotpisan: { type: Boolean, default: false },
   popravkaUPotpunosti: { type: Boolean, default: false },
   napomene: String,

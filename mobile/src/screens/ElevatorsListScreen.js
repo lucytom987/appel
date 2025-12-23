@@ -59,7 +59,6 @@ export default function ElevatorsListScreen({ navigation }) {
     if (searchQuery) {
       const q = normalize(searchQuery);
       filtered = filtered.filter(e => {
-        // Sva polja za pretragu
         const fields = [
           e.nazivStranke,
           e.ulica,
@@ -75,7 +74,6 @@ export default function ElevatorsListScreen({ navigation }) {
       });
     }
 
-    // Sortiraj po abecedi adresa (ulica, zatim mjesto, pa naziv stranke)
     const compareAddresses = (a, b) => {
       const au = normalize(a.ulica || '');
       const bu = normalize(b.ulica || '');
@@ -91,7 +89,18 @@ export default function ElevatorsListScreen({ navigation }) {
     };
 
     const sorted = [...filtered].sort(compareAddresses);
-    setFilteredElevators(sorted);
+
+    // Deduplicate by address (ulica + mjesto): keep first elevator per address
+    const seen = new Set();
+    const deduped = [];
+    sorted.forEach((e) => {
+      const key = `${normalize(e.ulica || '')}__${normalize(e.mjesto || '')}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      deduped.push(e);
+    });
+
+    setFilteredElevators(deduped);
   };
 
   const onRefresh = async () => {

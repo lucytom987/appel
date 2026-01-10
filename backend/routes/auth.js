@@ -6,6 +6,23 @@ const { logAction } = require('../services/auditService');
 
 const router = express.Router();
 
+// Helper za generiranje access/refresh tokena
+const generateTokens = (userId) => {
+  const accessToken = jwt.sign(
+    { userId },
+    process.env.JWT_SECRET,
+    { expiresIn: process.env.JWT_EXPIRE || '30d' }
+  );
+
+  const refreshToken = jwt.sign(
+    { userId },
+    process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET,
+    { expiresIn: process.env.JWT_REFRESH_EXPIRE || '90d' }
+  );
+
+  return { accessToken, refreshToken };
+};
+
 // POST /api/auth/login - Prijava korisnika
 router.post('/login', async (req, res) => {
   try {
@@ -16,31 +33,57 @@ router.post('/login', async (req, res) => {
     }
 
     const user = await User.findOne({ email });
-    
     if (!user || !user.aktivan) {
       return res.status(401).json({ message: 'Nevaljani email ili lozinka' });
     }
 
     const validnaLozinka = await user.provjeriLozinku(lozinka);
-    
     if (!validnaLozinka) {
       return res.status(401).json({ message: 'Nevaljani email ili lozinka' });
     }
 
-    // Kreiraj JWT token
-    const token = jwt.sign(
-      { userId: user._id },
-      process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRE || '24h' }
-    );
+    const { accessToken, refreshToken } = generateTokens(user._id);
 
     res.json({
-      token,
-      korisnik: user.toJSON()
+      token: accessToken,
+      refreshToken,
+      korisnik: user.toJSON(),
     });
   } catch (error) {
-    console.error('ƒ?O Login gre­ka:', error);
-    res.status(500).json({ message: 'Gre­ka pri prijavi' });
+    console.error('Login greška:', error);
+    res.status(500).json({ message: 'Greška pri prijavi' });
+  }
+});
+
+// POST /api/auth/refresh - Osvježi access token
+router.post('/refresh', async (req, res) => {
+  try {
+    const incoming = req.body.refreshToken || req.header('x-refresh-token');
+    if (!incoming) {
+      return res.status(401).json({ message: 'Nedostaje refresh token' });
+    }
+
+    let decoded;
+    try {
+      decoded = jwt.verify(incoming, process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET);
+    } catch (err) {
+      return res.status(401).json({ message: 'Nevažeći refresh token' });
+    }
+
+    const user = await User.findById(decoded.userId);
+    if (!user || !user.aktivan) {
+      return res.status(401).json({ message: 'Korisnik nije pronađen ili nije aktivan' });
+    }
+
+    const { accessToken, refreshToken } = generateTokens(user._id);
+    res.json({
+      token: accessToken,
+      refreshToken,
+      korisnik: user.toJSON(),
+    });
+  } catch (error) {
+    console.error('Refresh token greška:', error?.message);
+    res.status(500).json({ message: 'Greška pri osvježavanju tokena' });
   }
 });
 
@@ -49,14 +92,13 @@ router.post('/register', authenticate, async (req, res) => {
   try {
     const { ime, prezime, email, lozinka, uloga, telefon } = req.body;
 
-    // Samo admin moóe registrirati
     if (req.user.uloga !== 'admin') {
-      return res.status(403).json({ message: 'Samo admin moóe registrirati nove korisnike' });
+      return res.status(403).json({ message: 'Samo admin može registrirati nove korisnike' });
     }
 
     const postojeciKorisnik = await User.findOne({ email });
     if (postojeciKorisnik) {
-      return res.status(400).json({ message: 'Korisnik sa tim emailom veŽÎ postoji' });
+      return res.status(400).json({ message: 'Korisnik s tim emailom već postoji' });
     }
 
     const noviKorisnik = new User({
@@ -65,12 +107,11 @@ router.post('/register', authenticate, async (req, res) => {
       email,
       lozinka,
       uloga: uloga || 'serviser',
-      telefon
+      telefon,
     });
 
     await noviKorisnik.save();
 
-    // Log akciju
     await logAction({
       korisnikId: req.user._id,
       akcija: 'CREATE',
@@ -79,16 +120,16 @@ router.post('/register', authenticate, async (req, res) => {
       entitetNaziv: `${ime} ${prezime}`,
       noveVrijednosti: noviKorisnik.toJSON(),
       ipAdresa: req.ip,
-      opis: `Kreiran novi korisnik: ${email}`
+      opis: `Kreiran novi korisnik: ${email}`,
     });
 
     res.status(201).json({
-      message: 'Korisnik uspje­no registriran',
-      user: noviKorisnik.toJSON()
+      message: 'Korisnik uspješno registriran',
+      user: noviKorisnik.toJSON(),
     });
   } catch (error) {
-    console.error('ƒ?O Register gre­ka:', error);
-    res.status(500).json({ message: 'Gre­ka pri registraciji' });
+    console.error('Register greška:', error);
+    res.status(500).json({ message: 'Greška pri registraciji' });
   }
 });
 

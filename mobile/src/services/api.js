@@ -14,6 +14,8 @@ const api = axios.create({
   },
 });
 
+let refreshPromise = null;
+
 // Request interceptor - dodaj JWT token (bez logiranja osjetljivih podataka)
 api.interceptors.request.use(
   async (config) => {
@@ -59,13 +61,46 @@ api.interceptors.response.use(
       raw: error.response?.data,
     };
 
-    // 401: token istekao (osim offline demo)
-    if (status === 401) {
+    // 401: token istekao (osim offline demo) -> pokušaj refresh pa retry
+    if (status === 401 && error.config && !error.config._retry) {
       const token = await SecureStore.getItemAsync('userToken');
-      if (!(token && token.startsWith('offline_token_'))) {
-        await SecureStore.deleteItemAsync('userToken');
-        await SecureStore.deleteItemAsync('userData');
+      const isOffline = token && token.startsWith('offline_token_');
+      if (!isOffline) {
+        error.config._retry = true;
+        if (!refreshPromise) {
+          refreshPromise = (async () => {
+            try {
+              const storedRefresh = await SecureStore.getItemAsync('userRefreshToken');
+              if (!storedRefresh) throw new Error('Nema refresh tokena');
+              const res = await axios.post(`${API_URL}/auth/refresh`, { refreshToken: storedRefresh });
+              const newAccess = res.data?.token;
+              const newRefresh = res.data?.refreshToken;
+              if (newAccess) await SecureStore.setItemAsync('userToken', newAccess);
+              if (newRefresh) await SecureStore.setItemAsync('userRefreshToken', newRefresh);
+              return newAccess;
+            } finally {
+              refreshPromise = null;
+            }
+          })();
+        }
+        try {
+          const newToken = await refreshPromise;
+          if (newToken) {
+            error.config.headers = error.config.headers || {};
+            error.config.headers.Authorization = `Bearer ${newToken}`;
+            return api(error.config);
+          }
+        } catch (e) {
+          // ako refresh padne, nastavi na sessionExpired flow
+        }
       }
+      try {
+        await SecureStore.deleteItemAsync('userToken');
+        await SecureStore.deleteItemAsync('userRefreshToken');
+        await SecureStore.deleteItemAsync('userData');
+      } catch (e) { /* ignore */ }
+      normalized.sessionExpired = true;
+      normalized.message = 'Vaša prijava je istekla. Molim prijavite se ponovno.';
     }
 
     // 403: nedovoljna prava - eksplicitna poruka

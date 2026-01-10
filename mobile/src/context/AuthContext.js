@@ -89,12 +89,15 @@ export const AuthProvider = ({ children }) => {
         throw err;
       }
 
-      const { token, korisnik } = response.data;
+      const { token, refreshToken, korisnik } = response.data;
       if (!token || !korisnik) {
         throw new Error('Nevaljan login odgovor (nema tokena/korisnika)');
       }
 
       await SecureStore.setItemAsync('userToken', token);
+      if (refreshToken) {
+        await SecureStore.setItemAsync('userRefreshToken', refreshToken);
+      }
       await SecureStore.setItemAsync('userData', JSON.stringify(korisnik));
 
       setUser(korisnik);
@@ -120,6 +123,7 @@ export const AuthProvider = ({ children }) => {
       setLoading(true);
       stopAutoSync();
       await SecureStore.deleteItemAsync('userToken');
+      await SecureStore.deleteItemAsync('userRefreshToken');
       await SecureStore.deleteItemAsync('userData');
       resetDatabase();
       setUser(null);

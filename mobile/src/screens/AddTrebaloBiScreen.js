@@ -21,6 +21,7 @@ import { repairsAPI } from '../services/api';
 export default function AddTrebaloBiScreen({ navigation, route }) {
   const { elevator } = route.params || {};
   const { user, isOnline, serverAwake } = useAuth();
+  const online = Boolean(isOnline && serverAwake);
   const [loading, setLoading] = useState(false);
   const [isOfflineDemo, setIsOfflineDemo] = useState(false);
 
@@ -80,9 +81,8 @@ export default function AddTrebaloBiScreen({ navigation, route }) {
         trebaloBi: true,
       };
 
-      const token = await SecureStore.getItemAsync('userToken');
-      const isOfflineUser = token && token.startsWith('offline_token_');
-  const online = Boolean(isOnline && serverAwake);
+        const token = await SecureStore.getItemAsync('userToken');
+        const isOfflineUser = token && token.startsWith('offline_token_');
 
       if (isOfflineUser || !online) {
         repairDB.insert({

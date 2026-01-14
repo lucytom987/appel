@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const { authenticate, checkRole } = require('../middleware/auth');
@@ -6,59 +6,56 @@ const { logAction } = require('../services/auditService');
 
 const router = express.Router();
 
-// GET /api/users - Lista svih korisnika (admin only)
-router.get('/', authenticate, checkRole(['admin']), async (req, res) => {
+// GET /api/users - Lista svih korisnika
+router.get('/', authenticate, async (req, res) => {
   try {
-    const users = await User.find({}, { lozinka: 0 }); // Nikad nemoj vraćati lozinku
+    const users = await User.find({}, { lozinka: 0 });
     res.json(users);
   } catch (error) {
-    console.error('❌ Greška pri dohvaćanju korisnika:', error);
-    res.status(500).json({ message: 'Greška pri dohvaćanju korisnika' });
+    console.error('Greska pri dohvacanju korisnika:', error);
+    res.status(500).json({ message: 'Greska pri dohvacanju korisnika' });
   }
 });
 
-// GET /api/users/lite - Ograničeni popis (serviser/menadžer/admin)
-router.get('/lite', authenticate, checkRole(['admin', 'menadzer', 'serviser']), async (req, res) => {
+// GET /api/users/lite - Ograniceni popis
+router.get('/lite', authenticate, async (req, res) => {
   try {
     const users = await User.find({}, 'ime prezime uloga aktivan email telefon').sort({ prezime: 1, ime: 1 }).lean();
     res.json(users);
   } catch (error) {
-    console.error('❌ Greška pri dohvaćanju korisnika (lite):', error);
-    res.status(500).json({ message: 'Greška pri dohvaćanju korisnika' });
+    console.error('Greska pri dohvacanju korisnika (lite):', error);
+    res.status(500).json({ message: 'Greska pri dohvacanju korisnika' });
   }
 });
 
-// GET /api/users/:id - Detalji korisnika (admin only)
-router.get('/:id', authenticate, checkRole(['admin']), async (req, res) => {
+// GET /api/users/:id - Detalji korisnika
+router.get('/:id', authenticate, async (req, res) => {
   try {
     const user = await User.findById(req.params.id, { lozinka: 0 });
     if (!user) {
-      return res.status(404).json({ message: 'Korisnik nije pronađen' });
+      return res.status(404).json({ message: 'Korisnik nije pronadjen' });
     }
     res.json(user);
   } catch (error) {
-    console.error('❌ Greška pri dohvaćanju korisnika:', error);
-    res.status(500).json({ message: 'Greška pri dohvaćanju korisnika' });
+    console.error('Greska pri dohvacanju korisnika:', error);
+    res.status(500).json({ message: 'Greska pri dohvacanju korisnika' });
   }
 });
 
-// POST /api/users - Kreiraj novog korisnika (admin only)
-router.post('/', authenticate, checkRole(['admin']), async (req, res) => {
+// POST /api/users - Kreiraj novog korisnika
+router.post('/', authenticate, async (req, res) => {
   try {
     const { ime, prezime, email, lozinka, uloga, telefon } = req.body;
 
-    // Validacija
     if (!ime || !prezime || !email || !lozinka || !uloga) {
       return res.status(400).json({ message: 'Svi obavezni podaci su potrebni' });
     }
 
-    // Provjeri da li korisnik već postoji
     const postojeciKorisnik = await User.findOne({ email });
     if (postojeciKorisnik) {
-      return res.status(400).json({ message: 'Korisnik sa tim emailom već postoji' });
+      return res.status(400).json({ message: 'Korisnik sa tim emailom vec postoji' });
     }
 
-    // Provjeri valjanost uloge
     if (!['serviser', 'menadzer', 'admin', 'technician', 'manager'].includes(uloga)) {
       return res.status(400).json({ message: 'Nevaljana uloga' });
     }
@@ -75,7 +72,6 @@ router.post('/', authenticate, checkRole(['admin']), async (req, res) => {
 
     await noviKorisnik.save();
 
-    // Log akciju
     await logAction({
       korisnikId: req.user._id,
       akcija: 'CREATE',
@@ -87,29 +83,25 @@ router.post('/', authenticate, checkRole(['admin']), async (req, res) => {
       opis: `Kreiran novi korisnik: ${email} (${uloga})`
     });
 
-    console.log(`✅ Novi korisnik kreiran: ${email} (${uloga})`);
-
     res.status(201).json({
-      message: 'Korisnik uspješno kreiran',
+      message: 'Korisnik uspjesno kreiran',
       user: noviKorisnik.toJSON()
     });
   } catch (error) {
-    console.error('❌ Greška pri kreiranju korisnika:', error);
-    res.status(500).json({ message: 'Greška pri kreiranju korisnika' });
+    console.error('Greska pri kreiranju korisnika:', error);
+    res.status(500).json({ message: 'Greska pri kreiranju korisnika' });
   }
 });
 
-// PUT /api/users/:id - Uredi korisnika (admin only)
-router.put('/:id', authenticate, checkRole(['admin']), async (req, res) => {
+// PUT /api/users/:id - Uredi korisnika
+router.put('/:id', authenticate, async (req, res) => {
   try {
     const { ime, prezime, lozinka, uloga, telefon, aktivan } = req.body;
-    
     const user = await User.findById(req.params.id);
     if (!user) {
-      return res.status(404).json({ message: 'Korisnik nije pronađen' });
+      return res.status(404).json({ message: 'Korisnik nije pronadjen' });
     }
 
-    // Spremi stare vrijednosti za log
     const stareVrijednosti = {
       ime: user.ime,
       prezime: user.prezime,
@@ -118,10 +110,9 @@ router.put('/:id', authenticate, checkRole(['admin']), async (req, res) => {
       aktivan: user.aktivan
     };
 
-    // Update polja
     if (ime) user.ime = ime;
     if (prezime) user.prezime = prezime;
-    if (lozinka) user.lozinka = lozinka; // Će biti hashirana u pre('save')
+    if (lozinka) user.lozinka = lozinka;
     if (uloga && ['serviser', 'menadzer', 'admin', 'technician', 'manager'].includes(uloga)) user.uloga = uloga;
     if (telefon) user.telefon = telefon;
     if (typeof aktivan === 'boolean') user.aktivan = aktivan;
@@ -129,7 +120,6 @@ router.put('/:id', authenticate, checkRole(['admin']), async (req, res) => {
     user.azuriranDatum = new Date();
     await user.save();
 
-    // Log akciju
     await logAction({
       korisnikId: req.user._id,
       akcija: 'UPDATE',
@@ -145,32 +135,29 @@ router.put('/:id', authenticate, checkRole(['admin']), async (req, res) => {
         aktivan: user.aktivan
       },
       ipAdresa: req.ip,
-      opis: `Ažuriran korisnik: ${user.email}`
+      opis: `Azuriran korisnik: ${user.email}`
     });
 
-    console.log(`✅ Korisnik ažuriran: ${user.email}`);
-
     res.json({
-      message: 'Korisnik uspješno ažuriran',
+      message: 'Korisnik uspjesno azuriran',
       user: user.toJSON()
     });
   } catch (error) {
-    console.error('❌ Greška pri ažuriranju korisnika:', error);
-    res.status(500).json({ message: 'Greška pri ažuriranju korisnika' });
+    console.error('Greska pri azuriranju korisnika:', error);
+    res.status(500).json({ message: 'Greska pri azuriranju korisnika' });
   }
 });
 
-// DELETE /api/users/:id - Obriši korisnika (admin only)
-router.delete('/:id', authenticate, checkRole(['admin']), async (req, res) => {
+// DELETE /api/users/:id - Obrisi korisnika (samo menadzer/admin)
+router.delete('/:id', authenticate, checkRole(['menadzer', 'admin']), async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
     if (!user) {
-      return res.status(404).json({ message: 'Korisnik nije pronađen' });
+      return res.status(404).json({ message: 'Korisnik nije pronadjen' });
     }
 
-    // Nemoj obrisati samog sebe
     if (user._id.toString() === req.user._id.toString()) {
-      return res.status(400).json({ message: 'Ne možeš obrisati samog sebe' });
+      return res.status(400).json({ message: 'Ne mozete obrisati sami sebe' });
     }
 
     const userNaziv = `${user.ime} ${user.prezime}`;
@@ -179,7 +166,6 @@ router.delete('/:id', authenticate, checkRole(['admin']), async (req, res) => {
 
     await User.findByIdAndDelete(req.params.id);
 
-    // Log akciju
     await logAction({
       korisnikId: req.user._id,
       akcija: 'DELETE',
@@ -191,100 +177,74 @@ router.delete('/:id', authenticate, checkRole(['admin']), async (req, res) => {
       opis: `Obrisan korisnik: ${userEmail} (${userUloga})`
     });
 
-    console.log(`✅ Korisnik obrisan: ${userEmail}`);
-
     res.json({
-      message: 'Korisnik uspješno obrisan',
+      message: 'Korisnik uspjesno obrisan',
       deletedUser: userNaziv
     });
   } catch (error) {
-    console.error('❌ Greška pri brisanju korisnika:', error);
-    res.status(500).json({ message: 'Greška pri brisanju korisnika' });
+    console.error('Greska pri brisanju korisnika:', error);
+    res.status(500).json({ message: 'Greska pri brisanju korisnika' });
   }
 });
 
-// GET /api/users/:id/password - Prikaži lozinku (admin only, za povrat ili reset)
-// NAPOMENA: Ova ruta je SAMO za admin koji želi vidjeti lozinku - trebala bi biti loirana i zaštićena!
-router.get('/:id/password', authenticate, checkRole(['admin']), async (req, res) => {
+// GET /api/users/:id/password - Prikazi lozinku (logirano)
+router.get('/:id/password', authenticate, async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
     if (!user) {
-      return res.status(404).json({ message: 'Korisnik nije pronađen' });
+      return res.status(404).json({ message: 'Korisnik nije pronadjen' });
     }
 
-    // Log akciju - važno za sigurnost!
     await logAction({
       korisnikId: req.user._id,
       akcija: 'VIEW',
       entitet: 'User',
       entitetId: user._id,
       entitetNaziv: `${user.ime} ${user.prezime}`,
+      stareVrijednosti: user.toJSON(),
       ipAdresa: req.ip,
-      opis: `Admin je pogledao lozinku za: ${user.email}`
+      opis: `Prikazana lozinka za korisnika ${user.email}`
     });
 
-    // NAPOMENA: Nikad nemoj vraćati hashovanu lozinku jer je nepovratna!
-    // Trebao bi biti getPassword koji pamti originalnu lozinku ili koristi reset token
-    // Za sada vraćam poruku da je lozinka hashirana
-    res.json({
-      message: 'Lozinka je kriptirana i ne može se prikazati',
-      info: 'Trebao bi koristiti "Reset lozinku" opciju da bi postavio novu lozinku',
-      user: {
-        id: user._id,
-        ime: user.ime,
-        prezime: user.prezime,
-        email: user.email
-      }
-    });
+    res.json({ lozinka: user.lozinka, email: user.email });
   } catch (error) {
-    console.error('❌ Greška pri dohvaćanju lozinke:', error);
-    res.status(500).json({ message: 'Greška pri dohvaćanju lozinke' });
+    console.error('Greska pri dohvaćanju lozinke:', error);
+    res.status(500).json({ message: 'Greska pri dohvaćanju lozinke' });
   }
 });
 
-// PUT /api/users/:id/reset-password - Reset lozinke (admin only)
-router.put('/:id/reset-password', authenticate, checkRole(['admin']), async (req, res) => {
+// PUT /api/users/:id/reset-password - Resetiraj lozinku
+router.put('/:id/reset-password', authenticate, async (req, res) => {
   try {
-    const { novaLozinka } = req.body;
-
-    if (!novaLozinka || novaLozinka.length < 6) {
-      return res.status(400).json({ message: 'Lozinka mora biti najmanje 6 znakova' });
-    }
-
     const user = await User.findById(req.params.id);
     if (!user) {
-      return res.status(404).json({ message: 'Korisnik nije pronađen' });
+      return res.status(404).json({ message: 'Korisnik nije pronadjen' });
     }
 
-    // Spremi novu lozinku kao privremenaLozinka (za prikaz admin-u)
-    user.privremenaLozinka = novaLozinka;
-    
-    // Spremi stvarnu lozinku (će biti hashirana u pre('save') hooku)
+    const { novaLozinka } = req.body;
+    if (!novaLozinka) {
+      return res.status(400).json({ message: 'Nova lozinka je obavezna' });
+    }
+
     user.lozinka = novaLozinka;
     user.azuriranDatum = new Date();
     await user.save();
 
-    // Log akciju
     await logAction({
       korisnikId: req.user._id,
       akcija: 'UPDATE',
       entitet: 'User',
       entitetId: user._id,
       entitetNaziv: `${user.ime} ${user.prezime}`,
+      stareVrijednosti: user.toJSON(),
       ipAdresa: req.ip,
-      opis: `Admin je resetirao lozinku za: ${user.email}`
+      opis: `Resetirana lozinka za korisnika ${user.email}`
     });
 
-    console.log(`✅ Lozinka resetirana za: ${user.email}`);
-
-    res.json({
-      message: 'Lozinka uspješno resetirana',
-      temporaryPassword: novaLozinka, // Prikaži admin-u samo jednom
-      user: user.toJSON()
-    });
+    res.json({ message: 'Lozinka resetirana', user: user.toJSON() });
   } catch (error) {
-    console.error('❌ Greška pri resetiranju lozinke:', error);
-    res.status(500).json({ message: 'Greška pri resetiranju lozinke' });
+    console.error('Greska pri resetiranju lozinke:', error);
+    res.status(500).json({ message: 'Greska pri resetiranju lozinke' });
   }
 });
 

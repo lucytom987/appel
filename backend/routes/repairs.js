@@ -179,7 +179,7 @@ router.post('/', authenticate, async (req, res) => {
 });
 
 // PUT /api/repairs/:id - ažuriraj popravak (serviser može ažurirati svoj rad)
-router.put('/:id', authenticate, checkRole(['serviser', 'menadzer', 'admin']), async (req, res) => {
+router.put('/:id', authenticate, async (req, res) => {
   try {
     const existing = await Repair.findById(req.params.id);
     if (!existing) {
@@ -242,7 +242,7 @@ router.put('/:id', authenticate, checkRole(['serviser', 'menadzer', 'admin']), a
 });
 
 // DELETE /api/repairs/:id - brisanje
-router.delete('/:id', authenticate, checkRole(['serviser', 'menadzer', 'admin']), async (req, res) => {
+router.delete('/:id', authenticate, checkRole(['menadzer', 'admin']), async (req, res) => {
   try {
     const repair = await Repair.findById(req.params.id);
     if (!repair) {

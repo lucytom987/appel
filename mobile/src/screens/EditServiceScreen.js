@@ -43,7 +43,7 @@ const checklistLabels = {
 
 export default function EditServiceScreen({ route, navigation }) {
   const { service, onSave } = route.params;
-  const { user, isOnline } = useAuth();
+  const { user, isOnline, serverAwake } = useAuth();
 
   useFocusEffect(
     useCallback(() => {
@@ -109,7 +109,7 @@ export default function EditServiceScreen({ route, navigation }) {
   const [showKolege, setShowKolege] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const online = Boolean(isOnline);
+  const online = Boolean(isOnline && serverAwake);
 
   React.useEffect(() => {
     const fetchUsers = async () => {
@@ -231,8 +231,16 @@ export default function EditServiceScreen({ route, navigation }) {
         <View style={{ width: 24 }} />
       </View>
 
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={80}>
-        <ScrollView style={styles.content}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 80 : 0}
+      >
+        <ScrollView
+          style={styles.content}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ paddingBottom: 24 }}
+        >
           {elevator && (
             <View style={styles.card}>
               <Text style={styles.sectionTitle}>Dizalo</Text>

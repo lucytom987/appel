@@ -26,7 +26,11 @@ function formatName(person) {
   return full || person.email || '';
 }
 
-const confirmDelete = (baseRepair, navigation, setSaving, isOnline) => {
+const confirmDelete = (baseRepair, navigation, setSaving, online, canDelete) => {
+  if (!canDelete) {
+    Alert.alert('Nedovoljno prava', 'Samo administratori ili menadžeri mogu brisati popravke.');
+    return;
+  }
   const id = baseRepair?._id || baseRepair?.id;
   if (!id) {
     Alert.alert('Greska', 'Nije moguce obrisati zapis.');
@@ -41,7 +45,6 @@ const confirmDelete = (baseRepair, navigation, setSaving, isOnline) => {
       onPress: async () => {
         setSaving(true);
         try {
-          const online = Boolean(isOnline);
           if (online) {
             try {
               await repairsAPI.delete(id);
@@ -79,7 +82,9 @@ const confirmDelete = (baseRepair, navigation, setSaving, isOnline) => {
 
 export default function EditRepairScreen({ route, navigation }) {
   const { repair } = route.params;
-  const { user, isOnline } = useAuth();
+  const { user, isOnline, serverAwake } = useAuth();
+  const userRole = ((user?.uloga || user?.role || '') || '').toLowerCase();
+  const canDelete = userRole === 'admin' || userRole === 'menadzer' || userRole === 'manager';
 
   // Hardverski back vraća na detalje popravka
   useFocusEffect(
@@ -114,6 +119,7 @@ export default function EditRepairScreen({ route, navigation }) {
   const [showDateReported, setShowDateReported] = useState(false);
   const [showDateRepaired, setShowDateRepaired] = useState(false);
   const [saving, setSaving] = useState(false);
+  const online = Boolean(isOnline && serverAwake);
 
   const parseDate = (val) => {
     if (!val) return null;
@@ -161,8 +167,8 @@ export default function EditRepairScreen({ route, navigation }) {
     const merged = { ...baseRepair, ...payload, synced: 0, sync_status: 'dirty', updated_at: Date.now() };
 
     try {
-      const online = Boolean(isOnline);
-      if (!online) {
+      const onlineNow = Boolean(isOnline && serverAwake);
+      if (!onlineNow) {
         repairDB.update(id, merged);
         setShowingSaveHint(true);
       } else {
@@ -192,8 +198,16 @@ export default function EditRepairScreen({ route, navigation }) {
         <View style={{ width: 24 }} />
       </View>
 
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={80}>
-        <ScrollView style={styles.content}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 80 : 0}
+      >
+        <ScrollView
+          style={styles.content}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ paddingBottom: 24 }}
+        >
           {elevator && (
             <View style={styles.card}>
               <Text style={styles.sectionTitle}>Dizalo</Text>
@@ -271,7 +285,11 @@ export default function EditRepairScreen({ route, navigation }) {
             <Text style={styles.saveButtonText}>{saving ? 'Spremam...' : 'Spremi promjene'}</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.deleteButton} onPress={() => confirmDelete(baseRepair, navigation, setSaving, isOnline)} disabled={saving}>
+        <TouchableOpacity
+          style={styles.deleteButton}
+          onPress={() => confirmDelete(baseRepair, navigation, setSaving, online, canDelete)}
+          disabled={saving}
+        >
             <Ionicons name="trash" size={20} color="#b91c1c" />
             <Text style={styles.deleteButtonText}>Obriši popravak</Text>
           </TouchableOpacity>
@@ -304,6 +322,3 @@ const styles = StyleSheet.create({
   deleteButton: { borderWidth: 1, borderColor: '#fca5a5', backgroundColor: '#fef2f2', marginHorizontal: ms(16), marginTop: ms(12), padding: ms(14), borderRadius: ms(12), flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: ms(8) },
   deleteButtonText: { color: '#b91c1c', fontSize: ms(15), fontWeight: '700' },
 });
-
-
-

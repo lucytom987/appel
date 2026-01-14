@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const router = express.Router();
 const Service = require('../models/Service');
 const Elevator = require('../models/Elevator');
@@ -36,7 +36,7 @@ router.get('/', authenticate, async (req, res) => {
       const afterDate = new Date(updatedAfter);
       filter.$or = [
         { updated_at: { $gte: afterDate } },
-        { updated_at: { $exists: false } }, // stari zapisi bez updated_at ostaju vidljivi
+        { updated_at: { $exists: false } },
       ];
     }
     if (startDate || endDate) {
@@ -148,9 +148,8 @@ router.post('/', authenticate, async (req, res) => {
 
     await service.save();
 
-    // update dizalo
     elevator.zadnjiServis = service.datum;
-    if (service.sljedeciServis) elevator.sljedeciServis = service.sljedeciServis;
+    if (service.sljedećiServis) elevator.sljedećiServis = service.sljedećiServis;
     await elevator.save();
 
     await logAction({
@@ -176,7 +175,7 @@ router.post('/', authenticate, async (req, res) => {
       const messages = Object.keys(error.errors).map(key => `${key}: ${error.errors[key].message}`).join('; ');
       return res.status(400).json({
         success: false,
-        message: 'Validacijska greška pri kreiranju servisa',
+        message: 'Validacijska Greška pri kreiranju servisa',
         errors: error.errors,
         errorMessages: messages
       });
@@ -196,13 +195,6 @@ router.put('/:id', authenticate, async (req, res) => {
 
     if (existingService.is_deleted) {
       return res.status(404).json({ success: false, message: 'Servis je obrisan' });
-    }
-
-    const role = req.user.normalizedRole || req.user.uloga;
-    const isOwnerServiser = role === 'serviser' && String(existingService.serviserID) === String(req.user._id);
-    const canManage = ['menadzer', 'admin'].includes(role);
-    if (!isOwnerServiser && !canManage) {
-      return res.status(403).json({ success: false, message: 'Nedovoljna prava za ažuriranje ovog servisa' });
     }
 
     let checklist = Array.isArray(req.body.checklist) ? req.body.checklist : undefined;
@@ -226,10 +218,9 @@ router.put('/:id', authenticate, async (req, res) => {
       ...req.body,
       checklist,
       dodatniServiseri: uniqueAssistants,
-      // ne dozvoli promjenu vlasništva kroz body
       serviserID: existingService.serviserID,
       elevatorId: existingService.elevatorId,
-      azuriranDatum: now,
+      ažuriranDatum: now,
       updated_at: now,
       updated_by: req.user._id,
     };
@@ -251,7 +242,7 @@ router.put('/:id', authenticate, async (req, res) => {
       entitetNaziv: service.elevatorId ? `${service.elevatorId.nazivStranke} - ${service.elevatorId.brojDizala}` : 'Nepoznato dizalo',
       noveVrijednosti: service.toObject(),
       ipAdresa: req.ip,
-      opis: 'Ažuriran servis'
+      opis: 'ažuriran servis'
     });
 
     res.json({ success: true, message: 'Servis ažuriran', data: service });
@@ -268,7 +259,7 @@ router.put('/:id', authenticate, async (req, res) => {
       const messages = Object.keys(error.errors).map(key => `${key}: ${error.errors[key].message}`).join('; ');
       return res.status(400).json({
         success: false,
-        message: 'Validacijska greška pri ažuriranju servisa',
+        message: 'Validacijska Greška pri ažuriranju servisa',
         errors: error.errors,
         errorMessages: messages
       });
@@ -286,10 +277,8 @@ router.delete('/:id', authenticate, async (req, res) => {
       return res.status(404).json({ success: false, message: 'Servis nije pronađen' });
     }
 
-    const role = req.user.normalizedRole || req.user.uloga;
-    const isOwnerServiser = role === 'serviser' && String(service.serviserID) === String(req.user._id);
-    const canManage = ['menadzer', 'admin'].includes(role);
-    if (!isOwnerServiser && !canManage) {
+    const role = (req.user.normalizedRole || req.user.uloga || '').toLowerCase();
+    if (!['menadzer', 'admin'].includes(role)) {
       return res.status(403).json({ success: false, message: 'Nedovoljna prava za brisanje ovog servisa' });
     }
 
@@ -298,7 +287,7 @@ router.delete('/:id', authenticate, async (req, res) => {
     service.deleted_at = now;
     service.updated_at = now;
     service.updated_by = req.user._id;
-    service.azuriranDatum = now;
+    service.ažuriranDatum = now;
     await service.save();
 
     await logAction({

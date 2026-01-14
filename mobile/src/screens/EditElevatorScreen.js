@@ -24,7 +24,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 
 export default function EditElevatorScreen({ navigation, route }) {
   const { elevator } = route.params;
-  const { isOnline, user } = useAuth();
+  const { isOnline, serverAwake, user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [geocoding, setGeocoding] = useState(false);
@@ -48,8 +48,8 @@ export default function EditElevatorScreen({ navigation, route }) {
     ? parsedKontakt.ulazneSifre
     : [parsedKontakt.ulaznaKoda || ''];
 
-  // Konvertiraj isOnline u boolean
-  const online = Boolean(isOnline);
+  // Konvertiraj isOnline u boolean i traži da je backend budan
+  const online = Boolean(isOnline && serverAwake);
 
   const [formData, setFormData] = useState({
     // Osnovno
@@ -187,7 +187,21 @@ export default function EditElevatorScreen({ navigation, route }) {
 
   const normalizeDate = (value) => {
     if (!value) return undefined;
-    const d = new Date(value);
+    const trimmed = String(value).trim();
+
+    const monthYearMatch = trimmed.match(/^(\d{1,2})[./-]\s*(\d{4})$/);
+    const yearMonthMatch = trimmed.match(/^(\d{4})[./-]\s*(\d{1,2})$/);
+    const match = monthYearMatch || yearMonthMatch;
+    if (match) {
+      const month = Number(monthYearMatch ? match[1] : match[2]);
+      const year = Number(monthYearMatch ? match[2] : match[1]);
+      if (month >= 1 && month <= 12) {
+        const isoDate = new Date(Date.UTC(year, month - 1, 1));
+        return isoDate.toISOString();
+      }
+    }
+
+    const d = new Date(trimmed);
     return Number.isNaN(d.getTime()) ? undefined : d.toISOString();
   };
 
@@ -316,9 +330,9 @@ export default function EditElevatorScreen({ navigation, route }) {
   };
 
   const confirmDelete = async () => {
-    // Provjeri je li admin
-    if (user?.uloga !== 'admin') {
-      Alert.alert('Nemate dozvolu', 'Samo administratori mogu brisati dizala');
+    // Dozvoli brisanje samo adminu ili menadžeru
+    if (user?.uloga !== 'admin' && user?.uloga !== 'menadzer') {
+      Alert.alert('Nemate dozvolu', 'Samo administratori ili menadžeri mogu brisati dizala');
       return;
     }
 
@@ -467,7 +481,7 @@ export default function EditElevatorScreen({ navigation, route }) {
           <Ionicons name="arrow-back" size={24} color="#1f2937" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Uredi dizalo</Text>
-        {user?.uloga === 'admin' && (
+        {(user?.uloga === 'admin' || user?.uloga === 'menadzer') && (
           <TouchableOpacity onPress={handleDelete} disabled={deleting}>
             {deleting ? (
               <ActivityIndicator size="small" color="#ef4444" />
@@ -476,15 +490,19 @@ export default function EditElevatorScreen({ navigation, route }) {
             )}
           </TouchableOpacity>
         )}
-        {user?.uloga !== 'admin' && <View style={{ width: 24 }} />}
+        {!(user?.uloga === 'admin' || user?.uloga === 'menadzer') && <View style={{ width: 24 }} />}
       </View>
 
       <KeyboardAvoidingView 
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={100}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
       >
-        <ScrollView style={styles.content}>
+        <ScrollView
+          style={styles.content}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ paddingBottom: 24 }}
+        >
         {/* Offline warning */}
         {!online && (
           <View style={styles.offlineWarning}>
@@ -747,9 +765,9 @@ export default function EditElevatorScreen({ navigation, route }) {
           <View style={styles.dateRow}>
             <TextInput
               style={[styles.input, styles.dateInput]}
-              value={formatDate(formData.godisnjiPregled)}
+              value={formData.godisnjiPregled}
               onChangeText={(text) => setFormData(prev => ({ ...prev, godisnjiPregled: text }))}
-              placeholder="YYYY-MM-DD"
+              placeholder="YYYY-MM-DD ili MM/YYYY"
               autoCapitalize="none"
               keyboardType="numbers-and-punctuation"
             />
@@ -761,7 +779,7 @@ export default function EditElevatorScreen({ navigation, route }) {
               <Text style={styles.datePickerButtonText}>Odaberi</Text>
             </TouchableOpacity>
           </View>
-          <Text style={styles.hint}>Datum godišnjeg pregleda inspektorata.</Text>
+          <Text style={styles.hint}>Format: YYYY-MM-DD ili MM/YYYY (spremamo 1. dan tog mjeseca).</Text>
         </View>
 
         {/* Napomene */}

@@ -5,11 +5,9 @@ const logAction = async (...args) => {
   try {
     let payload = {};
 
-    // Novi potpis: logAction({ korisnikId, akcija, ... })
     if (args.length === 1 && typeof args[0] === 'object' && !Array.isArray(args[0])) {
       payload = args[0];
     } else {
-      // Stari potpis: logAction(korisnikId, akcija, entitet, entitetId, noveVrijednosti)
       const [korisnikId, akcija, entitet, entitetId, noveVrijednosti] = args;
       payload = { korisnikId, akcija, entitet, entitetId, noveVrijednosti };
     }
@@ -23,7 +21,7 @@ const logAction = async (...args) => {
       stareVrijednosti,
       noveVrijednosti,
       ipAdresa,
-      opis
+      opis,
     } = payload;
 
     const auditLog = new AuditLog({
@@ -35,13 +33,13 @@ const logAction = async (...args) => {
       stareVrijednosti,
       noveVrijednosti,
       ipAdresa,
-      opis
+      opis,
     });
 
     await auditLog.save();
-    console.log(`ÐY"? Audit log: ${akcija} ${entitet} od korisnika ${korisnikId}`);
+    console.log(`Audit log: ${akcija} ${entitet} od korisnika ${korisnikId}`);
   } catch (error) {
-    console.error('ƒ?O Gre­ka pri logiiranju:', error);
+    console.error('Greška pri logiranju:', error);
     // Ne prekidaj glavnu akciju ako audit logs failne
   }
 };

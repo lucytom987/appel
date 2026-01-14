@@ -22,15 +22,15 @@ import { elevatorsAPI } from '../services/api';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
 export default function AddElevatorScreen({ navigation }) {
-  const { isOnline } = useAuth();
+  const { isOnline, serverAwake } = useAuth();
   const [loading, setLoading] = useState(false);
   const [geocoding, setGeocoding] = useState(false);
   const [mapPickerVisible, setMapPickerVisible] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [activeDateElevatorId, setActiveDateElevatorId] = useState(null);
 
-  // Konvertiraj isOnline u boolean
-  const online = Boolean(isOnline);
+  // Konvertiraj isOnline u boolean i traži da je backend budan
+  const online = Boolean(isOnline && serverAwake);
 
   const [elevators, setElevators] = useState([
     { id: 1, brojDizala: '', intervalServisa: '1', godisnjiPregled: '' }
@@ -212,7 +212,21 @@ export default function AddElevatorScreen({ navigation }) {
 
       const normalizeDate = (value) => {
         if (!value) return undefined;
-        const d = new Date(value);
+        const trimmed = String(value).trim();
+
+        const monthYearMatch = trimmed.match(/^(\d{1,2})[./-]\s*(\d{4})$/);
+        const yearMonthMatch = trimmed.match(/^(\d{4})[./-]\s*(\d{1,2})$/);
+        const match = monthYearMatch || yearMonthMatch;
+        if (match) {
+          const month = Number(monthYearMatch ? match[1] : match[2]);
+          const year = Number(monthYearMatch ? match[2] : match[1]);
+          if (month >= 1 && month <= 12) {
+            const isoDate = new Date(Date.UTC(year, month - 1, 1));
+            return isoDate.toISOString();
+          }
+        }
+
+        const d = new Date(trimmed);
         return Number.isNaN(d.getTime()) ? undefined : d.toISOString();
       };
 
@@ -326,13 +340,17 @@ export default function AddElevatorScreen({ navigation }) {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 80 : 0}
       >
-        <ScrollView style={styles.content} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          style={styles.content}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ paddingBottom: 24 }}
+        >
         {/* Offline warning */}
         {!online && (
           <View style={styles.offlineWarning}>
             <Ionicons name="warning" size={20} color="#ef4444" />
             <Text style={styles.offlineText}>
-              Za dodavanje dizala morate biti online
+              Za dodavanje dizala morate biti online i da je server upaljen
             </Text>
           </View>
         )}
@@ -445,9 +463,9 @@ export default function AddElevatorScreen({ navigation }) {
               <View style={styles.dateRow}>
                 <TextInput
                   style={[styles.input, styles.dateInput]}
-                  value={formatDate(elevator.godisnjiPregled)}
+                  value={elevator.godisnjiPregled}
                   onChangeText={(text) => updateElevator(elevator.id, 'godisnjiPregled', text)}
-                  placeholder="YYYY-MM-DD"
+                  placeholder="YYYY-MM-DD ili MM/YYYY"
                   autoCapitalize="none"
                   keyboardType="numbers-and-punctuation"
                 />
@@ -462,7 +480,7 @@ export default function AddElevatorScreen({ navigation }) {
                   <Text style={styles.datePickerButtonText}>Odaberi</Text>
                 </TouchableOpacity>
               </View>
-              <Text style={styles.hint}>Datum godišnjeg pregleda inspektorata.</Text>
+              <Text style={styles.hint}>Format: YYYY-MM-DD ili MM/YYYY (spremamo 1. dan tog mjeseca).</Text>
             </View>
           ))}
         </View>

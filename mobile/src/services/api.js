@@ -3,7 +3,7 @@ import * as SecureStore from 'expo-secure-store';
 import { syncQueue } from '../database/db';
 
 // Backend URL - produkcija na Render
-const API_URL = 'https://appel-q97a.onrender.com/api';
+export const API_URL = 'https://appel-q97a.onrender.com/api';
 
 // Axios instance sa default konfiguracijom
 const api = axios.create({

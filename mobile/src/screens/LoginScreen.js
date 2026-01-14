@@ -13,7 +13,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import * as SecureStore from 'expo-secure-store';
 
-const APP_VERSION = '1.3 (build 6)';
+const APP_VERSION = '14.01.25';
 
 export default function LoginScreen() {
   const { login, loading, setUser } = useAuth();
@@ -37,7 +37,7 @@ export default function LoginScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <View style={styles.formContainer}>
         {/* Logo/Header */}

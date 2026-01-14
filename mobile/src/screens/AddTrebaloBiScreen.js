@@ -20,7 +20,7 @@ import { repairsAPI } from '../services/api';
 
 export default function AddTrebaloBiScreen({ navigation, route }) {
   const { elevator } = route.params || {};
-  const { user, isOnline } = useAuth();
+  const { user, isOnline, serverAwake } = useAuth();
   const [loading, setLoading] = useState(false);
   const [isOfflineDemo, setIsOfflineDemo] = useState(false);
 
@@ -82,7 +82,7 @@ export default function AddTrebaloBiScreen({ navigation, route }) {
 
       const token = await SecureStore.getItemAsync('userToken');
       const isOfflineUser = token && token.startsWith('offline_token_');
-      const online = Boolean(isOnline);
+  const online = Boolean(isOnline && serverAwake);
 
       if (isOfflineUser || !online) {
         repairDB.insert({
@@ -126,11 +126,15 @@ export default function AddTrebaloBiScreen({ navigation, route }) {
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={100}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
       >
-        <ScrollView style={styles.content}>
-          {!isOnline && !isOfflineDemo && (
+        <ScrollView
+          style={styles.content}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ paddingBottom: 24 }}
+        >
+        {!online && !isOfflineDemo && (
             <View style={styles.offlineWarning}>
               <Ionicons name="warning" size={20} color="#ef4444" />
               <Text style={styles.offlineText}>

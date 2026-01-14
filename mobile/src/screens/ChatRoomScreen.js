@@ -25,8 +25,12 @@ const SEND_COLOR = '#0ea5e9';
 
 export default function ChatRoomScreen({ route, navigation }) {
   const { room } = route.params;
-  const { user, isOnline } = useAuth();
-  const isAdmin = ((user?.uloga || user?.role || '') || '').toLowerCase() === 'admin';
+  const { user, isOnline, serverAwake } = useAuth();
+  const normalizedRole = ((user?.uloga || user?.role || '') || '').toLowerCase();
+  const isAdmin = normalizedRole === 'admin';
+  const isManager = normalizedRole === 'menadzer' || normalizedRole === 'manager';
+  const canDelete = isAdmin || isManager;
+  const online = Boolean(isOnline && serverAwake);
   const [roomInfo, setRoomInfo] = useState(room || {});
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
@@ -78,7 +82,7 @@ export default function ChatRoomScreen({ route, navigation }) {
   }, []);
 
   const markUnreadAsRead = useCallback(async (msgs) => {
-    if (!isOnline || !user?._id) return;
+    if (!online || !user?._id) return;
     const myId = user._id || user.id;
     const unread = (msgs || []).filter((m) => {
       if (!m?._id) return false;
@@ -95,12 +99,12 @@ export default function ChatRoomScreen({ route, navigation }) {
         console.log('Mark as read failed', err?.message);
       }
     }
-  }, [isOnline, user]);
+  }, [online, user]);
 
   const loadMessages = useCallback(async () => {
     if (!roomId) return;
     try {
-      if (isOnline) {
+      if (online) {
         const res = await messagesAPI.getByRoom(roomId);
         const data = res.data?.data || res.data || [];
         const normalized = Array.isArray(data) ? data.map(normalizeMessage) : [];
@@ -145,7 +149,7 @@ export default function ChatRoomScreen({ route, navigation }) {
       const cached = messageDB.getByRoom?.(roomId) || [];
       setMessages(sortMessagesAsc(cached.map(normalizeMessage)));
     }
-  }, [roomId, isOnline, normalizeMessage, markUnreadAsRead, sortMessagesAsc, room, user]);
+  }, [roomId, online, normalizeMessage, markUnreadAsRead, sortMessagesAsc, room, user]);
 
   useEffect(() => {
     loadMessages();
@@ -238,6 +242,10 @@ export default function ChatRoomScreen({ route, navigation }) {
   };
 
   const handleDeleteRoom = async () => {
+    if (!canDelete) {
+      Alert.alert('Nedovoljno prava', 'Samo administratori ili menadžeri mogu obrisati sobu.');
+      return;
+    }
     if (!roomId) return;
     setActionsVisible(false);
     Alert.alert(
@@ -266,11 +274,15 @@ export default function ChatRoomScreen({ route, navigation }) {
   };
 
   const handleDelete = async (id) => {
+    if (!canDelete) {
+      Alert.alert('Nedovoljno prava', 'Samo administratori ili menadžeri mogu brisati poruke.');
+      return;
+    }
     const msg = messages.find((m) => m._id === id || m.id === id);
     if (!msg) return;
     setMessages((prev) => prev.filter((m) => m._id !== id && m.id !== id));
     try {
-      if (isOnline && msg._id) {
+      if (online && msg._id) {
         await messagesAPI.delete(msg._id);
       }
       messageDB.remove?.(msg._id || msg.id);
@@ -326,7 +338,7 @@ export default function ChatRoomScreen({ route, navigation }) {
     }
     const msg = item.data || item;
     const mine = (msg.sender?._id || msg.sender || msg.senderId) === (user?._id || user?.id);
-    const canDelete = mine || isAdmin;
+    const canDeleteMessage = canDelete;
     const accent = defaultAccent;
     const msgId = msg._id || msg.id;
     const expanded = msgId && expandedIds.includes(msgId);
@@ -375,7 +387,7 @@ export default function ChatRoomScreen({ route, navigation }) {
                   </View>
                 )}
               </View>
-              {canDelete && (
+              {canDeleteMessage && (
                 <View style={styles.messageActionsRow}>
                   <TouchableOpacity style={styles.deleteButton} onPress={() => handleDelete(msgId)}>
                     <Ionicons name="trash-outline" size={16} color="#ef4444" />
@@ -416,8 +428,8 @@ export default function ChatRoomScreen({ route, navigation }) {
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.select({ ios: 50, android: 10, default: 0 })}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 50 : 0}
       >
         <FlatList
           ref={listRef}
@@ -473,10 +485,12 @@ export default function ChatRoomScreen({ route, navigation }) {
               <Ionicons name="create-outline" size={20} color="#0f172a" />
               <Text style={styles.actionText}>Uredi sobu</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.actionRow} onPress={handleDeleteRoom}>
-              <Ionicons name="trash-outline" size={20} color="#ef4444" />
-              <Text style={[styles.actionText, { color: '#ef4444' }]}>{deletingRoom ? 'Brisanje...' : 'Obrisi sobu'}</Text>
-            </TouchableOpacity>
+            {canDelete && (
+              <TouchableOpacity style={styles.actionRow} onPress={handleDeleteRoom}>
+                <Ionicons name="trash-outline" size={20} color="#ef4444" />
+                <Text style={[styles.actionText, { color: '#ef4444' }]}>{deletingRoom ? 'Brisanje...' : 'Obrisi sobu'}</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity style={styles.actionRow} onPress={() => setActionsVisible(false)}>
               <Ionicons name="close-outline" size={20} color="#0f172a" />
               <Text style={styles.actionText}>Zatvori</Text>

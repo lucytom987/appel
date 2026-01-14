@@ -1,4 +1,4 @@
-﻿import NetInfo from '@react-native-community/netinfo';
+import NetInfo from '@react-native-community/netinfo';
 import * as SecureStore from 'expo-secure-store';
 import api, { elevatorsAPI, servicesAPI, repairsAPI, usersAPI } from './api';
 import { elevatorDB, serviceDB, repairDB, userDB, syncQueue, cleanupOrphans } from '../database/db';
@@ -13,7 +13,7 @@ const ALLOWED_CHECKLIST = [
   'cable_inspection',
 ];
 
-// Normalizira payload prije slanja da spriječi validation/cast greške na backendu
+// Normalizira payload prije slanja da sprijeci validation/cast gre�ke na backendu
 const normalizeServicePayload = (s) => {
   const dodatniServiseri = Array.isArray(s.dodatniServiseri)
     ? s.dodatniServiseri
@@ -57,7 +57,7 @@ const normalizeServicePayload = (s) => {
     sljedeciServis: s.sljedeciServis || undefined,
   };
 
-  // Izbaci undefined polja da ne šaljemo prazne vrijednosti
+  // Izbaci undefined polja da ne �aljemo prazne vrijednosti
   Object.keys(payload).forEach((k) => payload[k] === undefined && delete payload[k]);
   return payload;
 };
@@ -103,7 +103,7 @@ const markConflict = (db, id) => {
   }
 };
 
-// Helper: odluÄi treba li full sync i po potrebi oÄisti lastSync kljuÄ
+// Helper: odluči treba li full sync i po potrebi očisti lastSync ključ
 const shouldForceFullSync = async (key, hasLocalRecordsFn) => {
   try {
     const existing = hasLocalRecordsFn?.() || [];
@@ -140,7 +140,7 @@ export const subscribeToNetworkChanges = (callback) =>
     isOnline = Boolean(state.isConnected && state.isInternetReachable);
     if (callback) callback(isOnline);
     if (!wasOnline && isOnline) {
-      console.log('Online - pokreÄ‡em full sync');
+      console.log('Online - pokrećem full sync');
       (async () => {
         await forceFullNextSync();
         await syncAll();
@@ -164,7 +164,7 @@ const setLastSync = async (key) => {
   }
 };
 
-// OdluÄi treba li periodiÄki forsirati full sync kako bismo uhvatili brisanja
+// Odluči treba li periodički forsirati full sync kako bismo uhvatili brisanja
 const shouldRunPeriodicFull = async (key, maxHours = 6) => {
   try {
     const last = await SecureStore.getItemAsync(key);
@@ -184,7 +184,7 @@ const setLastFull = async (key) => {
   }
 };
 
-  // Primaj full pull na idući sync (briše lastSync/lastFull ključeve)
+  // Primaj full pull na iduci sync (bri�e lastSync/lastFull kljuceve)
 export const forceFullNextSync = async () => {
   const keys = [
     'lastSyncElevators',
@@ -316,7 +316,7 @@ export const syncElevatorsFromServer = async (forceFull = false) => {
         const localDirty = local && (local.sync_status === 'dirty' || local.synced === 0);
 
         if (localDirty && localUpdated > serverUpdated) {
-          return; // zadrÅ¾i noviju lokalnu verziju
+          return; // zadrži noviju lokalnu verziju
         }
 
         const payload = {
@@ -354,7 +354,7 @@ export const syncElevatorsFromServer = async (forceFull = false) => {
       skip += serverElevators.length;
     } while (fetched < total && skip < 5000);
 
-    // Ako je full pull (nema updatedAfter) napravimo reconciliaciju: lokalni zapisi koji nisu na serveru -> oznaÄi kao obrisane (osim local_ i dirty)
+    // Ako je full pull (nema updatedAfter) napravimo reconciliaciju: lokalni zapisi koji nisu na serveru -> označi kao obrisane (osim local_ i dirty)
     if (!last) {
       try {
         const locals = elevatorDB.getAllIncludingDeleted?.() || [];
@@ -378,7 +378,7 @@ export const syncElevatorsFromServer = async (forceFull = false) => {
       }
     }
 
-    // Ako delta nije vratila ništa, forsiraj jedan full pull
+    // Ako delta nije vratila ni�ta, forsiraj jedan full pull
     if (!shouldFullSync && fetched === 0) {
       try {
         if (SecureStore.deleteItemAsync) {
@@ -396,7 +396,7 @@ export const syncElevatorsFromServer = async (forceFull = false) => {
       await setLastFull('lastFullElevators');
     }
 
-    // Recovery: ako delta sync donese manje zapisa od server total, odradi još jedan full pull
+    // Recovery: ako delta sync donese manje zapisa od server total, odradi jo� jedan full pull
     const localCount = (elevatorDB.getAll?.() || []).length;
     if (!forceFull && total && localCount < total) {
       console.log(`Elevators local count (${localCount}) < server total (${total}); forcing full pull once`);
@@ -406,7 +406,7 @@ export const syncElevatorsFromServer = async (forceFull = false) => {
     console.log(`Elevators synced: ${fetched} (total reported: ${total || fetched})`);
     return true;
   } catch (err) {
-    console.log('Greška sync elevators:', err.message);
+    console.log('Gre�ka sync elevators:', err.message);
     return false;
   }
 };
@@ -463,7 +463,7 @@ export const syncElevatorsToServer = async () => {
 
       if (localId.startsWith('local_')) {
         if (pendingDelete) {
-          // Lokalan zapis nikad nije otišao na server - oznaci kao sinkroniziran delete
+          // Lokalan zapis nikad nije oti�ao na server - oznaci kao sinkroniziran delete
           elevatorDB.markSynced(e.id, e.id);
           continue;
         }
@@ -473,7 +473,7 @@ export const syncElevatorsToServer = async () => {
           elevatorDB.markSynced(e.id, serverId);
         }
       } else {
-        // Ako je oznacen kao deleted/pending_delete, pokušaj DELETE
+        // Ako je oznacen kao deleted/pending_delete, poku�aj DELETE
         if (pendingDelete) {
           try {
             await elevatorsAPI.delete(e.id);
@@ -486,7 +486,7 @@ export const syncElevatorsToServer = async () => {
               elevatorDB.markSynced(e.id, e.id);
               continue;
             }
-            console.log('Greška delete elevator', e.id, explainError(err));
+            console.log('Gre�ka delete elevator', e.id, explainError(err));
             continue;
           }
         }
@@ -511,8 +511,8 @@ export const syncElevatorsToServer = async () => {
             if (serverId) elevatorDB.markSynced(e.id, serverId);
             continue;
           }
-          console.log('Greška dohvat server elevator', e.id, explainError(fetchErr));
-          // nastavi s push-om; bolje pokušati nego zapeti
+          console.log('Gre�ka dohvat server elevator', e.id, explainError(fetchErr));
+          // nastavi s push-om; bolje poku�ati nego zapeti
         }
 
         await elevatorsAPI.update(e.id, payload);
@@ -523,7 +523,7 @@ export const syncElevatorsToServer = async () => {
       if (status === 409 || status === 412) {
         markConflict(elevatorDB, e.id);
       }
-      console.log('Greška push elevator', e.id, explainError(err));
+      console.log('Gre�ka push elevator', e.id, explainError(err));
     }
   }
   return true;
@@ -619,7 +619,7 @@ export const syncServicesFromServer = async (forceFull = false) => {
       }
     }
 
-    // Ako je delta sync vratio 0 rezultata, pokušaj jedan full sync (obrisi lastSyncServices)
+    // Ako je delta sync vratio 0 rezultata, poku�aj jedan full sync (obrisi lastSyncServices)
     if (!shouldFullSync && fetched === 0) {
       try {
         if (SecureStore.deleteItemAsync) {
@@ -640,7 +640,7 @@ export const syncServicesFromServer = async (forceFull = false) => {
     console.log(`Services synced: ${fetched} (total reported: ${total || fetched}), lokalno: ${localCount}`);
     return true;
   } catch (err) {
-    console.log('Greška sync services:', err.message);
+    console.log('Gre�ka sync services:', err.message);
     return false;
   }
 };
@@ -649,7 +649,7 @@ export const syncServicesFromServer = async (forceFull = false) => {
 export const syncRepairsFromServer = async () => {
   if (!isOnline) return false;
   try {
-    const periodicFull = await shouldRunPeriodicFull('lastFullRepairs', 1); // češći full sync da pokupimo brisanja (svakih ~1h)
+    const periodicFull = await shouldRunPeriodicFull('lastFullRepairs', 1); // ce�ci full sync da pokupimo brisanja (svakih ~1h)
     const shouldFullSync = periodicFull || (() => {
       try {
         const existing = repairDB.getAll();
@@ -728,7 +728,7 @@ export const syncRepairsFromServer = async () => {
       skip += serverRepairs.length;
     } while (fetched < total && skip < 5000);
 
-    // Ako delta vrati 0, pokuaj full pull
+    // Ako delta vrati 0, poku�aj full pull
     if (!shouldFullSync && fetched === 0) {
       try {
         if (SecureStore.deleteItemAsync) {
@@ -748,7 +748,7 @@ export const syncRepairsFromServer = async () => {
     console.log(`Repairs synced: ${fetched} (total reported: ${total || fetched})`);
     return true;
   } catch (err) {
-    console.log('Greška sync repairs:', err.message);
+    console.log('Gre�ka sync repairs:', err.message);
     return false;
   }
 };
@@ -773,7 +773,7 @@ export const syncServicesToServer = async () => {
         serviceDB.markSynced(s.id, res.data.data._id);
       } else {
         const payload = normalizeServicePayload(s);
-        delete payload.elevatorId; // backend čuva originalni elevatorId
+        delete payload.elevatorId; // backend cuva originalni elevatorId
 
         if (pendingDelete) {
           try {
@@ -787,7 +787,7 @@ export const syncServicesToServer = async () => {
               serviceDB.markSynced(s.id, s.id);
               continue;
             }
-            console.log('Greška delete service', s.id, explainError(err));
+            console.log('Gre�ka delete service', s.id, explainError(err));
             continue;
           }
         }
@@ -811,8 +811,8 @@ export const syncServicesToServer = async () => {
             serviceDB.markSynced(s.id, res.data.data._id);
             continue;
           }
-          console.log('Greška dohvat server service', s.id, explainError(fetchErr));
-          // nastavi, pokušaj update
+          console.log('Gre�ka dohvat server service', s.id, explainError(fetchErr));
+          // nastavi, poku�aj update
         }
 
         if (s.is_deleted) {
@@ -827,9 +827,9 @@ export const syncServicesToServer = async () => {
       if (status === 409 || status === 412) {
         markConflict(serviceDB, s.id);
       }
-      console.log('Greška push service', s.id, explainError(err));
+      console.log('Gre�ka push service', s.id, explainError(err));
       if (err?.response?.data) {
-        console.log('Detalji greške:', err.response.data);
+        console.log('Detalji gre�ke:', err.response.data);
       }
     }
   }
@@ -924,7 +924,7 @@ export const syncRepairsToServer = async () => {
             continue;
           }
           console.log('Greska dohvat server repair', r.id, explainError(fetchErr));
-          // nastavi, pokušaj update
+          // nastavi, poku�aj update
         }
 
         await repairsAPI.update(r.id, {
@@ -972,12 +972,12 @@ export const syncUsersFromServer = async () => {
     userDB.bulkInsert(res.data);
     return true;
   } catch (err) {
-    console.log('Greška sync users:', err.message);
+    console.log('Gre�ka sync users:', err.message);
     return false;
   }
 };
 
-// Public helper: force idući sync da bude full (čisti lastSync/lastFull ključeve)
+// Public helper: force iduci sync da bude full (cisti lastSync/lastFull kljuceve)
 export const primeFullSync = async () => {
   await forceFullNextSync();
 };
@@ -985,7 +985,7 @@ export const primeFullSync = async () => {
 // Master sync
 export const syncAll = async () => {
   if (syncInProgress) {
-    console.log('Sync veÄ‡ u tijeku - preskaÄem');
+    console.log('Sync već u tijeku - preskačem');
     return false;
   }
   syncInProgress = true;
@@ -1011,7 +1011,7 @@ export const syncAll = async () => {
     await syncServicesToServer();
     await syncRepairsToServer();
     await syncElevatorsFromServer();
-    // Ako je broj lokalnih dizala neočekivano mali (npr. Expo dev s praznim cacheom), forsiraj jedan full pull
+    // Ako je broj lokalnih dizala neocekivano mali (npr. Expo dev s praznim cacheom), forsiraj jedan full pull
     const localElevatorCount = (elevatorDB.getAll?.() || []).length;
     if (localElevatorCount > 0 && localElevatorCount < 80) {
       console.log(`Elevators count looks low (${localElevatorCount}), forcing one full pull retry`);
@@ -1030,7 +1030,7 @@ export const syncAll = async () => {
     syncInProgress = false;
     return true;
   } catch (err) {
-    console.error('Greška pri full sync:', err);
+    console.error('Gre�ka pri full sync:', err);
     syncInProgress = false;
     return false;
   }

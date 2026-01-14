@@ -148,8 +148,8 @@ router.post('/', authenticate, async (req, res) => {
 // @route   PUT /api/elevators/:id
 // @route   PUT /api/elevators/:id
 // @desc    Ažuriraj dizalo
-// @access  Private (Menadžer or Admin)
-router.put('/:id', authenticate, checkRole(['menadzer', 'admin']), async (req, res) => {
+// @access  Private (bilo koja uloga)
+router.put('/:id', authenticate, async (req, res) => {
   try {
     const oldElevator = await Elevator.findById(req.params.id).lean();
     
@@ -208,7 +208,7 @@ router.put('/:id', authenticate, checkRole(['menadzer', 'admin']), async (req, r
 
 // @route   DELETE /api/elevators/:id
 // @desc    Obriši dizalo
-// @access  Private (Menadžer or Admin)
+// @access  Private (bilo koja uloga)
 router.delete('/:id', authenticate, checkRole(['menadzer', 'admin']), async (req, res) => {
   try {
     const elevator = await Elevator.findById(req.params.id);

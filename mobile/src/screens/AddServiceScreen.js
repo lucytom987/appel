@@ -37,7 +37,7 @@ export default function AddServiceScreen({ navigation, route }) {
       </View>
     );
   }
-  const { user, isOnline } = useAuth();
+  const { user, isOnline, serverAwake } = useAuth();
   const [isOfflineDemo, setIsOfflineDemo] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -49,8 +49,8 @@ export default function AddServiceScreen({ navigation, route }) {
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [showKolege, setShowKolege] = useState(false);
 
-  // Konvertiraj isOnline u boolean
-  const online = Boolean(isOnline);
+  // Konvertiraj isOnline u boolean i traži backend da je budan
+  const online = Boolean(isOnline && serverAwake);
 
   React.useEffect(() => {
     (async () => {
@@ -337,10 +337,14 @@ export default function AddServiceScreen({ navigation, route }) {
 
       <KeyboardAvoidingView 
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={100}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
       >
-        <ScrollView style={styles.content}>
+        <ScrollView
+          style={styles.content}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ paddingBottom: 24 }}
+        >
         {/* Informacije o dizalu */}
         <View style={styles.elevatorInfo}>
           <Text style={styles.elevatorName}>{elevator?.brojDizala || '?'} - {elevator?.nazivStranke || 'Nepoznato'}</Text>

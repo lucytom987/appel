@@ -21,7 +21,7 @@ import { useAuth } from '../context/AuthContext';
 import { userDB } from '../database/db';
 
 const UserManagementScreen = ({ navigation }) => {
-  const { user, isOnline } = useAuth();
+  const { user, isOnline, serverAwake } = useAuth();
   const { goBack } = navigation;
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -32,23 +32,15 @@ const UserManagementScreen = ({ navigation }) => {
   const [passwordModalVisible, setPasswordModalVisible] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
   const [selectedUser, setSelectedUser] = useState(null);
+  const online = Boolean(isOnline && serverAwake);
 
   useEffect(() => {
     loadUsers();
   }, []);
 
-  // Provjeri je li korisnik admin
-  if (user?.uloga !== 'admin') {
-    return (
-      <View style={styles.centeredContainer}>
-        <Ionicons name="lock-closed" size={64} color="#FF6B6B" />
-        <Text style={styles.errorText}>Samo admin može upravljati korisnicima!</Text>
-      </View>
-    );
-  }
 
   // Provjeri je li korisnik online (offline admin ne može upravljati korisnicima sa servera)
-  if (!isOnline) {
+  if (!online) {
     return (
       <View style={styles.centeredContainer}>
         <Ionicons name="wifi-off" size={64} color="#FF6B6B" />

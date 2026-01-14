@@ -38,7 +38,7 @@ const colorChoices = [
 ];
 
 export default function ChatRoomsScreen({ navigation }) {
-  const { isOnline } = useAuth();
+  const { isOnline, serverAwake } = useAuth();
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -50,6 +50,7 @@ export default function ChatRoomsScreen({ navigation }) {
   const [editingRoom, setEditingRoom] = useState(null);
   const [roomColors, setRoomColors] = useState({});
   const [selectedColorKey, setSelectedColorKey] = useState('');
+  const online = Boolean(isOnline && serverAwake);
 
   const loadRooms = useCallback(async () => {
     setLoading(true);
@@ -266,8 +267,8 @@ export default function ChatRoomsScreen({ navigation }) {
         </View>
         <View style={styles.statsRow}>
           <View style={styles.statPill}>
-            <View style={[styles.statusDot, { backgroundColor: isOnline ? '#22c55e' : '#f97316' }]} />
-            <Text style={styles.statText}>{isOnline ? 'Online' : 'Offline mod'}</Text>
+            <View style={[styles.statusDot, { backgroundColor: online ? '#22c55e' : '#f97316' }]} />
+            <Text style={styles.statText}>{online ? 'Online' : 'Offline mod'}</Text>
           </View>
           <View style={styles.statPill}>
             <Ionicons name="albums-outline" size={16} color="#e2e8f0" />

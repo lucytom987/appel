@@ -20,13 +20,13 @@ import { repairsAPI } from '../services/api';
 
 export default function AddRepairScreen({ navigation, route }) {
   const { elevator } = route.params || {};
-  const { user, isOnline } = useAuth();
+  const { user, isOnline, serverAwake } = useAuth();
   const [isOfflineDemo, setIsOfflineDemo] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isTrebaloBi, setIsTrebaloBi] = useState(false);
 
-  // Konvertiraj isOnline u boolean
-  const online = Boolean(isOnline);
+  // Konvertiraj isOnline u boolean i čekaj da se backend probudi
+  const online = Boolean(isOnline && serverAwake);
 
   // Detektiraj offline demo token da omogući lokalni unos
   React.useEffect(() => {
@@ -199,10 +199,14 @@ export default function AddRepairScreen({ navigation, route }) {
 
       <KeyboardAvoidingView 
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={100}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
       >
-        <ScrollView style={styles.content}>
+        <ScrollView
+          style={styles.content}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ paddingBottom: 24 }}
+        >
         {/* Vrsta prijave: popravak ili "trebalo bi" */}
         <View style={styles.toggleRow}>
           <TouchableOpacity

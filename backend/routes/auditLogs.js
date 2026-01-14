@@ -4,7 +4,7 @@ const AuditLog = require('../models/AuditLog');
 const { authenticate, checkRole } = require('../middleware/auth');
 
 // GET /api/audit-logs - dohvat svih logova s filtrima
-router.get('/', authenticate, checkRole(['admin', 'menadzer']), async (req, res) => {
+router.get('/', authenticate, async (req, res) => {
   try {
     const { userId, action, entityType, startDate, endDate, limit = 100, skip = 0 } = req.query;
 
@@ -35,7 +35,7 @@ router.get('/', authenticate, checkRole(['admin', 'menadzer']), async (req, res)
 });
 
 // GET /api/audit-logs/user/:userId - aktivnosti korisnika
-router.get('/user/:userId', authenticate, checkRole(['admin', 'menadzer']), async (req, res) => {
+router.get('/user/:userId', authenticate, async (req, res) => {
   try {
     const { limit = 50, skip = 0 } = req.query;
     const filter = { korisnikId: req.params.userId };
@@ -57,7 +57,7 @@ router.get('/user/:userId', authenticate, checkRole(['admin', 'menadzer']), asyn
 });
 
 // GET /api/audit-logs/entity/:entityType/:entityId - aktivnosti po entitetu
-router.get('/entity/:entityType/:entityId', authenticate, checkRole(['admin', 'menadzer']), async (req, res) => {
+router.get('/entity/:entityType/:entityId', authenticate, async (req, res) => {
   try {
     const logs = await AuditLog.find({
       entitet: req.params.entityType,
@@ -75,7 +75,7 @@ router.get('/entity/:entityType/:entityId', authenticate, checkRole(['admin', 'm
 });
 
 // DELETE /api/audit-logs/cleanup - briše stare logove (default 90 dana)
-router.delete('/cleanup', authenticate, checkRole(['admin']), async (req, res) => {
+router.delete('/cleanup', authenticate, checkRole(['admin', 'menadzer']), async (req, res) => {
   try {
     const daysToKeep = parseInt(req.query.days, 10) || 90;
     const cutoffDate = new Date();

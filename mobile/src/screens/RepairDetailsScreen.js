@@ -22,7 +22,8 @@ const statusColor = (repair) => {
 export default function RepairDetailsScreen({ route, navigation }) {
   const { repair } = route.params;
   const [repairData, setRepairData] = useState(repair);
-  const { user, isOnline } = useAuth();
+  const { user, isOnline, serverAwake } = useAuth();
+  const online = Boolean(isOnline && serverAwake);
 
   // Na hardverski back vrati na listu popravaka
   useFocusEffect(
@@ -99,8 +100,8 @@ export default function RepairDetailsScreen({ route, navigation }) {
 
     setSaving(true);
     try {
-      const online = Boolean(isOnline);
-      if (!online) {
+      const onlineNow = online;
+      if (!onlineNow) {
         repairDB.update(id, { ...repairData, ...payload, synced: 0, sync_status: 'dirty' });
         setRepairData((prev) => ({ ...prev, ...payload, synced: 0, sync_status: 'dirty' }));
       } else {
@@ -345,6 +346,5 @@ const styles = StyleSheet.create({
     borderRadius: ms(8),
   },
 });
-
 
 

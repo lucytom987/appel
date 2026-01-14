@@ -96,7 +96,7 @@ router.get('/:id', authenticate, async (req, res) => {
 });
 
 // POST /api/simcards - kreiraj
-router.post('/', authenticate, checkRole(['admin', 'menadzer']), async (req, res) => {
+router.post('/', authenticate, async (req, res) => {
   try {
     const simcard = new SimCard(req.body);
     await simcard.save();
@@ -126,7 +126,7 @@ router.post('/', authenticate, checkRole(['admin', 'menadzer']), async (req, res
 });
 
 // PUT /api/simcards/:id - ažuriraj
-router.put('/:id', authenticate, checkRole(['admin', 'menadzer']), async (req, res) => {
+router.put('/:id', authenticate, async (req, res) => {
   try {
     const oldSimCard = await SimCard.findById(req.params.id).lean();
     if (!oldSimCard) {
@@ -165,7 +165,7 @@ router.put('/:id', authenticate, checkRole(['admin', 'menadzer']), async (req, r
 });
 
 // DELETE /api/simcards/:id - brisanje
-router.delete('/:id', authenticate, checkRole(['admin']), async (req, res) => {
+router.delete('/:id', authenticate, checkRole(['menadzer', 'admin']), async (req, res) => {
   try {
     const simcard = await SimCard.findById(req.params.id);
     if (!simcard) {

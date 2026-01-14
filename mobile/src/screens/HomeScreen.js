@@ -32,7 +32,7 @@ const GAUGE_NEEDLE_WIDTH = 4;
 const GAUGE_NEEDLE_HEIGHT = GAUGE_RADIUS - 6;
 
 export default function HomeScreen({ navigation }) {
-  const { user, isOnline, logout } = useAuth();
+  const { user, isOnline, serverAwake, logout } = useAuth();
   const [offlineDemo, setOfflineDemo] = useState(false);
   const serviceGauge = useRef(new Animated.Value(0));
   const [unreadCount, setUnreadCount] = useState(0);
@@ -56,6 +56,7 @@ export default function HomeScreen({ navigation }) {
 
   // Konvertiraj isOnline u boolean eksplicitno
   const online = Boolean(isOnline);
+  const serverReady = serverAwake === null ? null : Boolean(serverAwake);
 
   const fetchUnread = useCallback(async () => {
     if (!online) {
@@ -270,6 +271,21 @@ export default function HomeScreen({ navigation }) {
               {online ? 'Online' : 'Offline'}
             </Text>
           </View>
+          <View style={[styles.statusContainer, { marginTop: 4 }]}>
+            <View
+              style={[
+                styles.statusDot,
+                { backgroundColor: serverReady ? '#10b981' : (serverReady === null ? '#f59e0b' : '#ef4444') },
+              ]}
+            />
+            <Text style={styles.statusText}>
+              {serverReady
+                ? 'Server ON'
+                : serverReady === null
+                  ? 'Provjeravam server...'
+                  : 'Server se budi (Render)'}
+            </Text>
+          </View>
         </View>
         <View style={styles.headerButtons}>
           <TouchableOpacity 
@@ -307,6 +323,14 @@ export default function HomeScreen({ navigation }) {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
+        {!serverReady && (
+          <View style={styles.serverWarning}>
+            <Ionicons name="time-outline" size={18} color="#f59e0b" />
+            <Text style={styles.serverWarningText}>
+              Server se budi (Render free tier). Čitanje je dostupno, uređivanje čeka "Server ON".
+            </Text>
+          </View>
+        )}
         {/* Stats Cards */}
         <View style={styles.statsGrid}>
           <TouchableOpacity 
@@ -713,4 +737,24 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
   },
+  serverWarning: {
+    backgroundColor: '#fffbeb',
+    borderWidth: 1,
+    borderColor: '#fef3c7',
+    margin: 15,
+    marginTop: 8,
+    borderRadius: 10,
+    padding: 12,
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'center',
+  },
+  serverWarningText: {
+    flex: 1,
+    color: '#92400e',
+    fontSize: rf(13, 11.5, 20),
+    lineHeight: 18,
+  },
 });
+
+

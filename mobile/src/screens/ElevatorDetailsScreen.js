@@ -37,13 +37,16 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
       </SafeAreaView>
     );
   }
-  const { user, isOnline } = useAuth();
+  const { user, isOnline, serverAwake } = useAuth();
+  const userRole = ((user?.uloga || user?.role || '') || '').toLowerCase();
+  const canDelete = userRole === 'admin' || userRole === 'menadzer' || userRole === 'manager';
   const [activeTab, setActiveTab] = useState('info'); // info, services, repairs
   const [services, setServices] = useState([]);
   const [repairs, setRepairs] = useState([]);
   const [checklistHistory, setChecklistHistory] = useState({});
   const [groupElevators, setGroupElevators] = useState([]); // sva dizala na adresi
   const [deletingService, setDeletingService] = useState(null);
+  const online = Boolean(isOnline && serverAwake);
   
   const parseDateSafe = (value) => {
     if (!value) return null;
@@ -207,7 +210,7 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
 
 
   const handleAddService = () => {
-    if (!isOnline) {
+    if (!online) {
       Alert.alert('Offline', 'Kreiranje servisa moguće samo online');
       return;
     }
@@ -215,7 +218,7 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
   };
 
   const handleReportFault = () => {
-    if (!isOnline) {
+    if (!online) {
       Alert.alert('Offline', 'Prijavljivanje kvara moguće samo online');
       return;
     }
@@ -227,6 +230,11 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
   };
 
   const handleDeleteService = (service) => {
+    if (!canDelete) {
+      Alert.alert('Nedovoljno prava', 'Samo administratori ili menadžeri mogu obrisati servis.');
+      return;
+    }
+
     const backendId = service?._id || service?.id;
     if (!backendId) {
       Alert.alert('Greška', 'Nije moguće obrisati: nedostaje ID servisa.');
@@ -425,10 +433,11 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
                 <Text style={styles.historyDate}>
                   {serviserSurname ? `${dateLabel} · ${serviserSurname}` : dateLabel}
                 </Text>
-                <View style={styles.historyHeaderRight}>
-                  <View style={[styles.historyBadge, { backgroundColor: '#10b981' }]}>
-                    <Text style={styles.historyBadgeText}>Obavljen</Text>
-                  </View>
+              <View style={styles.historyHeaderRight}>
+                <View style={[styles.historyBadge, { backgroundColor: '#10b981' }]}>
+                  <Text style={styles.historyBadgeText}>Obavljen</Text>
+                </View>
+                {canDelete && (
                   <TouchableOpacity
                     style={styles.historyDeleteButton}
                     onPress={() => handleDeleteService(service)}
@@ -436,7 +445,8 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
                   >
                     <Ionicons name="trash-outline" size={18} color="#ef4444" />
                   </TouchableOpacity>
-                </View>
+                )}
+              </View>
               </View>
 
               {serviceNotes && (

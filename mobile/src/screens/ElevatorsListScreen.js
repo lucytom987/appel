@@ -15,12 +15,13 @@ import { syncAll, primeFullSync } from '../services/syncService';
 import { useAuth } from '../context/AuthContext';
 
 export default function ElevatorsListScreen({ navigation }) {
-  const { isOnline } = useAuth();
+  const { isOnline, serverAwake } = useAuth();
   const [elevators, setElevators] = useState([]);
   const [filteredElevators, setFilteredElevators] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState('aktivan'); // aktivan, neaktivan
+  const online = Boolean(isOnline && serverAwake);
 
   useEffect(() => {
     loadElevators();
@@ -104,8 +105,8 @@ export default function ElevatorsListScreen({ navigation }) {
   };
 
   const onRefresh = async () => {
-    if (!isOnline) {
-      Alert.alert('Offline', 'Nema internet veze za sinkronizaciju');
+    if (!online) {
+      Alert.alert('Offline', 'Nema internet veze ili se server budi');
       return;
     }
 
@@ -244,7 +245,7 @@ export default function ElevatorsListScreen({ navigation }) {
       />
 
       {/* FAB - Dodaj dizalo */}
-      {isOnline && (
+      {online && (
         <TouchableOpacity
           style={styles.fab}
           onPress={() => navigation.navigate('AddElevator')}

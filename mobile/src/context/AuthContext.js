@@ -1,6 +1,7 @@
-import React, { createContext, useState, useEffect, useContext } from 'react';
+import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
+import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
-import { authAPI } from '../services/api';
+import { authAPI, API_URL } from '../services/api';
 import { initDatabase, resetDatabase } from '../database/db';
 import {
   syncAll,
@@ -16,6 +17,13 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(false);
+  const [serverAwake, setServerAwake] = useState(null); // null = nepoznato, false = spava, true = spreman
+  const serverProbeRef = useRef(null);
+  const userRef = useRef(null);
+
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
 
   useEffect(() => {
     initializeApp();
@@ -23,13 +31,74 @@ export const AuthProvider = ({ children }) => {
     const unsubscribe = subscribeToNetworkChanges((online) => {
       setIsOnline(online);
       console.log(online ? 'Online' : 'Offline');
+      if (online) {
+        wakeBackendAndSync(Boolean(userRef.current));
+      } else {
+        setServerAwake(false);
+      }
     });
 
     return () => {
       unsubscribe();
       stopAutoSync();
+      stopServerProbe();
     };
   }, []);
+
+  const HEALTH_URL = API_URL.replace(/\/api\/?$/, '/');
+  const SERVER_PING_TIMEOUT = 4000;
+
+  const stopServerProbe = () => {
+    if (serverProbeRef.current) {
+      clearInterval(serverProbeRef.current);
+      serverProbeRef.current = null;
+    }
+  };
+
+  const pingBackend = async () => {
+    try {
+      const onlineNow = await checkOnlineStatus();
+      setIsOnline(onlineNow);
+      if (!onlineNow) {
+        setServerAwake(false);
+        return false;
+      }
+
+      const res = await axios.get(HEALTH_URL, { timeout: SERVER_PING_TIMEOUT });
+      const ok = res?.status && res.status < 500;
+      setServerAwake(ok);
+      return ok;
+    } catch (err) {
+      setServerAwake(false);
+      return false;
+    }
+  };
+
+  const scheduleServerProbe = (shouldSyncAfterWake = false) => {
+    if (serverProbeRef.current) return;
+    serverProbeRef.current = setInterval(async () => {
+      const awake = await pingBackend();
+      if (awake) {
+        stopServerProbe();
+        if (shouldSyncAfterWake) {
+          syncAll().catch((err) => console.log('Background sync error:', err?.message || err));
+          startAutoSync();
+        }
+      }
+    }, 7000);
+  };
+
+  const wakeBackendAndSync = async (shouldSyncAfterWake = false) => {
+    const awake = await pingBackend();
+    if (awake) {
+      if (shouldSyncAfterWake) {
+        syncAll().catch((err) => console.log('Background sync error:', err?.message || err));
+        startAutoSync();
+      }
+    } else if (shouldSyncAfterWake) {
+      scheduleServerProbe(true);
+    }
+  };
 
   const initializeApp = async () => {
     try {
@@ -38,6 +107,7 @@ export const AuthProvider = ({ children }) => {
 
       const online = await checkOnlineStatus();
       setIsOnline(online);
+      setServerAwake(online ? null : false);
 
       const token = await SecureStore.getItemAsync('userToken');
       const userData = await SecureStore.getItemAsync('userData');
@@ -50,12 +120,8 @@ export const AuthProvider = ({ children }) => {
 
       if (token && userData) {
         setUser(JSON.parse(userData));
-
-        if (online) {
-          console.log('Auto-login - pokrecem inicijalni sync...');
-          await syncAll().catch((err) => console.log('Sync error:', err));
-          startAutoSync();
-        }
+        // Backend wake-up i sync idu u pozadini da se UI ne blokira na cold start-u
+        wakeBackendAndSync(true);
       } else {
         console.log('Nema tokena - login je obavezan');
       }
@@ -103,9 +169,8 @@ export const AuthProvider = ({ children }) => {
       setUser(korisnik);
       setLoading(false);
 
-      console.log('Pokrecem sync nakon logina...');
-      syncAll().catch((err) => console.log('Background sync error:', err));
-      startAutoSync();
+      console.log('Provjera backend statusa nakon logina...');
+      wakeBackendAndSync(true);
 
       return { success: true };
     } catch (error) {
@@ -122,11 +187,13 @@ export const AuthProvider = ({ children }) => {
     try {
       setLoading(true);
       stopAutoSync();
+      stopServerProbe();
       await SecureStore.deleteItemAsync('userToken');
       await SecureStore.deleteItemAsync('userRefreshToken');
       await SecureStore.deleteItemAsync('userData');
       resetDatabase();
       setUser(null);
+      setServerAwake(null);
     } catch (error) {
       console.error('Logout greska:', error);
     } finally {
@@ -139,6 +206,7 @@ export const AuthProvider = ({ children }) => {
     setUser,
     loading,
     isOnline,
+    serverAwake,
     login,
     logout,
   };

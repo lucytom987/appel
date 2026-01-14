@@ -21,7 +21,9 @@ import ms from '../utils/scale';
 
 export default function EditTrebaloBiScreen({ route, navigation }) {
   const { repair } = route.params || {};
-  const { isOnline } = useAuth();
+  const { user, isOnline, serverAwake } = useAuth();
+  const userRole = ((user?.uloga || user?.role || '') || '').toLowerCase();
+  const canDelete = userRole === 'admin' || userRole === 'menadzer' || userRole === 'manager';
 
   useFocusEffect(
     useCallback(() => {
@@ -53,6 +55,10 @@ export default function EditTrebaloBiScreen({ route, navigation }) {
   const [saving, setSaving] = useState(false);
 
   const handleDelete = () => {
+    if (!canDelete) {
+      Alert.alert('Nedovoljno prava', 'Samo administratori ili menadžeri mogu brisati zapise.');
+      return;
+    }
     const id = baseRepair?._id || baseRepair?.id;
     if (!id) {
       Alert.alert('Greska', 'Nije moguce obrisati zapis.');
@@ -66,7 +72,7 @@ export default function EditTrebaloBiScreen({ route, navigation }) {
         onPress: async () => {
           setSaving(true);
           try {
-            const online = Boolean(isOnline);
+            const online = Boolean(isOnline && serverAwake);
             if (online && !String(id).startsWith('local_')) {
               try {
                 await repairsAPI.delete(id);
@@ -115,7 +121,7 @@ export default function EditTrebaloBiScreen({ route, navigation }) {
 
     setSaving(true);
     try {
-      const online = Boolean(isOnline);
+      const online = Boolean(isOnline && serverAwake);
       if (online) {
         const res = await repairsAPI.update(id, payload);
         const updated = res.data?.data || res.data || {};
@@ -147,8 +153,16 @@ export default function EditTrebaloBiScreen({ route, navigation }) {
         <View style={{ width: 24 }} />
       </View>
 
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={80}>
-        <ScrollView style={styles.content}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 80 : 0}
+      >
+        <ScrollView
+          style={styles.content}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ paddingBottom: 24 }}
+        >
           <View style={styles.card}>
             <Text style={styles.label}>Opis *</Text>
             <TextInput

@@ -187,7 +187,7 @@ router.put('/:id', authenticate, async (req, res) => {
 });
 
 // DELETE /api/chatrooms/:id - brisanje
-router.delete('/:id', authenticate, checkRole(['admin']), async (req, res) => {
+router.delete('/:id', authenticate, checkRole(['admin', 'menadzer']), async (req, res) => {
   try {
     const chatroom = await ChatRoom.findById(req.params.id);
     if (!chatroom) {
@@ -218,7 +218,7 @@ router.delete('/:id', authenticate, checkRole(['admin']), async (req, res) => {
 });
 
 // POST /api/chatrooms/:id/members - dodaj člana
-router.post('/:id/members', authenticate, checkRole(['admin', 'menadzer']), async (req, res) => {
+router.post('/:id/members', authenticate, async (req, res) => {
   try {
     const { userId } = req.body;
     const chatroom = await ChatRoom.findById(req.params.id);
@@ -242,7 +242,7 @@ router.post('/:id/members', authenticate, checkRole(['admin', 'menadzer']), asyn
 });
 
 // DELETE /api/chatrooms/:id/members/:userId - ukloni člana
-router.delete('/:id/members/:userId', authenticate, checkRole(['admin', 'menadzer']), async (req, res) => {
+router.delete('/:id/members/:userId', authenticate, async (req, res) => {
   try {
     const chatroom = await ChatRoom.findById(req.params.id);
     if (!chatroom) {

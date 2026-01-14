@@ -11,7 +11,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as SecureStore from 'expo-secure-store';
@@ -21,6 +21,7 @@ import { servicesAPI, usersAPI } from '../services/api';
 
 export default function AddServiceScreen({ navigation, route }) {
   const { elevator } = route.params || {};
+  const insets = useSafeAreaInsets();
   if (!elevator) {
     return (
       <View style={styles.container}>
@@ -335,15 +336,15 @@ export default function AddServiceScreen({ navigation, route }) {
         <View style={{ width: 24 }} />
       </View>
 
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={(insets?.top || 0) + 80}
       >
         <ScrollView
           style={styles.content}
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ paddingBottom: 24 }}
+          contentContainerStyle={{ paddingBottom: Math.max((insets?.bottom || 0) + 200, 240) }}
         >
         {/* Informacije o dizalu */}
         <View style={styles.elevatorInfo}>

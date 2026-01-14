@@ -338,13 +338,13 @@ export default function AddServiceScreen({ navigation, route }) {
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={(insets?.top || 0) + 80}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={(insets?.top || 0) + 60}
       >
         <ScrollView
           style={styles.content}
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ paddingBottom: Math.max((insets?.bottom || 0) + 200, 240) }}
+          contentContainerStyle={{ paddingBottom: Math.max((insets?.bottom || 0) + 80, 120) }}
         >
         {/* Informacije o dizalu */}
         <View style={styles.elevatorInfo}>

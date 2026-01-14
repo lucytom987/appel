@@ -11,6 +11,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   BackHandler,
+  Keyboard,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -26,6 +27,7 @@ export default function EditElevatorScreen({ navigation, route }) {
   const { elevator } = route.params;
   const insets = useSafeAreaInsets();
   const { isOnline, serverAwake, user } = useAuth();
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [loading, setLoading] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [geocoding, setGeocoding] = useState(false);
@@ -474,6 +476,17 @@ export default function EditElevatorScreen({ navigation, route }) {
     return () => sub.remove();
   }, [navigation]);
 
+  useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardDidShow', (e) => {
+      setKeyboardHeight(e?.endCoordinates?.height || 0);
+    });
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardHeight(0));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Header */}
@@ -497,12 +510,12 @@ export default function EditElevatorScreen({ navigation, route }) {
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={(insets?.top || 0) + 80}
+        keyboardVerticalOffset={(insets?.top || 0) + 50}
       >
         <ScrollView
           style={styles.content}
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ paddingBottom: Math.max((insets?.bottom || 0) + 200, 240) }}
+          contentContainerStyle={{ paddingBottom: (insets?.bottom || 0) + 40 + keyboardHeight }}
         >
         {/* Offline warning */}
         {!online && (

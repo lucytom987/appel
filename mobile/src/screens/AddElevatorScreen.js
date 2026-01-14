@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Keyboard,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,6 +25,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 export default function AddElevatorScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const { isOnline, serverAwake } = useAuth();
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [loading, setLoading] = useState(false);
   const [geocoding, setGeocoding] = useState(false);
   const [mapPickerVisible, setMapPickerVisible] = useState(false);
@@ -325,6 +327,17 @@ export default function AddElevatorScreen({ navigation }) {
     }
   };
 
+  useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardDidShow', (e) => {
+      setKeyboardHeight(e?.endCoordinates?.height || 0);
+    });
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardHeight(0));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Header */}
@@ -339,12 +352,12 @@ export default function AddElevatorScreen({ navigation }) {
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={(insets?.top || 0) + 80}
+        keyboardVerticalOffset={(insets?.top || 0) + 50}
       >
         <ScrollView
           style={styles.content}
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ paddingBottom: Math.max((insets?.bottom || 0) + 200, 240) }}
+          contentContainerStyle={{ paddingBottom: (insets?.bottom || 0) + 40 + keyboardHeight }}
         >
         {/* Offline warning */}
         {!online && (

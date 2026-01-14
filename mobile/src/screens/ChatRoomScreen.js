@@ -12,8 +12,9 @@ import {
   Modal,
   Alert,
   ActivityIndicator,
+  Keyboard,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { messagesAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -26,6 +27,7 @@ const SEND_COLOR = '#0ea5e9';
 export default function ChatRoomScreen({ route, navigation }) {
   const { room } = route.params;
   const { user, isOnline, serverAwake } = useAuth();
+  const insets = useSafeAreaInsets();
   const normalizedRole = ((user?.uloga || user?.role || '') || '').toLowerCase();
   const isAdmin = normalizedRole === 'admin';
   const isManager = normalizedRole === 'menadzer' || normalizedRole === 'manager';
@@ -36,6 +38,7 @@ export default function ChatRoomScreen({ route, navigation }) {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [expandedIds, setExpandedIds] = useState([]);
   const [actionsVisible, setActionsVisible] = useState(false);
   const [editVisible, setEditVisible] = useState(false);
@@ -328,6 +331,22 @@ export default function ChatRoomScreen({ route, navigation }) {
     return result;
   }, [messages, formatDateHeading]);
 
+  useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardDidShow', (e) => {
+      setKeyboardHeight(e?.endCoordinates?.height || 0);
+    });
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardHeight(0));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    // Scroll na dno kad se uđe ili kad stignu poruke
+    scrollToBottom();
+  }, [roomId]);
+
   const renderItem = ({ item }) => {
     if (item.type === 'date') {
       return (
@@ -428,15 +447,20 @@ export default function ChatRoomScreen({ route, navigation }) {
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 50 : 0}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? (insets?.top || 0) + 6 : 0}
       >
         <FlatList
           ref={listRef}
           data={decoratedMessages}
           keyExtractor={(item, index) => item.type === 'date' ? item.id : item._id || item.id || `msg-${index}`}
           renderItem={renderItem}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[
+            styles.listContent,
+            {
+              paddingBottom: (insets?.bottom || 0) + Math.max(0, keyboardHeight - 90),
+            },
+          ]}
           onContentSizeChange={scrollToBottom}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           ListEmptyComponent={
@@ -448,7 +472,14 @@ export default function ChatRoomScreen({ route, navigation }) {
           }
         />
 
-        <View style={styles.inputBar}>
+        <View
+          style={[
+            styles.inputBar,
+            {
+              paddingBottom: (insets?.bottom || 0),
+            },
+          ]}
+        >
           <View style={styles.inputWrapper}>
             <TextInput
               style={styles.input}
@@ -591,7 +622,7 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 24, fontWeight: '800', color: '#e2e8f0' },
   headerSubtitle: { marginTop: 2, color: '#e2e8f0', fontSize: 14 },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  listContent: { padding: 12, paddingBottom: 150, paddingTop: 10 },
+  listContent: { padding: 12, paddingBottom: 16, paddingTop: 10 },
   dateDivider: {
     alignSelf: 'center',
     paddingHorizontal: 14,
@@ -646,32 +677,31 @@ const styles = StyleSheet.create({
   inputBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: '#f8fafc',
-    borderTopWidth: 1,
-    borderTopColor: '#e2e8f0',
-    gap: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 0,
+    backgroundColor: 'transparent',
+    borderTopWidth: 0,
+    gap: 8,
   },
   inputWrapper: {
     flex: 1,
     backgroundColor: '#fff',
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#e2e8f0',
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 1,
   },
   input: {
-    minHeight: 34,
-    maxHeight: 120,
+    minHeight: 30,
+    maxHeight: 100,
     fontSize: 16,
     color: '#0f172a',
   },
   sendButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     backgroundColor: '#0ea5e9',
     alignItems: 'center',
     justifyContent: 'center',

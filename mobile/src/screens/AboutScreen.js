@@ -11,8 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function AboutScreen({ navigation }) {
-  const currentVersion = '1.3';
-  const currentBuild = '6';
+  const currentVersion = '21.1.2026';
   const [versionTapCount, setVersionTapCount] = React.useState(0);
 
   const handleVersionPress = () => {
@@ -46,7 +45,7 @@ export default function AboutScreen({ navigation }) {
           <Text style={styles.appTagline}>Aplikacija za upravljanje dizalima</Text>
           <TouchableOpacity onPress={handleVersionPress} activeOpacity={0.8} style={styles.versionBadge}>
             <Text style={styles.versionText}>
-              v{currentVersion} • Build {currentBuild}
+              v{currentVersion}
             </Text>
           </TouchableOpacity>
         </View>

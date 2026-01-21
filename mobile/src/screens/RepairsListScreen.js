@@ -34,7 +34,7 @@ const buildElevatorDisplay = (elevator) => {
   return { primary, secondary, extra };
 };
 
-export default function RepairsListScreen({ navigation }) {
+export default function RepairsListScreen({ navigation, route }) {
   const [repairs, setRepairs] = useState([]);
   const [filteredRepairs, setFilteredRepairs] = useState([]);
   const [trebaloBiList, setTrebaloBiList] = useState([]);
@@ -135,6 +135,18 @@ export default function RepairsListScreen({ navigation }) {
     return unsubscribe;
   }, [navigation, loadRepairs]);
 
+  // Ako se vraćamo iz detalja s traženim odabirom liste, postavi ga
+  useEffect(() => {
+    const desiredList = route?.params?.activeList;
+    if (desiredList === 'trebalo' || desiredList === 'repairs') {
+      setActiveList(desiredList);
+    }
+    const desiredFilter = route?.params?.filter;
+    if (desiredFilter === 'pending' || desiredFilter === 'completed') {
+      setFilter(desiredFilter);
+    }
+  }, [route?.params?.activeList, route?.params?.filter]);
+
   // Override hardware back to uvijek vrati na Home
   useEffect(() => {
     const handler = () => {
@@ -171,6 +183,8 @@ export default function RepairsListScreen({ navigation }) {
   useEffect(() => {
     applyFilter();
   }, [applyFilter]);
+
+  // Memoriranje pozicije scrolla je uklonjeno na zahtjev; lista se ponaša standardno
 
   const getStatusColor = (item) => {
     if (item?.trebaloBi) return '#f59e0b';
@@ -238,7 +252,14 @@ export default function RepairsListScreen({ navigation }) {
     return (
       <TouchableOpacity
         style={[styles.repairCard, { borderColor: getStatusColor(item) }]}
-        onPress={() => navigation.navigate(isTrebalo ? 'TrebaloBiDetails' : 'RepairDetails', { repair: item })}
+        onPress={() => navigation.navigate(
+          isTrebalo ? 'TrebaloBiDetails' : 'RepairDetails',
+          {
+            repair: item,
+            returnTo: isTrebalo ? 'trebalo' : 'repairs',
+            filter,
+          }
+        )}
         activeOpacity={0.8}
       >
         <View style={styles.repairContent}>

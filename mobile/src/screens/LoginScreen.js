@@ -13,7 +13,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import * as SecureStore from 'expo-secure-store';
 
-const APP_VERSION = '14.01.25';
+const APP_VERSION = '21.1.2026';
 
 export default function LoginScreen() {
   const { login, loading, setUser } = useAuth();

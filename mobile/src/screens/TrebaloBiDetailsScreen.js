@@ -14,14 +14,14 @@ const formatDate = (value) => {
 };
 
 export default function TrebaloBiDetailsScreen({ route, navigation }) {
-  const { repair } = route.params || {};
+  const { repair, returnTo } = route.params || {};
   const [data, setData] = useState(repair || {});
   const [saving, setSaving] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
       const onBack = () => {
-        navigation.navigate('Repairs');
+        navigation.navigate('Repairs', { activeList: returnTo || 'trebalo' });
         return true;
       };
       const sub = BackHandler.addEventListener('hardwareBackPress', onBack);
@@ -97,7 +97,7 @@ export default function TrebaloBiDetailsScreen({ route, navigation }) {
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <View style={styles.fakeHeader}>
-        <TouchableOpacity onPress={() => navigation.navigate('Repairs')} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => navigation.navigate('Repairs', { activeList: returnTo || 'trebalo' })} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#1f2937" />
         </TouchableOpacity>
       </View>

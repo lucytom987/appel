@@ -20,7 +20,7 @@ const statusColor = (repair) => {
 };
 
 export default function RepairDetailsScreen({ route, navigation }) {
-  const { repair } = route.params;
+  const { repair, returnTo = 'repairs', filter } = route.params || {};
   const [repairData, setRepairData] = useState(repair);
   const { user, isOnline, serverAwake } = useAuth();
   const online = Boolean(isOnline && serverAwake);
@@ -29,7 +29,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
   useFocusEffect(
     useCallback(() => {
       const onBack = () => {
-        navigation.navigate('Repairs');
+        navigation.navigate('Repairs', { activeList: returnTo, filter });
         return true;
       };
       const sub = BackHandler.addEventListener('hardwareBackPress', onBack);
@@ -111,7 +111,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
         setRepairData((prev) => ({ ...prev, ...updated, synced: 1, sync_status: 'synced' }));
       }
       Alert.alert('Spremljeno', 'Promjene su spremljene', [
-        { text: 'OK', onPress: () => navigation.navigate('Repairs') },
+        { text: 'OK', onPress: () => navigation.navigate('Repairs', { activeList: returnTo, filter }) },
       ]);
     } catch (e) {
       Alert.alert('Greška', e?.message || 'Nije moguće spremiti promjene');
@@ -123,7 +123,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.navigate('Repairs')}>
+        <TouchableOpacity onPress={() => navigation.navigate('Repairs', { activeList: returnTo, filter })}>
           <Ionicons name="arrow-back" size={24} color="#1f2937" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Detalji popravka</Text>

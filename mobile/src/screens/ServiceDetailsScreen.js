@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, BackHandler } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { elevatorDB, userDB, serviceDB } from '../database/db';
@@ -9,6 +9,17 @@ export default function ServiceDetailsScreen({ route, navigation }) {
   const [service, setService] = useState(routeService);
 
   const serviceId = routeService?._id || routeService?.id;
+
+  useFocusEffect(
+    useCallback(() => {
+      const onBack = () => {
+        navigation.navigate('Services');
+        return true;
+      };
+      const sub = BackHandler.addEventListener('hardwareBackPress', onBack);
+      return () => sub.remove();
+    }, [navigation])
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -112,7 +123,7 @@ export default function ServiceDetailsScreen({ route, navigation }) {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+        <TouchableOpacity onPress={() => navigation.navigate('Services')}>
           <Ionicons name="arrow-back" size={24} color="#1f2937" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Detalji servisa</Text>

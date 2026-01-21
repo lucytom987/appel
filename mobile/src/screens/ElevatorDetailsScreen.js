@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Alert,
   Linking,
+  Modal,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -45,6 +46,7 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
   const [repairs, setRepairs] = useState([]);
   const [checklistHistory, setChecklistHistory] = useState({});
   const [groupElevators, setGroupElevators] = useState([]); // sva dizala na adresi
+  const [groupModalVisible, setGroupModalVisible] = useState(false);
   const [deletingService, setDeletingService] = useState(null);
   const online = Boolean(isOnline && serverAwake);
   
@@ -126,14 +128,15 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
       computeChecklistHistory(sortedServices);
 
       // Grupiraj dizala na istoj adresi (isti brojUgovora + nazivStranke + ulica + mjesto)
+      const normalize = (str) => (str || '').toString().trim().toLowerCase();
       const all = elevatorDB.getAll();
-      const grouped = Array.isArray(all) ? all.filter(e =>
-        e &&
-        e.brojUgovora === elevator.brojUgovora &&
-        e.nazivStranke === elevator.nazivStranke &&
-        e.ulica === elevator.ulica &&
-        e.mjesto === elevator.mjesto
-      ).sort((a,b) => (a?.brojDizala || '').localeCompare(b?.brojDizala || '')) : [];
+      const grouped = Array.isArray(all) ? all.filter(e => {
+        if (!e) return false;
+        const sameAddress = normalize(e.ulica) === normalize(elevator.ulica)
+          && normalize(e.mjesto) === normalize(elevator.mjesto);
+        const sameClient = normalize(e.nazivStranke) === normalize(elevator.nazivStranke);
+        return sameAddress && sameClient;
+      }).sort((a,b) => (a?.brojDizala || '').localeCompare(b?.brojDizala || '')) : [];
       setGroupElevators(grouped);
     } catch (error) {
       console.error('Greška pri učitavanju podataka:', error);
@@ -561,22 +564,38 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
 
       {groupElevators.length > 0 && (
         <View style={styles.groupBlock}>
-          <Text style={styles.sectionTitle}>Dizala na adresi ({groupElevators.length})</Text>
-          <View style={styles.elevatorsInline}>
-            {groupElevators.map((e) => {
-              const active = e.id === elevator.id || e._id === elevator.id;
-              return (
-                <TouchableOpacity
-                  key={e.id}
-                  disabled={active}
-                  style={[styles.elevatorBadge, active && styles.elevatorBadgeActive]}
-                  onPress={() => !active && navigation.navigate('ElevatorDetails', { elevator: e })}
-                >
-                  <Text style={[styles.elevatorBadgeText, active && styles.elevatorBadgeTextActive]}>{e.brojDizala || '?'}</Text>
-                </TouchableOpacity>
-              );
-            })}
+          <View style={styles.groupHeaderRow}>
+            <Text style={styles.sectionTitle}>Dizala na adresi ({groupElevators.length})</Text>
           </View>
+
+          {groupElevators.length <= 5 ? (
+            <View style={[styles.elevatorsInline, { marginTop: 6 }]}>
+              {groupElevators.map((e) => {
+                const active = e.id === elevator.id || e._id === elevator.id;
+                return (
+                  <TouchableOpacity
+                    key={e.id}
+                    disabled={active}
+                    style={[styles.elevatorBadge, active && styles.elevatorBadgeActive]}
+                    onPress={() => !active && navigation.navigate('ElevatorDetails', { elevator: e })}
+                  >
+                    <Text style={[styles.elevatorBadgeText, active && styles.elevatorBadgeTextActive]}>{e.brojDizala || '?'}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          ) : (
+            <View style={[styles.elevatorsInline, { flexWrap: 'nowrap', alignItems: 'center', marginTop: 8 }]}>
+              <View style={styles.currentBadge}>
+                <Ionicons name="checkmark-circle" size={14} color="#10b981" />
+                <Text style={styles.currentBadgeText}>{elevator.brojDizala || 'Aktivno dizalo'}</Text>
+              </View>
+              <TouchableOpacity onPress={() => setGroupModalVisible(true)} style={[styles.moreButton, { marginLeft: 6 }]}>
+                <Ionicons name="list" size={16} color="#2563eb" />
+                <Text style={styles.moreButtonText}>Prikaži sve</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       )}
 
@@ -617,6 +636,53 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
         {activeTab === 'services' && renderServicesTab()}
         {activeTab === 'repairs' && renderRepairsTab()}
       </ScrollView>
+
+      {/* Modal za sva dizala na adresi */}
+      <Modal
+        visible={groupModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setGroupModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Dizala na adresi ({groupElevators.length})</Text>
+              <TouchableOpacity onPress={() => setGroupModalVisible(false)}>
+                <Ionicons name="close" size={22} color="#0f172a" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={{ maxHeight: 420 }}>
+              {groupElevators.map((e) => {
+                const active = e.id === elevator.id || e._id === elevator.id;
+                return (
+                  <TouchableOpacity
+                    key={e.id}
+                    disabled={active}
+                    style={[styles.modalItem, active && styles.modalItemActive]}
+                    onPress={() => {
+                      setGroupModalVisible(false);
+                      if (!active) navigation.navigate('ElevatorDetails', { elevator: e });
+                    }}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.modalItemTitle}>{e.brojDizala || 'Dizalo'}</Text>
+                    </View>
+                    {active ? (
+                      <View style={styles.activePill}>
+                        <Ionicons name="checkmark" size={14} color="#0f172a" />
+                        <Text style={styles.activePillText}>Aktivno</Text>
+                      </View>
+                    ) : (
+                      <Ionicons name="chevron-forward" size={18} color="#6b7280" />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
       {/* Floating Action Buttons */}
       <View style={[styles.fabContainer, { bottom: Math.max(insets.bottom + 12, 20) }]}>
@@ -842,6 +908,113 @@ const styles = StyleSheet.create({
   },
   elevatorBadgeTextActive: {
     color: '#fff',
+  },
+  moreBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#e0e7ff',
+    borderWidth: 1,
+    borderColor: '#c7d2fe',
+  },
+  moreBadgeText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1d4ed8',
+  },
+  currentBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginLeft: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    backgroundColor: '#ecfdf3',
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+  },
+  currentBadgeText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#166534',
+  },
+  groupHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 10,
+  },
+  moreButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: '#eef2ff',
+    borderWidth: 1,
+    borderColor: '#c7d2fe',
+  },
+  moreButtonText: {
+    color: '#2563eb',
+    fontWeight: '700',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'flex-end',
+    padding: 12,
+  },
+  modalCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 14,
+    gap: 10,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  modalItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+    gap: 10,
+  },
+  modalItemActive: {
+    backgroundColor: '#ecfdf3',
+  },
+  modalItemTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  modalItemSubtitle: {
+    fontSize: 13,
+    color: '#6b7280',
+  },
+  activePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: '#d1fae5',
+  },
+  activePillText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#065f46',
   },
   checkHistoryRow: {
     flexDirection: 'row',

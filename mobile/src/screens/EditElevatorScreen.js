@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -33,6 +33,7 @@ export default function EditElevatorScreen({ navigation, route }) {
   const [geocoding, setGeocoding] = useState(false);
   const [mapPickerVisible, setMapPickerVisible] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [applyToAddress, setApplyToAddress] = useState(false);
 
   // Normaliziraj kontaktOsoba ako dolazi kao JSON string iz SQLite
   const parsedKontakt = (() => {
@@ -53,6 +54,18 @@ export default function EditElevatorScreen({ navigation, route }) {
 
   // Konvertiraj isOnline u boolean i traži da je backend budan
   const online = Boolean(isOnline && serverAwake);
+
+  const normalize = (str) => (str || '').toString().trim().toLowerCase();
+
+  const groupElevators = useMemo(() => {
+    const all = elevatorDB.getAll() || [];
+    return all.filter((e) =>
+      e &&
+      normalize(e.ulica) === normalize(elevator.ulica) &&
+      normalize(e.mjesto) === normalize(elevator.mjesto) &&
+      normalize(e.nazivStranke) === normalize(elevator.nazivStranke)
+    ).sort((a, b) => (a?.brojDizala || '').localeCompare(b?.brojDizala || ''));
+  }, [elevator.ulica, elevator.mjesto, elevator.nazivStranke]);
 
   const [formData, setFormData] = useState({
     // Osnovno
@@ -276,22 +289,41 @@ export default function EditElevatorScreen({ navigation, route }) {
       const token = await SecureStore.getItemAsync('userToken');
       const isOfflineUser = token?.startsWith('offline_token_');
 
+      const targets = applyToAddress ? groupElevators : [elevator];
+      const mainId = elevator._id || elevator.id;
+      const otherTargets = targets.filter((t) => (t._id || t.id) !== mainId);
+
       if (!online || isOfflineUser) {
         // Spremi samo lokalno i označi za sync
+        const now = Date.now();
         elevatorDB.update(eid, {
           ...elevator,
           ...elevatorData,
           id: eid,
           sync_status: 'dirty',
           synced: 0,
-          updated_at: Date.now(),
+          updated_at: now,
         });
-        Alert.alert('Spremljeno lokalno', 'Dizalo je ažurirano i čeka sinkronizaciju.');
+
+        // Primijeni broj ugovora na ostala dizala na istoj adresi
+        if (otherTargets.length && formData.brojUgovora) {
+          otherTargets.forEach((t) => {
+            const tid = t._id || t.id;
+            if (!tid) return;
+            elevatorDB.update(tid, {
+              ...t,
+              brojUgovora: formData.brojUgovora,
+              id: tid,
+              sync_status: 'dirty',
+              synced: 0,
+              updated_at: now,
+            });
+          });
+        }
+        Alert.alert('Spremljeno lokalno', applyToAddress ? 'Ažurirano za sva dizala na adresi (čeka sync).' : 'Dizalo je ažurirano i čeka sinkronizaciju.');
       } else {
         // Ažuriraj na backend
         const response = await elevatorsAPI.update(eid, elevatorData);
-
-        // Ažuriraj u lokalnoj bazi
         const updated = response.data?.data || response.data;
         elevatorDB.update(eid, {
           ...updated,
@@ -300,7 +332,37 @@ export default function EditElevatorScreen({ navigation, route }) {
           sync_status: 'synced',
         });
 
-        Alert.alert('Uspjeh', 'Dizalo uspješno ažurirano', [
+        // Primijeni broj ugovora na ostala dizala na istoj adresi (samo brojUgovora da ne diramo specifične atribute)
+        if (otherTargets.length && formData.brojUgovora) {
+          for (const t of otherTargets) {
+            const tid = t._id || t.id;
+            if (!tid) continue;
+            try {
+              const res = await elevatorsAPI.update(tid, { brojUgovora: formData.brojUgovora });
+              const upd = res.data?.data || res.data || {};
+              elevatorDB.update(tid, {
+                ...t,
+                ...upd,
+                brojUgovora: formData.brojUgovora,
+                id: tid,
+                synced: 1,
+                sync_status: 'synced',
+              });
+            } catch (err) {
+              console.log('Apply broj ugovora fail for', tid, err?.message);
+              elevatorDB.update(tid, {
+                ...t,
+                brojUgovora: formData.brojUgovora,
+                id: tid,
+                sync_status: 'dirty',
+                synced: 0,
+                updated_at: Date.now(),
+              });
+            }
+          }
+        }
+
+        Alert.alert('Uspjeh', applyToAddress ? 'Broj ugovora ažuriran za sva dizala na adresi.' : 'Dizalo uspješno ažurirano', [
           {
             text: 'OK',
             onPress: () => navigation.navigate('Elevators'),
@@ -580,6 +642,20 @@ export default function EditElevatorScreen({ navigation, route }) {
             onChangeText={(text) => setFormData(prev => ({ ...prev, brojUgovora: text }))}
             placeholder="npr. UG-2025-001"
           />
+          {groupElevators.length > 1 && (
+            <TouchableOpacity
+              style={styles.applyRow}
+              onPress={() => setApplyToAddress((v) => !v)}
+              activeOpacity={0.8}
+            >
+              <Ionicons
+                name={applyToAddress ? 'checkbox' : 'square-outline'}
+                size={18}
+                color={applyToAddress ? '#2563eb' : '#6b7280'}
+              />
+              <Text style={styles.applyText}>Primijeni broj ugovora na sva dizala na adresi ({groupElevators.length})</Text>
+            </TouchableOpacity>
+          )}
 
           <Text style={styles.label}>Naziv stranke *</Text>
           <TextInput

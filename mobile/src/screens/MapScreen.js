@@ -256,6 +256,11 @@ export default function MapScreen({ navigation }) {
     setSelectedElevator(groupAtLocation[0] || elevator);
   };
 
+  const handleOpenSelectedElevator = () => {
+    if (!selectedElevator) return;
+    navigation.navigate('ElevatorDetails', { elevator: selectedElevator });
+  };
+
   const getCodesForLocation = (coord) => {
     const groupAtLocation = elevators.filter((e) => sameCoord(e.koordinate, coord));
     const collected = groupAtLocation.flatMap((item) => {
@@ -449,8 +454,12 @@ export default function MapScreen({ navigation }) {
 
       {/* Brzi prikaz ulazne šifre i adrese */}
       {selectedElevator && (
-        <View style={styles.quickCard}>
-          <TouchableOpacity 
+        <TouchableOpacity
+          activeOpacity={0.9}
+          style={styles.quickCard}
+          onPress={handleOpenSelectedElevator}
+        >
+          <TouchableOpacity
             style={styles.closeButton}
             onPress={() => setSelectedElevator(null)}
           >
@@ -488,8 +497,8 @@ export default function MapScreen({ navigation }) {
             </View>
           </View>
 
-          <Text style={styles.quickHintBig}>Tapni ponovo za sve detalje</Text>
-        </View>
+          <Text style={styles.quickHintBig}>Tapni na karticu za detalje</Text>
+        </TouchableOpacity>
       )}
     </SafeAreaView>
   );

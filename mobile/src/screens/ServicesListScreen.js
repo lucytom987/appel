@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { serviceDB, elevatorDB } from '../database/db';
+import { serviceDB, elevatorDB, userDB } from '../database/db';
 import { syncAll } from '../services/syncService';
 
 const MONTHS = [
@@ -52,11 +52,43 @@ const buildElevatorDisplay = (rawElevator) => {
   const tip = rawElevator?.tip || rawElevator?.tipObjekta;
   const address = [rawElevator?.ulica, rawElevator?.mjesto].filter(Boolean).join(', ').trim();
   const name = rawElevator?.nazivStranke || '';
-  const primary = tip === 'privreda'
+  const title = tip === 'privreda'
     ? (name || address || 'Nepoznato dizalo')
     : (address || name || 'Nepoznato dizalo');
-  const secondary = tip === 'privreda' ? address : name;
-  return { primary, secondary };
+  return { title };
+};
+
+const getServiserLabel = (service) => {
+  const raw = service?.serviserID;
+  if (!raw) return '-';
+
+  if (typeof raw === 'object') {
+    const ime = raw.ime || raw.firstName || '';
+    const prezime = raw.prezime || raw.lastName || '';
+    const full = `${ime} ${prezime}`.trim();
+    if (full) return full;
+    if (raw._id) {
+      const found = userDB.getById(raw._id);
+      if (found) {
+        const f = `${found.ime || found.firstName || ''} ${found.prezime || found.lastName || ''}`.trim();
+        if (f) return f;
+      }
+    }
+    return '-';
+  }
+
+  if (typeof raw === 'string' || typeof raw === 'number') {
+    const idStr = String(raw);
+    const found = userDB.getById(idStr);
+    if (found) {
+      const full = `${found.ime || found.firstName || ''} ${found.prezime || found.lastName || ''}`.trim();
+      if (full) return full;
+      if (found.email) return found.email;
+    }
+    return idStr.length > 8 ? `${idStr.slice(0, 8)}...` : idStr;
+  }
+
+  return String(raw);
 };
 
 const isInactiveElevator = (rawElevatorId) => {
@@ -417,6 +449,7 @@ export default function ServicesListScreen({ navigation }) {
 
     const elevator = resolveElevatorForService(item);
     const display = buildElevatorDisplay(elevator);
+    const serviserLabel = getServiserLabel(item);
     const dateLabel = formatDateLabel(serviceDate);
 
     const showNextBadge = daysUntilNext !== null;
@@ -451,10 +484,8 @@ export default function ServicesListScreen({ navigation }) {
         >
           <View style={styles.serviceHeader}>
             <View style={styles.serviceInfo}>
-              <Text style={styles.elevatorName} numberOfLines={1}>{display.primary}</Text>
-              {!!display.secondary && (
-                <Text style={styles.elevatorSub} numberOfLines={1}>{display.secondary}</Text>
-              )}
+              <Text style={styles.elevatorName} numberOfLines={1}>{display.title}</Text>
+              <Text style={styles.serviserLabel} numberOfLines={1}>Serviser: {serviserLabel}</Text>
             </View>
 
             <View style={styles.serviceMeta}>
@@ -914,6 +945,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
     color: '#6b7280',
+  },
+  serviserLabel: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#4b5563',
   },
   serviceMeta: {
     flexDirection: 'row',

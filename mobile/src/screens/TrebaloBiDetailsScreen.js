@@ -21,6 +21,10 @@ export default function TrebaloBiDetailsScreen({ route, navigation }) {
   useFocusEffect(
     useCallback(() => {
       const onBack = () => {
+        if (navigation.canGoBack()) {
+          navigation.goBack();
+          return true;
+        }
         navigation.navigate('Repairs', { activeList: returnTo || 'trebalo' });
         return true;
       };
@@ -97,7 +101,13 @@ export default function TrebaloBiDetailsScreen({ route, navigation }) {
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <View style={styles.fakeHeader}>
-        <TouchableOpacity onPress={() => navigation.navigate('Repairs', { activeList: returnTo || 'trebalo' })} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => {
+          if (navigation.canGoBack()) {
+            navigation.goBack();
+          } else {
+            navigation.navigate('Repairs', { activeList: returnTo || 'trebalo' });
+          }
+        }} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#1f2937" />
         </TouchableOpacity>
       </View>

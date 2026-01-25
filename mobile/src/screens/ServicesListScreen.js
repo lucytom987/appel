@@ -18,6 +18,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { serviceDB, elevatorDB, userDB } from '../database/db';
 import { syncAll } from '../services/syncService';
+import { useAuth } from '../context/AuthContext';
+import { usersAPI } from '../services/api';
 
 const MONTHS = [
   'Siječanj',
@@ -127,6 +129,7 @@ const resolveElevatorForService = (service) => {
 
 export default function ServicesListScreen({ navigation }) {
   const insets = useSafeAreaInsets();
+  const { isOnline, serverAwake } = useAuth();
   const [services, setServices] = useState([]);
   const [filteredServices, setFilteredServices] = useState([]);
   const [annualOccurrences, setAnnualOccurrences] = useState([]);
@@ -197,6 +200,24 @@ export default function ServicesListScreen({ navigation }) {
     }
   }, []);
 
+  const loadUsersIfOnline = useCallback(async () => {
+    try {
+      const online = Boolean(isOnline && serverAwake);
+      if (!online) return;
+      const res = await usersAPI.getLite();
+      const data = res?.data?.data || res?.data || [];
+      if (Array.isArray(data) && data.length) {
+        try {
+          userDB.bulkInsert(data);
+        } catch (e) {
+          console.log('ServicesListScreen: cache users fail', e?.message);
+        }
+      }
+    } catch (e) {
+      console.log('ServicesListScreen: load users fail', e?.message);
+    }
+  }, [isOnline, serverAwake]);
+
   const refreshAnnualOccurrences = useCallback(() => {
     try {
       const elevators = elevatorDB.getAll?.() || [];
@@ -247,7 +268,8 @@ export default function ServicesListScreen({ navigation }) {
   useEffect(() => {
     loadServices();
     refreshAnnualOccurrences();
-  }, [loadServices, refreshAnnualOccurrences]);
+    loadUsersIfOnline();
+  }, [loadServices, refreshAnnualOccurrences, loadUsersIfOnline]);
 
   // Ako u trenutno odabranom periodu nema servisa, automatski prebaci na najnoviji dostupni period
   // Ne preskači korisnički odabir za godišnje preglede (annual)

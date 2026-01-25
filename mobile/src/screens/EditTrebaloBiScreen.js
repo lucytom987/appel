@@ -28,6 +28,10 @@ export default function EditTrebaloBiScreen({ route, navigation }) {
   useFocusEffect(
     useCallback(() => {
       const onBack = () => {
+        if (navigation.canGoBack()) {
+          navigation.goBack();
+          return true;
+        }
         navigation.navigate('TrebaloBiDetails', { repair });
         return true;
       };

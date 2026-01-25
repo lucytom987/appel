@@ -13,8 +13,11 @@ export default function ServiceDetailsScreen({ route, navigation }) {
   useFocusEffect(
     useCallback(() => {
       const onBack = () => {
-        navigation.navigate('Services');
-        return true;
+        if (navigation.canGoBack()) {
+          navigation.goBack();
+          return true;
+        }
+        return false;
       };
       const sub = BackHandler.addEventListener('hardwareBackPress', onBack);
       return () => sub.remove();
@@ -123,7 +126,13 @@ export default function ServiceDetailsScreen({ route, navigation }) {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.navigate('Services')}>
+        <TouchableOpacity onPress={() => {
+          if (navigation.canGoBack()) {
+            navigation.goBack();
+          } else {
+            navigation.navigate('Services');
+          }
+        }}>
           <Ionicons name="arrow-back" size={24} color="#1f2937" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Detalji servisa</Text>

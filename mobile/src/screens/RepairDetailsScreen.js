@@ -29,6 +29,10 @@ export default function RepairDetailsScreen({ route, navigation }) {
   useFocusEffect(
     useCallback(() => {
       const onBack = () => {
+        if (navigation.canGoBack()) {
+          navigation.goBack();
+          return true;
+        }
         navigation.navigate('Repairs', { activeList: returnTo, filter });
         return true;
       };
@@ -111,7 +115,13 @@ export default function RepairDetailsScreen({ route, navigation }) {
         setRepairData((prev) => ({ ...prev, ...updated, synced: 1, sync_status: 'synced' }));
       }
       Alert.alert('Spremljeno', 'Promjene su spremljene', [
-        { text: 'OK', onPress: () => navigation.navigate('Repairs', { activeList: returnTo, filter }) },
+        { text: 'OK', onPress: () => {
+          if (navigation.canGoBack()) {
+            navigation.goBack();
+          } else {
+            navigation.navigate('Repairs', { activeList: returnTo, filter });
+          }
+        } },
       ]);
     } catch (e) {
       Alert.alert('Greška', e?.message || 'Nije moguće spremiti promjene');
@@ -123,7 +133,13 @@ export default function RepairDetailsScreen({ route, navigation }) {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.navigate('Repairs', { activeList: returnTo, filter })}>
+        <TouchableOpacity onPress={() => {
+          if (navigation.canGoBack()) {
+            navigation.goBack();
+          } else {
+            navigation.navigate('Repairs', { activeList: returnTo, filter });
+          }
+        }}>
           <Ionicons name="arrow-back" size={24} color="#1f2937" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Detalji popravka</Text>

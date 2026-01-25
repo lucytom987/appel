@@ -90,6 +90,10 @@ export default function EditRepairScreen({ route, navigation }) {
   useFocusEffect(
     useCallback(() => {
       const onBack = () => {
+        if (navigation.canGoBack()) {
+          navigation.goBack();
+          return true;
+        }
         navigation.navigate('RepairDetails', { repair });
         return true;
       };

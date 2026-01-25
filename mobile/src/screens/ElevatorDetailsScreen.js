@@ -8,13 +8,14 @@ import {
   Alert,
   Linking,
   Modal,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { serviceDB, repairDB, elevatorDB, userDB } from '../database/db';
 import { useAuth } from '../context/AuthContext';
-import { servicesAPI } from '../services/api';
+import { servicesAPI, simcardsAPI } from '../services/api';
 
 export default function ElevatorDetailsScreen({ route, navigation }) {
   const insets = useSafeAreaInsets();
@@ -48,6 +49,12 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
   const [groupElevators, setGroupElevators] = useState([]); // sva dizala na adresi
   const [groupModalVisible, setGroupModalVisible] = useState(false);
   const [deletingService, setDeletingService] = useState(null);
+  const [simModalVisible, setSimModalVisible] = useState(false);
+  const [simSerial, setSimSerial] = useState('');
+  const [simPhone, setSimPhone] = useState('');
+  const [simStart, setSimStart] = useState('');
+  const [simEnd, setSimEnd] = useState('');
+  const [savingSim, setSavingSim] = useState(false);
   const online = Boolean(isOnline && serverAwake);
   
   const parseDateSafe = (value) => {
@@ -180,6 +187,81 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
       });
     });
     setChecklistHistory(latest);
+  };
+
+  const parseEuroDate = (value) => {
+    if (!value || typeof value !== 'string') return null;
+    const cleaned = value.trim();
+    const parts = cleaned.split(/[./-]/).filter(Boolean);
+    if (parts.length !== 3) return null;
+    const [dd, mm, yyyy] = parts.map((p) => parseInt(p, 10));
+    if (!dd || !mm || !yyyy) return null;
+    const d = new Date(yyyy, mm - 1, dd);
+    if (Number.isNaN(d.getTime())) return null;
+    if (d.getFullYear() !== yyyy || d.getMonth() !== mm - 1 || d.getDate() !== dd) return null;
+    return d;
+  };
+
+  const formatEuroDate = (date) => {
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
+    const dd = String(date.getDate()).padStart(2, '0');
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const yyyy = date.getFullYear();
+    return `${dd}.${mm}.${yyyy}`;
+  };
+
+  const handleSimStartChange = (value) => {
+    setSimStart(value);
+    const startDate = parseEuroDate(value);
+    if (startDate) {
+      const endDate = new Date(startDate);
+      endDate.setFullYear(endDate.getFullYear() + 2);
+      setSimEnd(formatEuroDate(endDate));
+    }
+  };
+
+  const handleSimEndChange = (value) => {
+    const parsed = parseEuroDate(value);
+    setSimEnd(parsed ? formatEuroDate(parsed) : value);
+  };
+
+  const handleSaveSim = async () => {
+    if (!simSerial.trim() && !simPhone.trim()) {
+      Alert.alert('Sim kartica', 'Upiši barem serijski broj ili broj mobitela.');
+      return;
+    }
+
+    const startDate = parseEuroDate(simStart);
+    const endDate = parseEuroDate(simEnd);
+    const computedEnd = endDate || (startDate ? (() => {
+      const d = new Date(startDate);
+      d.setFullYear(d.getFullYear() + 2);
+      return d;
+    })() : null);
+
+    const payload = {
+      serijaSimKartice: simSerial.trim(),
+      brojTelefona: simPhone.trim(),
+      datumIsteka: computedEnd ? computedEnd.toISOString() : undefined,
+      elevatorId: elevator.id,
+      napomene: startDate ? `Početak ugovora: ${formatEuroDate(startDate)}` : undefined,
+    };
+
+    setSavingSim(true);
+    try {
+      await simcardsAPI.create(payload);
+      Alert.alert('Sim kartica', 'Podaci su spremljeni.');
+      setSimModalVisible(false);
+      setSimSerial('');
+      setSimPhone('');
+      setSimStart('');
+      setSimEnd('');
+    } catch (error) {
+      console.error('Ne mogu spremiti SIM:', error);
+      Alert.alert('Greška', 'Spremanje SIM kartice nije uspjelo.');
+    } finally {
+      setSavingSim(false);
+    }
   };
 
   const daysAgo = (date) => {
@@ -350,6 +432,17 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
         {elevator.intervalServisa && (
           <InfoRow icon="repeat-outline" label="Interval servisa" value={`${elevator.intervalServisa} ${elevator.intervalServisa === 1 ? 'mjesec' : 'mjeseci'}`} />
         )}
+      </View>
+
+      <View style={styles.infoSection}>
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionTitle}>SIM kartica</Text>
+          <TouchableOpacity style={styles.linkButton} onPress={() => setSimModalVisible(true)}>
+            <Ionicons name="card" size={16} color="#2563eb" />
+            <Text style={styles.linkButtonText}>Otvori</Text>
+          </TouchableOpacity>
+        </View>
+        <Text style={styles.subtleText}>Upiši serijski broj, broj mobitela i trajanje ugovora.</Text>
       </View>
 
       {elevator.napomene && typeof elevator.napomene === 'string' && elevator.napomene.trim() && (
@@ -684,6 +777,71 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
         </View>
       </Modal>
 
+      {/* Modal za SIM karticu */}
+      <Modal
+        visible={simModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setSimModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>SIM kartica</Text>
+              <TouchableOpacity onPress={() => setSimModalVisible(false)}>
+                <Ionicons name="close" size={22} color="#0f172a" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalField}>
+              <Text style={styles.modalLabel}>Serijski broj</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="Serijski broj"
+                value={simSerial}
+                onChangeText={setSimSerial}
+              />
+            </View>
+
+            <View style={styles.modalField}>
+              <Text style={styles.modalLabel}>Broj mobitela</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="npr. 0912345678"
+                keyboardType="phone-pad"
+                value={simPhone}
+                onChangeText={setSimPhone}
+              />
+            </View>
+
+            <View style={styles.modalField}>
+              <Text style={styles.modalLabel}>Početak ugovora</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="dd.mm.yyyy"
+                value={simStart}
+                onChangeText={handleSimStartChange}
+              />
+            </View>
+
+            <View style={styles.modalField}>
+              <Text style={styles.modalLabel}>Kraj ugovora</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="dd.mm.yyyy"
+                value={simEnd}
+                onChangeText={handleSimEndChange}
+              />
+            </View>
+
+            <TouchableOpacity style={styles.primaryButton} onPress={handleSaveSim} disabled={savingSim}>
+              <Ionicons name="save-outline" size={18} color="#fff" />
+              <Text style={styles.primaryButtonText}>{savingSim ? 'Spremam...' : 'Spremi SIM'}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {/* Floating Action Buttons */}
       <View style={[styles.fabContainer, { bottom: Math.max(insets.bottom + 12, 20) }]}>
         <TouchableOpacity style={[styles.fab, styles.fabTrebalo]} onPress={handleAddTrebaloBi}>
@@ -972,6 +1130,18 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 10,
   },
+  modalField: { marginBottom: 12 },
+  modalLabel: { fontSize: 14, fontWeight: '700', color: '#111827', marginBottom: 6 },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: '#111827',
+    backgroundColor: '#f9fafb',
+  },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1057,6 +1227,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     gap: 8,
   },
+  linkButton: { flexDirection: 'row', alignItems: 'center', gap: 6, padding: 6 },
+  linkButtonText: { color: '#2563eb', fontWeight: '700', fontSize: 14 },
+  subtleText: { color: '#6b7280', fontSize: 13, marginTop: 6 },
   actionButtonText: {
     color: '#fff',
     fontSize: 16,

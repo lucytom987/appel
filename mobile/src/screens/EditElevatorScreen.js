@@ -195,15 +195,39 @@ export default function EditElevatorScreen({ navigation, route }) {
     });
   };
 
-  const formatDate = (value) => {
-    if (!value) return '';
+  const parseDateSafe = (value) => {
+    if (!value) return null;
     const d = new Date(value);
-    return Number.isNaN(d.getTime()) ? '' : d.toISOString().split('T')[0];
+    return Number.isNaN(d.getTime()) ? null : d;
+  };
+
+  const parseEuroDate = (value) => {
+    if (!value || typeof value !== 'string') return null;
+    const cleaned = value.trim();
+    const parts = cleaned.split(/[./-]/).filter(Boolean);
+    if (parts.length !== 3) return null;
+    const [dd, mm, yyyy] = parts.map((p) => parseInt(p, 10));
+    if (!dd || !mm || !yyyy) return null;
+    const d = new Date(yyyy, mm - 1, dd);
+    if (Number.isNaN(d.getTime())) return null;
+    if (d.getFullYear() !== yyyy || d.getMonth() !== mm - 1 || d.getDate() !== dd) return null;
+    return d;
+  };
+
+  const formatEuroDate = (date) => {
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
+    const dd = String(date.getDate()).padStart(2, '0');
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const yyyy = date.getFullYear();
+    return `${dd}.${mm}.${yyyy}`;
   };
 
   const normalizeDate = (value) => {
     if (!value) return undefined;
     const trimmed = String(value).trim();
+
+    const euro = parseEuroDate(trimmed);
+    if (euro) return euro.toISOString();
 
     const monthYearMatch = trimmed.match(/^(\d{1,2})[./-]\s*(\d{4})$/);
     const yearMonthMatch = trimmed.match(/^(\d{4})[./-]\s*(\d{1,2})$/);
@@ -221,14 +245,26 @@ export default function EditElevatorScreen({ navigation, route }) {
     return Number.isNaN(d.getTime()) ? undefined : d.toISOString();
   };
 
+  const handleAnnualInputChange = (value) => {
+    const parsed = parseEuroDate(value);
+    setFormData(prev => ({ ...prev, godisnjiPregled: parsed ? formatEuroDate(parsed) : value }));
+  };
+
+  useEffect(() => {
+    const parsed = parseDateSafe(elevator.godisnjiPregled);
+    if (parsed) {
+      setFormData(prev => ({ ...prev, godisnjiPregled: formatEuroDate(parsed) }));
+    }
+  }, [elevator.godisnjiPregled]);
+
   const handleAnnualDateChange = (event, selectedDate) => {
     if (event?.type === 'dismissed') {
       setShowDatePicker(false);
       return;
     }
     setShowDatePicker(false);
-    const iso = (selectedDate || new Date()).toISOString().split('T')[0];
-    setFormData(prev => ({ ...prev, godisnjiPregled: iso }));
+    const chosen = selectedDate || new Date();
+    setFormData(prev => ({ ...prev, godisnjiPregled: formatEuroDate(chosen) }));
   };
 
   const handleUpdate = async () => {
@@ -531,7 +567,11 @@ export default function EditElevatorScreen({ navigation, route }) {
   // Hardverski back uvijek vodi na listu dizala
   useEffect(() => {
     const handler = () => {
-        navigation.navigate('Elevators');
+      if (navigation.canGoBack()) {
+        navigation.goBack();
+        return true;
+      }
+      navigation.navigate('Elevators');
       return true;
     };
     const sub = BackHandler.addEventListener('hardwareBackPress', handler);
@@ -553,7 +593,13 @@ export default function EditElevatorScreen({ navigation, route }) {
     <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.navigate('Elevators')}>
+        <TouchableOpacity onPress={() => {
+          if (navigation.canGoBack()) {
+            navigation.goBack();
+          } else {
+            navigation.navigate('Elevators');
+          }
+        }}>
           <Ionicons name="arrow-back" size={24} color="#1f2937" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Uredi dizalo</Text>
@@ -856,8 +902,8 @@ export default function EditElevatorScreen({ navigation, route }) {
             <TextInput
               style={[styles.input, styles.dateInput]}
               value={formData.godisnjiPregled}
-              onChangeText={(text) => setFormData(prev => ({ ...prev, godisnjiPregled: text }))}
-              placeholder="YYYY-MM-DD ili MM/YYYY"
+              onChangeText={handleAnnualInputChange}
+              placeholder="dd.mm.yyyy"
               autoCapitalize="none"
               keyboardType="numbers-and-punctuation"
             />
@@ -869,7 +915,7 @@ export default function EditElevatorScreen({ navigation, route }) {
               <Text style={styles.datePickerButtonText}>Odaberi</Text>
             </TouchableOpacity>
           </View>
-          <Text style={styles.hint}>Format: YYYY-MM-DD ili MM/YYYY (spremamo 1. dan tog mjeseca).</Text>
+          <Text style={styles.hint}>Format: dd.mm.yyyy (podržavamo i YYYY-MM-DD ili MM/YYYY; spremamo 1. dan tog mjeseca).</Text>
         </View>
 
         {/* Napomene */}
@@ -910,8 +956,10 @@ export default function EditElevatorScreen({ navigation, route }) {
       {showDatePicker && (
         <DateTimePicker
           value={(() => {
-            const d = formData.godisnjiPregled ? new Date(formData.godisnjiPregled) : new Date();
-            return Number.isNaN(d.getTime()) ? new Date() : d;
+            const euro = parseEuroDate(formData.godisnjiPregled);
+            if (euro) return euro;
+            const iso = parseDateSafe(formData.godisnjiPregled);
+            return iso || new Date();
           })()}
           mode="date"
           display={Platform.OS === 'ios' ? 'spinner' : 'default'}

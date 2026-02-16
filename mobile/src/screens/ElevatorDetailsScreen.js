@@ -13,7 +13,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
-import { serviceDB, repairDB, elevatorDB, userDB } from '../database/db';
+import { serviceDB, repairDB, elevatorDB, userDB, eventDB } from '../database/db';
 import { useAuth } from '../context/AuthContext';
 import { servicesAPI, simcardsAPI } from '../services/api';
 
@@ -42,14 +42,16 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
   const { user, isOnline, serverAwake } = useAuth();
   const userRole = ((user?.uloga || user?.role || '') || '').toLowerCase();
   const canDelete = userRole === 'admin' || userRole === 'menadzer' || userRole === 'manager';
-  const [activeTab, setActiveTab] = useState('info'); // info, services, repairs
+  const [activeTab, setActiveTab] = useState('info'); // info, services, events
   const [services, setServices] = useState([]);
+  const [events, setEvents] = useState([]);
   const [repairs, setRepairs] = useState([]);
   const [checklistHistory, setChecklistHistory] = useState({});
   const [groupElevators, setGroupElevators] = useState([]); // sva dizala na adresi
   const [groupModalVisible, setGroupModalVisible] = useState(false);
   const [deletingService, setDeletingService] = useState(null);
   const [simModalVisible, setSimModalVisible] = useState(false);
+  const [fabMenuVisible, setFabMenuVisible] = useState(false);
   const [simSerial, setSimSerial] = useState('');
   const [simPhone, setSimPhone] = useState('');
   const [simStart, setSimStart] = useState('');
@@ -130,8 +132,15 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
         const bd = parseDateSafe(b?.datumPrijave || b?.reportedDate || b?.datum);
         return (bd?.getTime() || 0) - (ad?.getTime() || 0);
       });
+      const eventsData = eventDB.getAll(elevator.id) || [];
+      const sortedEvents = [...eventsData].sort((a, b) => {
+        const ad = parseDateSafe(a?.datum);
+        const bd = parseDateSafe(b?.datum);
+        return (bd?.getTime() || 0) - (ad?.getTime() || 0);
+      });
       setServices(sortedServices);
       setRepairs(sortedRepairs);
+      setEvents(sortedEvents);
       computeChecklistHistory(sortedServices);
 
       // Grupiraj dizala na istoj adresi (isti brojUgovora + nazivStranke + ulica + mjesto)
@@ -180,8 +189,12 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
         const checked = item?.provjereno ?? item?.provjereno;
         if (checked === 1 || checked === true) {
           const key = item.stavka;
-          if (!latest[key] || serviceDate > latest[key]) {
-            latest[key] = serviceDate;
+          const note = typeof item?.napomena === 'string' ? item.napomena.trim() : '';
+          const status = (key === 'ups_check' || key === 'voice_comm') && (note === 'radi' || note === 'ne_radi')
+            ? note
+            : null;
+          if (!latest[key] || serviceDate > (latest[key].date || latest[key])) {
+            latest[key] = { date: serviceDate, status };
           }
         }
       });
@@ -312,6 +325,30 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
 
   const handleAddTrebaloBi = () => {
     navigation.navigate('AddTrebaloBi', { elevator });
+  };
+
+  const handleLogRepair = () => {
+    // Kreiraj novi prazan repair objekt i otvori RepairDetailsScreen
+    const newRepair = {
+      id: `local_${Date.now()}`,
+      elevatorId: elevator.id,
+      opisKvara: '',
+      opisPopravka: '',
+      status: 'completed', // Popravka je već obavljena
+      trebaloBi: false,
+      radniNalogPotpisan: false,
+      datumPrijave: new Date().toISOString(),
+      datumPopravka: new Date().toISOString(),
+      synced: 0,
+      sync_status: 'dirty',
+    };
+    
+    setFabMenuVisible(false);
+    navigation.navigate('RepairDetails', { 
+      repair: newRepair, 
+      returnTo: 'events',
+      isNew: true 
+    });
   };
 
   const handleDeleteService = (service) => {
@@ -455,7 +492,9 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
       <View style={styles.infoSection}>
         <Text style={styles.sectionTitle}>Checklist povijest</Text>
         {Object.keys(checklistLabels).map(key => {
-          const lastDate = checklistHistory[key];
+          const entry = checklistHistory[key];
+          const lastDate = entry?.date || entry;
+          const status = entry?.status || null;
           const ago = lastDate ? daysAgo(lastDate) : null;
           // Boja prema starosti i intervalServisa (ako postoji)
           let badgeColor = '#6b7280';
@@ -471,10 +510,17 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
           return (
             <View key={key} style={styles.checkHistoryRow}>
               <Text style={styles.checkHistoryLabel}>{checklistLabels[key]}</Text>
-              <View style={[styles.checkHistoryBadge, { backgroundColor: badgeColor }]}> 
-                <Text style={styles.checkHistoryBadgeText}>
-                  {lastDate ? `${ago} d` : 'nikad'}
-                </Text>
+              <View style={styles.checkHistoryRight}>
+                <View style={[styles.checkHistoryBadge, { backgroundColor: badgeColor }]}> 
+                  <Text style={styles.checkHistoryBadgeText}>
+                    {lastDate ? `${ago} d` : 'nikad'}
+                  </Text>
+                </View>
+                {status === 'ne_radi' && (
+                  <View style={styles.checkHistoryStatusBadge}>
+                    <Text style={styles.checkHistoryStatusText}>ne radi</Text>
+                  </View>
+                )}
               </View>
             </View>
           );
@@ -561,69 +607,158 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
     </View>
   );
 
-  const renderRepairsTab = () => (
-    <View style={styles.tabContent}>
-      {repairs.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Ionicons name="construct-outline" size={48} color="#d1d5db" />
-          <Text style={styles.emptyText}>Nema popravaka</Text>
-        </View>
-      ) : (
-        repairs.map((repair, index) => {
-          // Osiguraj da je repair.opisKvara sigurno string
-          const faultDescription = typeof (repair.opisKvara || repair.faultDescription) === 'string'
-            ? (repair.opisKvara || repair.faultDescription)
-            : '';
-          const parsedDate = parseDateSafe(repair.datumPrijave || repair.reportedDate || repair.datum);
-          const dateLabel = parsedDate ? parsedDate.toLocaleDateString('hr-HR') : '-';
-          const key = repair._id || repair.id || repair.localId || `rep_${index}`;
-          
-          const isTrebaloBi = Boolean(
-            repair.trebaloBi ||
-            repair.trebalo_bi ||
-            repair.category === 'trebaloBi' || repair.category === 'trebalo_bi' || repair.category === 'trebalo-bi' || repair.category === 'trebalo' ||
-            repair.type === 'trebaloBi' || repair.type === 'trebalo_bi' || repair.type === 'trebalo-bi' || repair.type === 'trebalo' ||
-            repair.status === 'in_progress' ||
-            repair.status === 'u tijeku' ||
-            repair.status === 'u_tijeku'
-          );
+  const renderEventsTab = () => {
+    // Kombinira sve popravke i događaje u jednu listu
+    const allEvents = [];
 
-          return (
-            <TouchableOpacity
-              key={key}
-              style={styles.historyCard}
-              onPress={() => navigation.navigate(isTrebaloBi ? 'TrebaloBiDetails' : 'RepairDetails', { repair })}
-            >
-              <View style={styles.historyHeader}>
-                <Text style={styles.historyDate}>
-                  {dateLabel}
-                </Text>
-                <View style={[
-                  styles.historyBadge,
-                  {
-                    backgroundColor:
-                      repair.status === 'završen' || repair.status === 'completed' ? '#10b981' :
-                      isTrebaloBi ? '#f59e0b' : '#ef4444'
+    // Dodaj existing popravke kao event-e
+    repairs.forEach((repair, idx) => {
+      const isTrebaloBi = Boolean(
+        repair.trebaloBi ||
+        repair.trebalo_bi ||
+        repair.category === 'trebaloBi' || repair.category === 'trebalo_bi' || repair.category === 'trebalo-bi' ||
+        repair.type === 'trebaloBi' || repair.type === 'trebalo_bi' || repair.type === 'trebalo-bi' ||
+        repair.status === 'in_progress' ||
+        repair.status === 'u tijeku'
+      );
+
+      allEvents.push({
+        id: repair._id || repair.id || `repair_${idx}`,
+        type: 'repair',
+        datum: repair.datumPrijave || repair.reportedDate || repair.datum || new Date().toISOString(),
+        isTrebaloBi,
+        repair,
+        originalRepair: true, // Mark kao da je iz repairDB, ne eventDB
+      });
+    });
+
+    // Dodaj samo servisne napomene kao event-e
+    services.forEach((service, idx) => {
+      const serviceNotes = typeof (service.napomene || service.notes) === 'string'
+        ? (service.napomene || service.notes).trim()
+        : '';
+      if (!serviceNotes) return;
+      allEvents.push({
+        id: service._id || service.id || service.localId || `service_${idx}`,
+        type: 'service',
+        datum: service.datum || service.serviceDate || new Date().toISOString(),
+        service,
+        serviceNotes,
+      });
+    });
+
+    // Dodaj nove događaje
+    events.forEach((event, idx) => {
+      allEvents.push({
+        id: event.id || `event_${idx}`,
+        type: event.eventType,
+        datum: event.datum,
+        event,
+      });
+    });
+
+    // Sortiraj kronološki od najnovije k najstarijoj
+    allEvents.sort((a, b) => {
+      const ad = parseDateSafe(a.datum);
+      const bd = parseDateSafe(b.datum);
+      return (bd?.getTime() || 0) - (ad?.getTime() || 0);
+    });
+
+    return (
+      <View style={styles.tabContent}>
+        {allEvents.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Ionicons name="calendar-outline" size={48} color="#d1d5db" />
+            <Text style={styles.emptyText}>Nema događaja</Text>
+          </View>
+        ) : (
+          allEvents.map((item) => {
+            const parsedDate = parseDateSafe(item.datum);
+            const dateLabel = parsedDate ? parsedDate.toLocaleDateString('hr-HR') : '-';
+            
+            let eventLabel = '';
+            let eventIcon = 'calendar';
+            let eventColor = '#0ea5e9';
+            let description = '';
+
+            if (item.type === 'repair') {
+              // Stari popravci iz repairDB
+              const repair = item.repair;
+              
+              if (item.isTrebaloBi) {
+                eventLabel = 'Trebalo bi';
+                eventIcon = 'sparkles';
+                eventColor = '#f59e0b';
+              } else if (repair.status === 'completed' || repair.status === 'završen') {
+                eventLabel = 'Popravak završen';
+                eventIcon = 'construct';
+                eventColor = '#22c55e';
+              } else {
+                eventLabel = 'Popravak otvoren';
+                eventIcon = 'warning';
+                eventColor = '#f43f5e';
+              }
+              
+              description = repair.opisKvara || repair.faultDescription || '';
+            } else if (item.type === 'service') {
+              eventLabel = 'Napomena';
+              eventIcon = 'reader';
+              eventColor = '#6366f1';
+              description = item.serviceNotes || '';
+            } else if (item.type === 'service_note') {
+              eventLabel = 'Napomena sa servisa';
+              eventIcon = 'reader';
+              eventColor = '#6366f1';
+              description = item.event?.serviceNote?.tekst || '';
+            } else if (item.type === 'activity') {
+              eventLabel = `Aktivnost - ${item.event?.activity?.tip || 'ostalo'}`;
+              eventIcon = 'pulse';
+              eventColor = '#0ea5e9';
+              description = item.event?.activity?.opis || '';
+            } else {
+              eventLabel = 'Događaj';
+            }
+
+            return (
+              <TouchableOpacity
+                key={item.id}
+                style={styles.historyCard}
+                onPress={() => {
+                  if (item.type === 'repair' && item.originalRepair) {
+                    // Otvori RepairDetailsScreen za stare popravke
+                    navigation.navigate('RepairDetails', { repair: item.repair, returnTo: 'events' });
+                  } else if (item.type === 'service') {
+                    navigation.navigate('ServiceDetails', { service: item.service });
                   }
-                ]}>
-                  <Text style={styles.historyBadgeText}>{
-                    repair.status === 'završen' || repair.status === 'completed'
-                      ? 'Završeno'
-                      : isTrebaloBi
-                        ? 'Trebalo bi'
-                        : 'Na čekanju'
-                  }</Text>
+                  // TODO: Dodaj navigate za nove event tipove
+                }}
+              >
+                <View style={styles.historyHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.historyDate}>{dateLabel}</Text>
+                    <Text style={styles.historyLabel}>{eventLabel}</Text>
+                  </View>
+                  <View style={[styles.historyBadge, { backgroundColor: eventColor }]}>
+                    <Ionicons name={eventIcon} size={14} color="white" />
+                  </View>
                 </View>
-              </View>
-              {faultDescription && (
-                <Text style={styles.historyNotes}>{faultDescription}</Text>
-              )}
-            </TouchableOpacity>
-          );
-        })
-      )}
-    </View>
-  );
+                {description && (
+                  <Text style={styles.historyNotes}>{description}</Text>
+                )}
+              </TouchableOpacity>
+            );
+          })
+        )}
+      </View>
+    );
+  };
+
+  const serviceNotesCount = services.reduce((count, service) => {
+    const serviceNotes = typeof (service?.napomene || service?.notes) === 'string'
+      ? (service.napomene || service.notes).trim()
+      : '';
+    return serviceNotes ? count + 1 : count;
+  }, 0);
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -711,11 +846,11 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.tab, activeTab === 'repairs' && styles.tabActive]}
-          onPress={() => setActiveTab('repairs')}
+          style={[styles.tab, activeTab === 'events' && styles.tabActive]}
+          onPress={() => setActiveTab('events')}
         >
-          <Text style={[styles.tabText, activeTab === 'repairs' && styles.tabTextActive]}>
-            Popravci ({repairs.length})
+          <Text style={[styles.tabText, activeTab === 'events' && styles.tabTextActive]}>
+            Događaji ({repairs.length + events.length + serviceNotesCount})
           </Text>
         </TouchableOpacity>
       </View>
@@ -727,7 +862,7 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
       >
         {activeTab === 'info' && renderInfoTab()}
         {activeTab === 'services' && renderServicesTab()}
-        {activeTab === 'repairs' && renderRepairsTab()}
+        {activeTab === 'events' && renderEventsTab()}
       </ScrollView>
 
       {/* Modal za sva dizala na adresi */}
@@ -843,17 +978,88 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
       </Modal>
 
       {/* Floating Action Buttons */}
-      <View style={[styles.fabContainer, { bottom: Math.max(insets.bottom + 12, 20) }]}>
-        <TouchableOpacity style={[styles.fab, styles.fabTrebalo]} onPress={handleAddTrebaloBi}>
-          <Ionicons name="bulb" size={24} color="#fff" />
+      {/* Zeleni FAB - Servis */}
+      <TouchableOpacity 
+        style={[styles.fabService, { bottom: Math.max(insets.bottom + 16, 24) }]}
+        onPress={handleAddService}
+      >
+        <Ionicons name="briefcase" size={24} color="#fff" />
+      </TouchableOpacity>
+
+      {/* Crveni FAB - Menu */}
+      <TouchableOpacity 
+        style={[styles.fabMenu, { bottom: Math.max(insets.bottom + 16, 24) }]}
+        onPress={() => setFabMenuVisible(true)}
+      >
+        <Ionicons name="add" size={28} color="#fff" />
+      </TouchableOpacity>
+
+      {/* FAB Menu Modal */}
+      <Modal
+        visible={fabMenuVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setFabMenuVisible(false)}
+      >
+        <TouchableOpacity 
+          style={styles.fabMenuOverlay}
+          activeOpacity={1}
+          onPress={() => setFabMenuVisible(false)}
+        >
+          <View style={[styles.fabMenuContainer, { bottom: Math.max(insets.bottom + 80, 90) }]}>
+            {/* Prijava Kvara */}
+            <TouchableOpacity 
+              style={styles.fabMenuItem}
+              onPress={() => {
+                setFabMenuVisible(false);
+                handleReportFault();
+              }}
+            >
+              <View style={[styles.fabMenuIcon, { backgroundColor: '#ef4444' }]}>
+                <Ionicons name="alert-circle" size={20} color="#fff" />
+              </View>
+              <View style={styles.fabMenuLabel}>
+                <Text style={styles.fabMenuLabelTitle}>PRIJAVA KVARA</Text>
+                <Text style={styles.fabMenuLabelSubtitle}>Prijavi novi kvar</Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* Trebalo Bi */}
+            <TouchableOpacity 
+              style={styles.fabMenuItem}
+              onPress={() => {
+                setFabMenuVisible(false);
+                handleAddTrebaloBi();
+              }}
+            >
+              <View style={[styles.fabMenuIcon, { backgroundColor: '#f59e0b' }]}>
+                <Ionicons name="bulb" size={20} color="#fff" />
+              </View>
+              <View style={styles.fabMenuLabel}>
+                <Text style={styles.fabMenuLabelTitle}>TREBALO BI</Text>
+                <Text style={styles.fabMenuLabelSubtitle}>Dodaj preporuku</Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* Popravak */}
+            <TouchableOpacity 
+              style={styles.fabMenuItem}
+              onPress={() => {
+                setFabMenuVisible(false);
+                handleLogRepair();
+              }}
+            >
+              <View style={[styles.fabMenuIcon, { backgroundColor: '#3b82f6' }]}>
+                <Ionicons name="hammer" size={20} color="#fff" />
+              </View>
+              <View style={styles.fabMenuLabel}>
+                <Text style={styles.fabMenuLabelTitle}>POPRAVAK</Text>
+                <Text style={styles.fabMenuLabelSubtitle}>Zabilježi popravak</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.fab, styles.fabSecondary]} onPress={handleReportFault}>
-          <Ionicons name="construct" size={24} color="#fff" />
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.fab} onPress={handleAddService}>
-          <Ionicons name="briefcase" size={24} color="#fff" />
-        </TouchableOpacity>
-      </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1203,6 +1409,23 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 12
   },
+  checkHistoryRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  checkHistoryStatusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: '#ef4444',
+  },
+  checkHistoryStatusText: {
+    fontSize: 12,
+    color: '#fff',
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
   checkHistoryBadgeText: {
     fontSize: 12,
     color: '#fff',
@@ -1265,6 +1488,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#111827',
+  },
+  historyLabel: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginTop: 2,
   },
   historyBadge: {
     paddingHorizontal: 10,
@@ -1346,36 +1574,83 @@ const styles = StyleSheet.create({
     color: '#065f46',
     letterSpacing: 1,
   },
-  fabContainer: {
+  fabService: {
     position: 'absolute',
-    bottom: 20,
-    right: 18,
-    flexDirection: 'row',
-    gap: 12,
-  },
-  fab: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    right: 90,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     backgroundColor: '#10b981',
     alignItems: 'center',
     justifyContent: 'center',
-    elevation: 6,
+    elevation: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+  },
+  fabMenu: {
+    position: 'absolute',
+    right: 18,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#ef4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+  },
+  fabMenuOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  fabMenuContainer: {
+    position: 'absolute',
+    right: 18,
+    width: 320,
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.15,
     shadowRadius: 8,
   },
-  fabSecondary: {
-    backgroundColor: '#ef4444',
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+  fabMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    marginVertical: 4,
+    borderRadius: 12,
+    backgroundColor: '#f9fafb',
   },
-  fabTrebalo: {
-    backgroundColor: '#f59e0b',
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+  fabMenuIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  fabMenuLabel: {
+    flex: 1,
+  },
+  fabMenuLabelTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  fabMenuLabelSubtitle: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginTop: 2,
   },
 });

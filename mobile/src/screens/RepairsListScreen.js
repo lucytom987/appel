@@ -266,18 +266,12 @@ export default function RepairsListScreen({ navigation, route }) {
           <View style={styles.headerRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.elevatorName} numberOfLines={1}>{display.primary}</Text>
-              {!!display.secondary && (
-                <Text style={styles.elevatorSub} numberOfLines={1}>{display.secondary}</Text>
-              )}
-              {!!display.extra && (
-                <Text style={styles.elevatorSub} numberOfLines={1}>{display.extra}</Text>
-              )}
             </View>
             <View style={styles.iconRow}>
               <Ionicons
                 name={isTrebalo ? (isResolvedTrebalo ? 'checkbox' : 'square-outline') : (item.radniNalogPotpisan ? 'document-text-outline' : 'document-outline')}
                 size={18}
-                color={isTrebalo ? (isResolvedTrebalo ? '#16a34a' : '#f59e0b') : (item.radniNalogPotpisan ? '#16a34a' : '#9ca3af')}
+                color={isTrebalo ? (isResolvedTrebalo ? '#16a34a' : '#f59e0b') : (item.radniNalogPotpisan ? '#16a34a' : '#ef4444')}
                 style={{ marginRight: 8 }}
               />
               <Ionicons
@@ -538,8 +532,8 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   elevatorName: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 18,
+    fontWeight: '700',
     color: '#111827',
     marginTop: 2,
   },
@@ -555,6 +549,7 @@ const styles = StyleSheet.create({
   },
   repairDescription: {
     fontSize: 14,
+    fontWeight: '400',
     color: '#4b5563',
     lineHeight: 20,
     marginTop: 4,

@@ -227,6 +227,32 @@ export const repairsAPI = {
   getMonthlyStats: (year, month) => api.get('/repairs/stats/monthly', { params: { year, month } }),
 };
 
+// Events API
+export const eventsAPI = {
+  getAll: (params) => api.get('/events', { params }),
+  getById: (id) => api.get(`/events/${id}`),
+  getByElevator: (elevatorId, params) => api.get(`/events/elevator/${elevatorId}`, { params }),
+  create: (data) =>
+    api.post('/events', {
+      elevatorId: data.elevatorId,
+      eventType: data.eventType,
+      repair: data.repair || null,
+      serviceNote: data.serviceNote || null,
+      activity: data.activity || null,
+      napomene: data.napomene,
+      datum: data.datum,
+    }),
+  update: (id, data) =>
+    api.put(`/events/${id}`, {
+      repair: data.repair,
+      serviceNote: data.serviceNote,
+      activity: data.activity,
+      napomene: data.napomene,
+      datum: data.datum,
+    }),
+  delete: (id) => api.delete(`/events/${id}`),
+};
+
 // ChatRooms API
 export const chatroomsAPI = {
   getAll: () => api.get('/chatrooms'),

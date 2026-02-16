@@ -2,13 +2,14 @@ import React, { createContext, useState, useEffect, useContext, useRef } from 'r
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import { authAPI, API_URL } from '../services/api';
-import { initDatabase, resetDatabase } from '../database/db';
+import { initDatabase, resetDatabase, elevatorDB, serviceDB, repairDB } from '../database/db';
 import {
   syncAll,
   startAutoSync,
   stopAutoSync,
   subscribeToNetworkChanges,
   checkOnlineStatus,
+  primeFullSync,
 } from '../services/syncService';
 
 const AuthContext = createContext({});
@@ -120,6 +121,19 @@ export const AuthProvider = ({ children }) => {
 
       if (token && userData) {
         setUser(JSON.parse(userData));
+
+        try {
+          const localElevators = elevatorDB.getAll?.() || [];
+          const localServices = serviceDB.getAll?.() || [];
+          const localRepairs = repairDB.getAll?.() || [];
+          if (!localElevators.length && !localServices.length && !localRepairs.length) {
+            await primeFullSync();
+            console.log('Local cache empty - forced full sync');
+          }
+        } catch (e) {
+          console.log('Local cache check failed:', e?.message);
+        }
+
         // Backend wake-up i sync idu u pozadini da se UI ne blokira na cold start-u
         wakeBackendAndSync(true);
       } else {

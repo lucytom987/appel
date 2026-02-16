@@ -1,12 +1,14 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, BackHandler } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, BackHandler, Image, Modal, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { elevatorDB, userDB, serviceDB } from '../database/db';
+import ImageViewer from 'react-native-image-zoom-viewer';
 
 export default function ServiceDetailsScreen({ route, navigation }) {
   const { service: routeService } = route.params;
   const [service, setService] = useState(routeService);
+  const [activePhotoUrl, setActivePhotoUrl] = useState(null);
 
   const serviceId = routeService?._id || routeService?.id;
 
@@ -46,6 +48,7 @@ export default function ServiceDetailsScreen({ route, navigation }) {
   const elevator = elevatorDB.getById(service?.elevatorId);
 
   const checklistItems = Array.isArray(service.checklist) ? service.checklist : [];
+  const notePhotos = Array.isArray(service?.notePhotos) ? service.notePhotos : [];
 
   const serviserValue = (() => {
     const raw = service?.serviserID;
@@ -181,6 +184,43 @@ export default function ServiceDetailsScreen({ route, navigation }) {
           </View>
         )}
 
+        {notePhotos.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Fotografije</Text>
+            <Text style={styles.photoCountText}>{notePhotos.length} slika</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photoScroll}>
+              {notePhotos.map((photo, idx) => (
+                <View key={idx} style={styles.photoThumbnailWrapper}>
+                  <TouchableOpacity onPress={() => setActivePhotoUrl(photo.url)}>
+                    <Image source={{ uri: photo.url }} style={styles.photoThumbnail} />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        <Modal
+          visible={Boolean(activePhotoUrl)}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setActivePhotoUrl(null)}
+        >
+          <View style={styles.photoModalOverlay}>
+            <TouchableOpacity style={styles.photoModalClose} onPress={() => setActivePhotoUrl(null)}>
+              <Ionicons name="close" size={28} color="#fff" />
+            </TouchableOpacity>
+            <ImageViewer
+              imageUrls={activePhotoUrl ? [{ url: activePhotoUrl }] : []}
+              enableSwipeDown
+              onSwipeDown={() => setActivePhotoUrl(null)}
+              backgroundColor="transparent"
+              style={styles.photoViewer}
+              loadingRender={() => <ActivityIndicator size="large" color="#fff" />}
+            />
+          </View>
+        </Modal>
+
         {checklistItems.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Checklist</Text>
@@ -206,6 +246,8 @@ export default function ServiceDetailsScreen({ route, navigation }) {
               const label = labelMap[rawKey] || fallback || '-';
               const checked = item?.provjereno ?? item?.provjereno;
               const isChecked = checked === 1 || checked === true;
+              const note = typeof item?.napomena === 'string' ? item.napomena.trim() : '';
+              const hasStatus = (rawKey === 'ups_check' || rawKey === 'voice_comm') && (note === 'radi' || note === 'ne_radi');
 
               return (
                 <View key={idx} style={styles.checkItem}>
@@ -215,6 +257,11 @@ export default function ServiceDetailsScreen({ route, navigation }) {
                     color={isChecked ? '#10b981' : '#9ca3af'}
                   />
                   <Text style={styles.checkLabel}>{label}</Text>
+                  {hasStatus && (
+                    <View style={[styles.statusBadge, note === 'radi' ? styles.statusBadgeOk : styles.statusBadgeFail]}>
+                      <Text style={styles.statusBadgeText}>{note === 'radi' ? 'Radi' : 'Ne radi'}</Text>
+                    </View>
+                  )}
                 </View>
               );
             })}
@@ -268,4 +315,61 @@ const styles = StyleSheet.create({
   checkLabel: { fontSize: 14, color: '#1f2937' },
   elevatorBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, backgroundColor: '#eef2ff', borderWidth: 1, borderColor: '#e0e7ff' },
   elevatorBadgeText: { fontSize: 13, fontWeight: '700', color: '#1f2937' },
+  statusBadge: {
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    marginLeft: 'auto',
+  },
+  statusBadgeOk: {
+    backgroundColor: '#dcfce7',
+    borderColor: '#22c55e',
+  },
+  statusBadgeFail: {
+    backgroundColor: '#fee2e2',
+    borderColor: '#ef4444',
+  },
+  statusBadgeText: {
+    fontSize: 12,
+    color: '#111827',
+    fontWeight: '600',
+  },
+  photoCountText: {
+    fontSize: 13,
+    color: '#6b7280',
+    marginBottom: 8,
+  },
+  photoScroll: {
+    maxHeight: 100,
+  },
+  photoThumbnailWrapper: {
+    marginRight: 10,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  photoThumbnail: {
+    width: 100,
+    height: 100,
+    borderRadius: 8,
+    backgroundColor: '#f3f4f6',
+  },
+  photoModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  photoModalClose: {
+    position: 'absolute',
+    top: 40,
+    right: 20,
+    padding: 8,
+    zIndex: 2,
+  },
+  photoViewer: {
+    flex: 1,
+    width: '100%',
+  },
 });

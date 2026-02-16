@@ -13,7 +13,7 @@ const ALLOWED_CHECKLIST = [
   'cable_inspection',
 ];
 
-// Normalizira payload prije slanja da sprijeci validation/cast greške na backendu
+// Normalizira payload prije slanja da sprijeci validation/cast greï¿½ke na backendu
 const normalizeServicePayload = (s) => {
   const dodatniServiseri = Array.isArray(s.dodatniServiseri)
     ? s.dodatniServiseri
@@ -54,10 +54,11 @@ const normalizeServicePayload = (s) => {
     imaNedostataka: Boolean(s.imaNedostataka),
     nedostaci,
     napomene: s.napomene || '',
+    notePhotos: Array.isArray(s.notePhotos) ? s.notePhotos : [],
     sljedeciServis: s.sljedeciServis || undefined,
   };
 
-  // Izbaci undefined polja da ne šaljemo prazne vrijednosti
+  // Izbaci undefined polja da ne ï¿½aljemo prazne vrijednosti
   Object.keys(payload).forEach((k) => payload[k] === undefined && delete payload[k]);
   return payload;
 };
@@ -125,6 +126,8 @@ const toMs = (v) => {
   return Number.isNaN(t) ? 0 : t;
 };
 
+const toBool = (v) => v === true || v === 1 || v === '1' || v === 'true';
+
 const isPendingDelete = (rec) => rec?.sync_status === 'pending_delete' || rec?.is_deleted;
 
 // Network status
@@ -184,7 +187,7 @@ const setLastFull = async (key) => {
   }
 };
 
-  // Primaj full pull na iduci sync (briše lastSync/lastFull kljuceve)
+  // Primaj full pull na iduci sync (briï¿½e lastSync/lastFull kljuceve)
 export const forceFullNextSync = async () => {
   const keys = [
     'lastSyncElevators',
@@ -306,6 +309,9 @@ export const syncElevatorsFromServer = async (forceFull = false) => {
       total = res.data.total || serverElevators.length;
 
       serverElevators.forEach((e) => {
+        if (!e || (!e._id && !e.id)) {
+          return;
+        }
         const serverId = e._id || e.id;
         if (serverId) {
           serverIds.add(String(serverId));
@@ -378,7 +384,7 @@ export const syncElevatorsFromServer = async (forceFull = false) => {
       }
     }
 
-    // Ako delta nije vratila ništa, forsiraj jedan full pull
+    // Ako delta nije vratila niï¿½ta, forsiraj jedan full pull
     if (!shouldFullSync && fetched === 0) {
       try {
         if (SecureStore.deleteItemAsync) {
@@ -396,7 +402,7 @@ export const syncElevatorsFromServer = async (forceFull = false) => {
       await setLastFull('lastFullElevators');
     }
 
-    // Recovery: ako delta sync donese manje zapisa od server total, odradi još jedan full pull
+    // Recovery: ako delta sync donese manje zapisa od server total, odradi joï¿½ jedan full pull
     const localCount = (elevatorDB.getAll?.() || []).length;
     if (!forceFull && total && localCount < total) {
       console.log(`Elevators local count (${localCount}) < server total (${total}); forcing full pull once`);
@@ -406,7 +412,7 @@ export const syncElevatorsFromServer = async (forceFull = false) => {
     console.log(`Elevators synced: ${fetched} (total reported: ${total || fetched})`);
     return true;
   } catch (err) {
-    console.log('Greška sync elevators:', err.message);
+    console.log('Greï¿½ka sync elevators:', err.message);
     return false;
   }
 };
@@ -463,7 +469,7 @@ export const syncElevatorsToServer = async () => {
 
       if (localId.startsWith('local_')) {
         if (pendingDelete) {
-          // Lokalan zapis nikad nije otišao na server - oznaci kao sinkroniziran delete
+          // Lokalan zapis nikad nije otiï¿½ao na server - oznaci kao sinkroniziran delete
           elevatorDB.markSynced(e.id, e.id);
           continue;
         }
@@ -473,7 +479,7 @@ export const syncElevatorsToServer = async () => {
           elevatorDB.markSynced(e.id, serverId);
         }
       } else {
-        // Ako je oznacen kao deleted/pending_delete, pokušaj DELETE
+        // Ako je oznacen kao deleted/pending_delete, pokuï¿½aj DELETE
         if (pendingDelete) {
           try {
             await elevatorsAPI.delete(e.id);
@@ -486,7 +492,7 @@ export const syncElevatorsToServer = async () => {
               elevatorDB.markSynced(e.id, e.id);
               continue;
             }
-            console.log('Greška delete elevator', e.id, explainError(err));
+            console.log('Greï¿½ka delete elevator', e.id, explainError(err));
             continue;
           }
         }
@@ -511,8 +517,8 @@ export const syncElevatorsToServer = async () => {
             if (serverId) elevatorDB.markSynced(e.id, serverId);
             continue;
           }
-          console.log('Greška dohvat server elevator', e.id, explainError(fetchErr));
-          // nastavi s push-om; bolje pokušati nego zapeti
+          console.log('Greï¿½ka dohvat server elevator', e.id, explainError(fetchErr));
+          // nastavi s push-om; bolje pokuï¿½ati nego zapeti
         }
 
         await elevatorsAPI.update(e.id, payload);
@@ -523,7 +529,7 @@ export const syncElevatorsToServer = async () => {
       if (status === 409 || status === 412) {
         markConflict(elevatorDB, e.id);
       }
-      console.log('Greška push elevator', e.id, explainError(err));
+      console.log('Greï¿½ka push elevator', e.id, explainError(err));
     }
   }
   return true;
@@ -553,6 +559,9 @@ export const syncServicesFromServer = async (forceFull = false) => {
       total = res.data.total || serverServices.length;
 
       serverServices.forEach((s) => {
+        if (!s || !s._id) {
+          return;
+        }
         serverIds.add(String(s._id));
         const local = serviceDB.getById?.(s._id);
         const serverUpdated = toMs(s.updated_at || s.azuriranDatum || s.updatedAt || s.kreiranDatum);
@@ -573,12 +582,13 @@ export const syncServicesFromServer = async (forceFull = false) => {
           imaNedostataka: s.imaNedostataka,
           nedostaci: s.nedostaci || [],
           napomene: s.napomene,
+          notePhotos: s.notePhotos || [],
           sljedeciServis: s.sljedeciServis,
           kreiranDatum: s.kreiranDatum || s.createdAt,
           azuriranDatum: s.azuriranDatum || s.updatedAt,
           updated_at: s.updated_at || s.azuriranDatum || s.updatedAt,
           updated_by: s.updated_by,
-          is_deleted: s.is_deleted,
+          is_deleted: toBool(s.is_deleted),
           deleted_at: s.deleted_at,
           sync_status: 'synced',
           synced: 1,
@@ -619,7 +629,7 @@ export const syncServicesFromServer = async (forceFull = false) => {
       }
     }
 
-    // Ako je delta sync vratio 0 rezultata, pokušaj jedan full sync (obrisi lastSyncServices)
+    // Ako je delta sync vratio 0 rezultata, pokuï¿½aj jedan full sync (obrisi lastSyncServices)
     if (!shouldFullSync && fetched === 0) {
       try {
         if (SecureStore.deleteItemAsync) {
@@ -640,7 +650,7 @@ export const syncServicesFromServer = async (forceFull = false) => {
     console.log(`Services synced: ${fetched} (total reported: ${total || fetched}), lokalno: ${localCount}`);
     return true;
   } catch (err) {
-    console.log('Greška sync services:', err.message);
+    console.log('Greï¿½ka sync services:', err.message);
     return false;
   }
 };
@@ -649,7 +659,7 @@ export const syncServicesFromServer = async (forceFull = false) => {
 export const syncRepairsFromServer = async () => {
   if (!isOnline) return false;
   try {
-    const periodicFull = await shouldRunPeriodicFull('lastFullRepairs', 1); // cešci full sync da pokupimo brisanja (svakih ~1h)
+    const periodicFull = await shouldRunPeriodicFull('lastFullRepairs', 1); // ceï¿½ci full sync da pokupimo brisanja (svakih ~1h)
     const shouldFullSync = periodicFull || (() => {
       try {
         const existing = repairDB.getAll();
@@ -679,6 +689,9 @@ export const syncRepairsFromServer = async () => {
       total = res.data.total || serverRepairs.length;
 
       serverRepairs.forEach((r) => {
+        if (!r || !r._id) {
+          return;
+        }
         const elevatorId = r.elevatorId?._id || r.elevatorId?.id || r.elevator || r.elevatorId;
         const serviserID = r.serviserID?._id || r.serviserID?.id || r.serviserID;
         const local = repairDB.getById?.(r._id);
@@ -704,6 +717,7 @@ export const syncRepairsFromServer = async () => {
           radniNalogPotpisan: r.radniNalogPotpisan,
           popravkaUPotpunosti: r.popravkaUPotpunosti,
           napomene: r.napomene,
+          photos: r.photos || [],
           kreiranDatum: r.kreiranDatum || r.createdAt,
           azuriranDatum: r.azuriranDatum || r.updatedAt,
           prijavio: r.prijavio,
@@ -711,7 +725,7 @@ export const syncRepairsFromServer = async () => {
           primioPoziv: r.primioPoziv,
           updated_at: r.updated_at || r.azuriranDatum || r.updatedAt,
           updated_by: r.updated_by,
-          is_deleted: r.is_deleted,
+          is_deleted: toBool(r.is_deleted),
           deleted_at: r.deleted_at,
           sync_status: 'synced',
           synced: 1,
@@ -728,7 +742,7 @@ export const syncRepairsFromServer = async () => {
       skip += serverRepairs.length;
     } while (fetched < total && skip < 5000);
 
-    // Ako delta vrati 0, pokuaj full pull
+    // Ako delta vrati 0, pokuï¿½aj full pull
     if (!shouldFullSync && fetched === 0) {
       try {
         if (SecureStore.deleteItemAsync) {
@@ -748,7 +762,7 @@ export const syncRepairsFromServer = async () => {
     console.log(`Repairs synced: ${fetched} (total reported: ${total || fetched})`);
     return true;
   } catch (err) {
-    console.log('Greška sync repairs:', err.message);
+    console.log('Greï¿½ka sync repairs:', err.message);
     return false;
   }
 };
@@ -770,7 +784,12 @@ export const syncServicesToServer = async () => {
           continue;
         }
         const res = await servicesAPI.create(normalizeServicePayload(s));
-        serviceDB.markSynced(s.id, res.data.data._id);
+        const serverId = res?.data?.data?._id || res?.data?._id || res?.data?.id;
+        if (serverId) {
+          serviceDB.markSynced(s.id, serverId);
+        } else {
+          console.log('Service create: missing server id for', s.id);
+        }
       } else {
         const payload = normalizeServicePayload(s);
         delete payload.elevatorId; // backend cuva originalni elevatorId
@@ -787,7 +806,7 @@ export const syncServicesToServer = async () => {
               serviceDB.markSynced(s.id, s.id);
               continue;
             }
-            console.log('Greška delete service', s.id, explainError(err));
+            console.log('Greï¿½ka delete service', s.id, explainError(err));
             continue;
           }
         }
@@ -808,11 +827,16 @@ export const syncServicesToServer = async () => {
           if (status === 404) {
             console.log('Server nema service, kreiram ponovo', s.id);
             const res = await servicesAPI.create(normalizeServicePayload(s));
-            serviceDB.markSynced(s.id, res.data.data._id);
+            const serverId = res?.data?.data?._id || res?.data?._id || res?.data?.id;
+            if (serverId) {
+              serviceDB.markSynced(s.id, serverId);
+            } else {
+              console.log('Service create (retry): missing server id for', s.id);
+            }
             continue;
           }
-          console.log('Greška dohvat server service', s.id, explainError(fetchErr));
-          // nastavi, pokušaj update
+          console.log('Greï¿½ka dohvat server service', s.id, explainError(fetchErr));
+          // nastavi, pokuï¿½aj update
         }
 
         if (s.is_deleted) {
@@ -827,9 +851,9 @@ export const syncServicesToServer = async () => {
       if (status === 409 || status === 412) {
         markConflict(serviceDB, s.id);
       }
-      console.log('Greška push service', s.id, explainError(err));
+      console.log('Greï¿½ka push service', s.id, explainError(err));
       if (err?.response?.data) {
-        console.log('Detalji greške:', err.response.data);
+        console.log('Detalji greï¿½ke:', err.response.data);
       }
     }
   }
@@ -843,8 +867,12 @@ export const syncRepairsToServer = async () => {
   if (!unsynced.length) return true;
   console.log(`Push repairs: ${unsynced.length}`);
   for (const r of unsynced) {
-    const elevatorId = (typeof r.elevatorId === 'object') ? (r.elevatorId._id || r.elevatorId.id) : r.elevatorId;
-    const serviserID = (typeof r.serviserID === 'object') ? (r.serviserID._id || r.serviserID.id) : r.serviserID;
+    const elevatorId = (r.elevatorId && typeof r.elevatorId === 'object')
+      ? (r.elevatorId._id || r.elevatorId.id)
+      : r.elevatorId;
+    const serviserID = (r.serviserID && typeof r.serviserID === 'object')
+      ? (r.serviserID._id || r.serviserID.id)
+      : r.serviserID;
     const localId = String(r.id || '');
     const pendingDelete = isPendingDelete(r);
     const flag = detectTrebaloBi(r);
@@ -865,12 +893,18 @@ export const syncRepairsToServer = async () => {
           radniNalogPotpisan: Boolean(r.radniNalogPotpisan),
           popravkaUPotpunosti: Boolean(r.popravkaUPotpunosti),
           napomene: r.napomene,
+          photos: r.photos || [],
           prijavio: r.prijavio,
           kontaktTelefon: r.kontaktTelefon,
           primioPoziv: r.primioPoziv,
           serviserID,
         });
-        repairDB.markSynced(r.id, res.data.data._id);
+        const serverId = res?.data?.data?._id || res?.data?._id || res?.data?.id;
+        if (serverId) {
+          repairDB.markSynced(r.id, serverId);
+        } else {
+          console.log('Repair create: missing server id for', r.id);
+        }
       } else {
         if (pendingDelete) {
           try {
@@ -915,16 +949,22 @@ export const syncRepairsToServer = async () => {
                 radniNalogPotpisan: Boolean(r.radniNalogPotpisan),
                 popravkaUPotpunosti: Boolean(r.popravkaUPotpunosti),
                 napomene: r.napomene,
+                photos: r.photos || [],
                 prijavio: r.prijavio,
               kontaktTelefon: r.kontaktTelefon,
               primioPoziv: r.primioPoziv,
               serviserID,
             });
-            repairDB.markSynced(r.id, res.data.data._id);
+            const serverId = res?.data?.data?._id || res?.data?._id || res?.data?.id;
+            if (serverId) {
+              repairDB.markSynced(r.id, serverId);
+            } else {
+              console.log('Repair create (retry): missing server id for', r.id);
+            }
             continue;
           }
           console.log('Greska dohvat server repair', r.id, explainError(fetchErr));
-          // nastavi, pokušaj update
+          // nastavi, pokuï¿½aj update
         }
 
         await repairsAPI.update(r.id, {
@@ -937,6 +977,7 @@ export const syncRepairsToServer = async () => {
           radniNalogPotpisan: Boolean(r.radniNalogPotpisan),
           popravkaUPotpunosti: Boolean(r.popravkaUPotpunosti),
           napomene: r.napomene,
+          photos: r.photos || [],
           prijavio: r.prijavio,
           kontaktTelefon: r.kontaktTelefon,
           primioPoziv: r.primioPoziv,
@@ -972,7 +1013,7 @@ export const syncUsersFromServer = async () => {
     userDB.bulkInsert(res.data);
     return true;
   } catch (err) {
-    console.log('Greška sync users:', err.message);
+    console.log('Greï¿½ka sync users:', err.message);
     return false;
   }
 };
@@ -1030,7 +1071,7 @@ export const syncAll = async () => {
     syncInProgress = false;
     return true;
   } catch (err) {
-    console.error('Greška pri full sync:', err);
+    console.error('Greï¿½ka pri full sync:', err);
     syncInProgress = false;
     return false;
   }

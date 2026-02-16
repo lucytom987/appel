@@ -346,6 +346,27 @@ export default function ServicesListScreen({ navigation }) {
         })
         .filter(Boolean);
 
+      // Sortiraj po daysUntilNext - prekoračeno prvo, zatim po broju dana
+      notServiced.sort((a, b) => {
+        const sljedeciA = parseDate(a.sljedeciServis);
+        const sljedeciB = parseDate(b.sljedeciServis);
+        
+        const daysA = sljedeciA ? Math.ceil((sljedeciA - new Date()) / (1000 * 60 * 60 * 24)) : Infinity;
+        const daysB = sljedeciB ? Math.ceil((sljedeciB - new Date()) / (1000 * 60 * 60 * 24)) : Infinity;
+        
+        // Prekoračene (negativne) prvo, sortirane od najviše prekoračenosti prema manjoj
+        if (daysA < 0 && daysB < 0) {
+          return daysA - daysB; // manja vrijednost (prije) = više prekoračeno
+        }
+        
+        // Ako je samo jedan prekoračen, taj ide prvi
+        if (daysA < 0) return -1;
+        if (daysB < 0) return 1;
+        
+        // Inače sortiraj po broju preostalih dana (manje = prvo)
+        return daysA - daysB;
+      });
+
       setFilteredServices(notServiced);
       return;
     }

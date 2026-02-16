@@ -1,10 +1,12 @@
 ﻿import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, BackHandler } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, BackHandler, Image, ActivityIndicator, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { elevatorDB, repairDB } from '../database/db';
 import { repairsAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useFocusEffect } from '@react-navigation/native';
+import { usePhotoUpload } from '../hooks/usePhotoUpload';
+import ImageViewer from 'react-native-image-zoom-viewer';
 import ms from '../utils/scale';
 
 const statusLabel = (repair) => {
@@ -24,6 +26,11 @@ export default function RepairDetailsScreen({ route, navigation }) {
   const [repairData, setRepairData] = useState(repair);
   const { user, isOnline, serverAwake } = useAuth();
   const online = Boolean(isOnline && serverAwake);
+  
+  // Photo upload hook
+  const { pickAndUploadPhoto, takePhotoWithCamera, uploading: uploadingPhoto, error: photoError, clearError } = usePhotoUpload();
+  const [photos, setPhotos] = useState(repair?.photos || []);
+  const [activePhotoUrl, setActivePhotoUrl] = useState(null);
 
   // Na hardverski back vrati na listu popravaka
   useFocusEffect(
@@ -49,6 +56,9 @@ export default function RepairDetailsScreen({ route, navigation }) {
       const fresh = repairDB.getById(id);
       if (fresh) {
         setRepairData({ ...repair, ...fresh });
+        if (Array.isArray(fresh.photos)) {
+          setPhotos(fresh.photos);
+        }
       }
     } catch (e) {
       console.log('Ne mogu učitati detalje popravka iz baze:', e?.message);
@@ -93,28 +103,42 @@ export default function RepairDetailsScreen({ route, navigation }) {
 
   const handleSave = async () => {
     const id = repairData._id || repairData.id;
+    const isNew = String(id).startsWith('local_');
+    
     const payload = {
+      id,
+      elevatorId: repairData.elevatorId,
       opisKvara,
       opisPopravka,
       status,
       trebaloBi: isTrebaloBi,
       radniNalogPotpisan,
+      photos,
       updated_at: Date.now(),
     };
 
     setSaving(true);
     try {
       const onlineNow = online;
-      if (!onlineNow) {
-        repairDB.update(id, { ...repairData, ...payload, synced: 0, sync_status: 'dirty' });
+      
+      if (isNew) {
+        // NOVA popravka - spremi localno prvo
+        repairDB.insert({ ...repairData, ...payload, synced: 0, sync_status: 'dirty' });
         setRepairData((prev) => ({ ...prev, ...payload, synced: 0, sync_status: 'dirty' }));
       } else {
-        const response = await repairsAPI.update(id, payload);
-        const updated = response.data?.data || response.data;
-        repairDB.update(id, { ...repairData, ...updated, synced: 1, sync_status: 'synced' });
-        setRepairData((prev) => ({ ...prev, ...updated, synced: 1, sync_status: 'synced' }));
+        // Postojeća popravka - ažuriraj
+        if (!onlineNow) {
+          repairDB.update(id, { ...repairData, ...payload, synced: 0, sync_status: 'dirty' });
+          setRepairData((prev) => ({ ...prev, ...payload, synced: 0, sync_status: 'dirty' }));
+        } else {
+          const response = await repairsAPI.update(id, payload);
+          const updated = response.data?.data || response.data;
+          repairDB.update(id, { ...repairData, ...updated, synced: 1, sync_status: 'synced' });
+          setRepairData((prev) => ({ ...prev, ...updated, synced: 1, sync_status: 'synced' }));
+        }
       }
-      Alert.alert('Spremljeno', 'Promjene su spremljene', [
+      
+      Alert.alert('Spremljeno', 'Popravka je spremljena', [
         { text: 'OK', onPress: () => {
           if (navigation.canGoBack()) {
             navigation.goBack();
@@ -124,10 +148,23 @@ export default function RepairDetailsScreen({ route, navigation }) {
         } },
       ]);
     } catch (e) {
-      Alert.alert('Greška', e?.message || 'Nije moguće spremiti promjene');
+      Alert.alert('Greška', e?.message || 'Nije moguće spremiti popravku');
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleOpenElevator = () => {
+    const baseElevator = elevatorId
+      ? (elevatorDB.getById(elevatorId) || { ...elevator, id: elevatorId })
+      : elevator;
+
+    if (baseElevator && (baseElevator._id || baseElevator.id || baseElevator.brojDizala)) {
+      navigation.navigate('ElevatorDetails', { elevator: baseElevator });
+      return;
+    }
+
+    Alert.alert('Greška', 'Nije moguće otvoriti dizalo.');
   };
 
   return (
@@ -148,9 +185,13 @@ export default function RepairDetailsScreen({ route, navigation }) {
 
       <ScrollView style={styles.content}>
         <View style={styles.elevatorHero}>
-          <View style={[styles.elevatorBadgeLarge, { borderColor: statusColor({ status, trebaloBi: isTrebaloBi }) }]}>
+          <TouchableOpacity
+            style={[styles.elevatorBadgeLarge, { borderColor: statusColor({ status, trebaloBi: isTrebaloBi }) }]}
+            onPress={handleOpenElevator}
+            activeOpacity={0.8}
+          >
             <Text style={styles.elevatorBadgeLargeText}>{elevator?.brojDizala || 'Dizalo'}</Text>
-          </View>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.card}>
@@ -174,6 +215,102 @@ export default function RepairDetailsScreen({ route, navigation }) {
             multiline
           />
         </View>
+
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Fotografije</Text>
+          {photoError && (
+            <View style={styles.errorBanner}>
+              <Ionicons name="alert-circle" size={18} color="#dc2626" />
+              <Text style={styles.errorText}>{photoError}</Text>
+              <TouchableOpacity onPress={clearError}>
+                <Ionicons name="close" size={18} color="#dc2626" />
+              </TouchableOpacity>
+            </View>
+          )}
+          
+          <View style={styles.photoButtonRow}>
+            <TouchableOpacity
+              style={[styles.photoButton, uploadingPhoto && styles.photoButtonDisabled]}
+              onPress={async () => {
+                const result = await pickAndUploadPhoto();
+                if (result) {
+                  setPhotos((prev) => [...prev, result]);
+                }
+              }}
+              disabled={uploadingPhoto}
+            >
+              {uploadingPhoto ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Ionicons name="image-outline" size={20} color="#fff" />
+              )}
+              <Text style={styles.photoButtonText}>Odaberi</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={[styles.photoButton, uploadingPhoto && styles.photoButtonDisabled]}
+              onPress={async () => {
+                const result = await takePhotoWithCamera();
+                if (result) {
+                  setPhotos((prev) => [...prev, result]);
+                }
+              }}
+              disabled={uploadingPhoto}
+            >
+              {uploadingPhoto ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Ionicons name="camera-outline" size={20} color="#fff" />
+              )}
+              <Text style={styles.photoButtonText}>Fotka</Text>
+            </TouchableOpacity>
+          </View>
+
+          {photos.length > 0 && (
+            <View style={styles.photoGallery}>
+              <Text style={styles.photoCountText}>{photos.length} slika</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photoScroll}>
+                {photos.map((photo, idx) => (
+                  <View key={idx} style={styles.photoThumbnailWrapper}>
+                    <TouchableOpacity onPress={() => setActivePhotoUrl(photo.url)}>
+                      <Image
+                        source={{ uri: photo.url }}
+                        style={styles.photoThumbnail}
+                      />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.photoRemoveBtn}
+                      onPress={() => setPhotos(photos.filter((_, i) => i !== idx))}
+                    >
+                      <Ionicons name="close" size={16} color="#fff" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+        </View>
+
+        <Modal
+          visible={Boolean(activePhotoUrl)}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setActivePhotoUrl(null)}
+        >
+          <View style={styles.photoModalOverlay}>
+            <TouchableOpacity style={styles.photoModalClose} onPress={() => setActivePhotoUrl(null)}>
+              <Ionicons name="close" size={28} color="#fff" />
+            </TouchableOpacity>
+            <ImageViewer
+              imageUrls={activePhotoUrl ? [{ url: activePhotoUrl }] : []}
+              enableSwipeDown
+              onSwipeDown={() => setActivePhotoUrl(null)}
+              backgroundColor="transparent"
+              style={styles.photoViewer}
+              loadingRender={() => <ActivityIndicator size="large" color="#fff" />}
+            />
+          </View>
+        </Modal>
 
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Status</Text>
@@ -360,6 +497,96 @@ const styles = StyleSheet.create({
     paddingHorizontal: ms(14),
     backgroundColor: '#2563eb',
     borderRadius: ms(8),
+  },
+  
+  // Photo styles
+  photoButtonRow: {
+    flexDirection: 'row',
+    gap: ms(10),
+    marginTop: ms(12),
+  },
+  photoButton: {
+    flex: 1,
+    backgroundColor: '#3b82f6',
+    borderRadius: ms(10),
+    paddingVertical: ms(12),
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: ms(8),
+  },
+  photoButtonDisabled: {
+    opacity: 0.6,
+  },
+  photoButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: ms(14),
+  },
+  photoGallery: {
+    marginTop: ms(12),
+  },
+  photoCountText: {
+    fontSize: ms(13),
+    color: '#6b7280',
+    marginBottom: ms(8),
+  },
+  photoScroll: {
+    maxHeight: ms(100),
+  },
+  photoThumbnailWrapper: {
+    marginRight: ms(10),
+    borderRadius: ms(8),
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  photoThumbnail: {
+    width: ms(80),
+    height: ms(80),
+    borderRadius: ms(8),
+    backgroundColor: '#f3f4f6',
+  },
+  photoModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: ms(20),
+  },
+  photoModalClose: {
+    position: 'absolute',
+    top: ms(40),
+    right: ms(20),
+    padding: ms(8),
+    zIndex: 2,
+  },
+  photoViewer: {
+    flex: 1,
+    width: '100%',
+  },
+  photoRemoveBtn: {
+    position: 'absolute',
+    top: ms(4),
+    right: ms(4),
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: ms(12),
+    padding: ms(4),
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: ms(8),
+    backgroundColor: '#fee2e2',
+    borderRadius: ms(8),
+    paddingHorizontal: ms(10),
+    paddingVertical: ms(8),
+    marginBottom: ms(12),
+  },
+  errorText: {
+    flex: 1,
+    fontSize: ms(13),
+    color: '#dc2626',
+    fontWeight: '500',
   },
 });
 

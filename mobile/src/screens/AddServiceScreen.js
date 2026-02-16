@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Image,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,6 +19,7 @@ import * as SecureStore from 'expo-secure-store';
 import { useAuth } from '../context/AuthContext';
 import { serviceDB, elevatorDB, userDB } from '../database/db';
 import { servicesAPI, usersAPI } from '../services/api';
+import { usePhotoUpload } from '../hooks/usePhotoUpload';
 
 export default function AddServiceScreen({ navigation, route }) {
   const { elevator } = route.params || {};
@@ -117,7 +119,9 @@ export default function AddServiceScreen({ navigation, route }) {
       initChecklist[e._id || e.id] = {
         lubrication: false,
         upsCheck: false,
+        upsStatus: null,
         voiceComm: false,
+        voiceCommStatus: null,
         shaftCleaning: false,
         driveCheck: false,
         brakeCheck: false,
@@ -144,10 +148,16 @@ export default function AddServiceScreen({ navigation, route }) {
     kolegaId: null,
   });
 
+  // Photo upload hook
+  const { pickAndUploadPhoto, takePhotoWithCamera, uploading: uploadingPhoto, error: photoError, clearError } = usePhotoUpload();
+  const [notePhotos, setNotePhotos] = useState([]);
+
   const baseChecklist = {
     lubrication: false,
     upsCheck: false,
+    upsStatus: null,
     voiceComm: false,
+    voiceCommStatus: null,
     shaftCleaning: false,
     driveCheck: false,
     brakeCheck: false,
@@ -167,10 +177,38 @@ export default function AddServiceScreen({ navigation, route }) {
   const toggleChecklistItem = (elevatorId, key) => {
     setPerElevatorChecklist((prev) => ({
       ...prev,
-      [elevatorId]: {
-        ...(prev[elevatorId] || baseChecklist),
-        [key]: !(prev[elevatorId]?.[key]),
-      }
+      [elevatorId]: (() => {
+        const nextState = {
+          ...(prev[elevatorId] || baseChecklist),
+        };
+
+        if (key === 'upsCheck') {
+          const currentStatus = nextState.upsStatus || null;
+          const nextStatus = currentStatus === null
+            ? 'radi'
+            : currentStatus === 'radi'
+              ? 'ne_radi'
+              : null;
+          nextState.upsStatus = nextStatus;
+          nextState.upsCheck = Boolean(nextStatus);
+          return nextState;
+        }
+
+        if (key === 'voiceComm') {
+          const currentStatus = nextState.voiceCommStatus || null;
+          const nextStatus = currentStatus === null
+            ? 'radi'
+            : currentStatus === 'radi'
+              ? 'ne_radi'
+              : null;
+          nextState.voiceCommStatus = nextStatus;
+          nextState.voiceComm = Boolean(nextStatus);
+          return nextState;
+        }
+
+        nextState[key] = !(prev[elevatorId]?.[key]);
+        return nextState;
+      })()
     }));
   };
 
@@ -220,8 +258,8 @@ export default function AddServiceScreen({ navigation, route }) {
         const state = perElevatorChecklist[cid] || baseChecklist;
         return [
           { stavka: 'lubrication', provjereno: state.lubrication ? 1 : 0, napomena: '' },
-          { stavka: 'ups_check', provjereno: state.upsCheck ? 1 : 0, napomena: '' },
-          { stavka: 'voice_comm', provjereno: state.voiceComm ? 1 : 0, napomena: '' },
+          { stavka: 'ups_check', provjereno: state.upsCheck ? 1 : 0, napomena: state.upsCheck && state.upsStatus ? state.upsStatus : '' },
+          { stavka: 'voice_comm', provjereno: state.voiceComm ? 1 : 0, napomena: state.voiceComm && state.voiceCommStatus ? state.voiceCommStatus : '' },
           { stavka: 'shaft_cleaning', provjereno: state.shaftCleaning ? 1 : 0, napomena: '' },
           { stavka: 'drive_check', provjereno: state.driveCheck ? 1 : 0, napomena: '' },
           { stavka: 'brake_check', provjereno: state.brakeCheck ? 1 : 0, napomena: '' },
@@ -237,6 +275,7 @@ export default function AddServiceScreen({ navigation, route }) {
         nedostaci: [],
         sljedeciServis: formData.nextServiceDate.toISOString(),
         dodatniServiseri: formData.kolegaId ? [formData.kolegaId] : [],
+        notePhotos: notePhotos,
       };
 
       // Provjeri je li offline korisnik (demo korisnik)
@@ -276,6 +315,7 @@ export default function AddServiceScreen({ navigation, route }) {
               checklist: created.checklist || payload.checklist,
               imaNedostataka: created.imaNedostataka ?? payload.imaNedostataka,
               nedostaci: created.nedostaci || payload.nedostaci,
+              notePhotos: created.notePhotos || payload.notePhotos || [],
               napomene: created.napomene ?? created.notes ?? payload.napomene,
               sljedeciServis: created.sljedeciServis || created.nextServiceDate || payload.sljedeciServis,
               kreiranDatum: created.kreiranDatum || new Date().toISOString(),
@@ -473,18 +513,54 @@ export default function AddServiceScreen({ navigation, route }) {
                 {included && (
                   <View style={styles.checklist}>
                     {checklistItems.map(item => (
-                      <TouchableOpacity
+                      <View
                         key={item.key}
                         style={styles.checklistItem}
-                        onPress={() => toggleChecklistItem(cid, item.key)}
                       >
-                        <View style={styles.checkbox}>
+                        <TouchableOpacity
+                          style={[
+                            styles.checkbox,
+                            (item.key === 'upsCheck' && perElevatorChecklist[cid]?.upsStatus === 'radi') && styles.checkboxOk,
+                            (item.key === 'upsCheck' && perElevatorChecklist[cid]?.upsStatus === 'ne_radi') && styles.checkboxFail,
+                            (item.key === 'voiceComm' && perElevatorChecklist[cid]?.voiceCommStatus === 'radi') && styles.checkboxOk,
+                            (item.key === 'voiceComm' && perElevatorChecklist[cid]?.voiceCommStatus === 'ne_radi') && styles.checkboxFail,
+                          ]}
+                          onPress={() => toggleChecklistItem(cid, item.key)}
+                          activeOpacity={0.7}
+                        >
                           {perElevatorChecklist[cid]?.[item.key] && (
                             <Ionicons name="checkmark" size={18} color="#10b981" />
                           )}
+                        </TouchableOpacity>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.checklistLabel}>{item.label}</Text>
+                          {(item.key === 'upsCheck' || item.key === 'voiceComm') &&
+                            (item.key === 'upsCheck'
+                              ? perElevatorChecklist[cid]?.upsStatus
+                              : perElevatorChecklist[cid]?.voiceCommStatus) && (
+                            <View style={styles.statusRow}>
+                              <View
+                                style={[
+                                  styles.statusBadge,
+                                  (item.key === 'upsCheck'
+                                    ? perElevatorChecklist[cid]?.upsStatus === 'radi'
+                                    : perElevatorChecklist[cid]?.voiceCommStatus === 'radi')
+                                    ? styles.statusBadgeOk
+                                    : styles.statusBadgeFail,
+                                ]}
+                              >
+                                <Text style={styles.statusBadgeText}>
+                                  {(item.key === 'upsCheck'
+                                    ? perElevatorChecklist[cid]?.upsStatus === 'radi'
+                                    : perElevatorChecklist[cid]?.voiceCommStatus === 'radi')
+                                    ? 'Radi'
+                                    : 'Ne radi'}
+                                </Text>
+                              </View>
+                            </View>
+                          )}
                         </View>
-                        <Text style={styles.checklistLabel}>{item.label}</Text>
-                      </TouchableOpacity>
+                      </View>
                     ))}
                   </View>
                 )}
@@ -505,6 +581,80 @@ export default function AddServiceScreen({ navigation, route }) {
             numberOfLines={3}
             textAlignVertical="top"
           />
+        </View>
+
+        {/* Fotografije */}
+        <View style={styles.section}>
+          <Text style={styles.label}>Fotografije</Text>
+          {photoError && (
+            <View style={styles.errorBanner}>
+              <Ionicons name="alert-circle" size={18} color="#dc2626" />
+              <Text style={styles.errorText}>{photoError}</Text>
+              <TouchableOpacity onPress={clearError}>
+                <Ionicons name="close" size={18} color="#dc2626" />
+              </TouchableOpacity>
+            </View>
+          )}
+
+          <View style={styles.photoButtonRow}>
+            <TouchableOpacity
+              style={[styles.photoButton, uploadingPhoto && styles.photoButtonDisabled]}
+              onPress={async () => {
+                const result = await pickAndUploadPhoto();
+                if (result) {
+                  setNotePhotos(prev => [...prev, result]);
+                }
+              }}
+              disabled={uploadingPhoto}
+            >
+              {uploadingPhoto ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Ionicons name="image-outline" size={20} color="#fff" />
+              )}
+              <Text style={styles.photoButtonText}>Odaberi</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.photoButton, uploadingPhoto && styles.photoButtonDisabled]}
+              onPress={async () => {
+                const result = await takePhotoWithCamera();
+                if (result) {
+                  setNotePhotos(prev => [...prev, result]);
+                }
+              }}
+              disabled={uploadingPhoto}
+            >
+              {uploadingPhoto ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Ionicons name="camera-outline" size={20} color="#fff" />
+              )}
+              <Text style={styles.photoButtonText}>Fotka</Text>
+            </TouchableOpacity>
+          </View>
+
+          {notePhotos.length > 0 && (
+            <View style={styles.photoGallery}>
+              <Text style={styles.photoCountText}>{notePhotos.length} slika</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photoScroll}>
+                {notePhotos.map((photo, idx) => (
+                  <View key={idx} style={styles.photoThumbnailWrapper}>
+                    <Image
+                      source={{ uri: photo.url }}
+                      style={styles.photoThumbnail}
+                    />
+                    <TouchableOpacity
+                      style={styles.photoRemoveBtn}
+                      onPress={() => setNotePhotos(notePhotos.filter((_, i) => i !== idx))}
+                    >
+                      <Ionicons name="close" size={16} color="#fff" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </ScrollView>
+            </View>
+          )}
         </View>
 
         {/* Sljedeći servis */}
@@ -641,6 +791,31 @@ const styles = StyleSheet.create({
     minHeight: 100,
     paddingTop: 12,
   },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+    gap: 8,
+  },
+  statusBadge: {
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  statusBadgeOk: {
+    backgroundColor: '#dcfce7',
+    borderColor: '#22c55e',
+  },
+  statusBadgeFail: {
+    backgroundColor: '#fee2e2',
+    borderColor: '#ef4444',
+  },
+  statusBadgeText: {
+    fontSize: 12,
+    color: '#111827',
+    fontWeight: '600',
+  },
   dateButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -671,6 +846,14 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  checkboxOk: {
+    backgroundColor: '#dcfce7',
+    borderColor: '#22c55e',
+  },
+  checkboxFail: {
+    backgroundColor: '#fee2e2',
+    borderColor: '#ef4444',
   },
   checklistLabel: {
     fontSize: 16,
@@ -739,5 +922,77 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#fff',
+  },
+
+  // Photo styles
+  photoButtonRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 12,
+  },
+  photoButton: {
+    flex: 1,
+    backgroundColor: '#3b82f6',
+    borderRadius: 10,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  photoButtonDisabled: {
+    opacity: 0.6,
+  },
+  photoButtonText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  photoGallery: {
+    marginTop: 12,
+  },
+  photoCountText: {
+    fontSize: 13,
+    color: '#6b7280',
+    marginBottom: 8,
+  },
+  photoScroll: {
+    maxHeight: 100,
+  },
+  photoThumbnailWrapper: {
+    marginRight: 10,
+    borderRadius: 8,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  photoThumbnail: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+    backgroundColor: '#f3f4f6',
+  },
+  photoRemoveBtn: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: 12,
+    padding: 4,
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#fee2e2',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginBottom: 12,
+  },
+  errorText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#dc2626',
+    fontWeight: '500',
   },
 });

@@ -22,6 +22,14 @@ const repairSchema = new mongoose.Schema({
   radniNalogPotpisan: { type: Boolean, default: false },
   popravkaUPotpunosti: { type: Boolean, default: false },
   napomene: String,
+  
+  // Fotografije (Cloudinary URLs)
+  photos: [{
+    url: String,
+    size: Number,
+    mime: String,
+    createdAt: { type: Date, default: Date.now }
+  }],
 
   // Audit
   updated_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },

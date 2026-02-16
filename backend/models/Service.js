@@ -37,6 +37,14 @@ const serviceSchema = new mongoose.Schema({
   
   napomene: String,
   sljedeciServis: Date,
+  
+  // Fotografije (Cloudinary URLs)
+  notePhotos: [{
+    url: String,
+    size: Number,
+    mime: String,
+    createdAt: { type: Date, default: Date.now }
+  }],
 
   // Audit
   updated_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },

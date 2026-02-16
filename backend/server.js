@@ -39,6 +39,7 @@ app.use('/api/users', require('./routes/users'));
 app.use('/api/elevators', require('./routes/elevators'));
 app.use('/api/services', require('./routes/services'));
 app.use('/api/repairs', require('./routes/repairs'));
+app.use('/api/events', require('./routes/events'));
 app.use('/api/chatrooms', require('./routes/chatrooms'));
 app.use('/api/messages', require('./routes/messages'));
 app.use('/api/simcards', require('./routes/simcards'));

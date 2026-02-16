@@ -92,6 +92,21 @@ export default function EditServiceScreen({ route, navigation }) {
     return map;
   }, [freshService.checklist]);
 
+  const initialStatus = useMemo(() => {
+    const status = { ups: null, voice: null };
+    (freshService.checklist || []).forEach((item) => {
+      const key = item?.stavka;
+      const note = typeof item?.napomena === 'string' ? item.napomena.trim() : '';
+      if (key === 'ups_check' && (note === 'radi' || note === 'ne_radi')) {
+        status.ups = note;
+      }
+      if (key === 'voice_comm' && (note === 'radi' || note === 'ne_radi')) {
+        status.voice = note;
+      }
+    });
+    return status;
+  }, [freshService.checklist]);
+
   const [form, setForm] = useState(() => ({
     serviceDate: parseDate(freshService.datum) || new Date(),
     nextServiceDate: parseDate(freshService.sljedeciServis) || new Date(),
@@ -102,6 +117,7 @@ export default function EditServiceScreen({ route, navigation }) {
   }));
 
   const [checklistState, setChecklistState] = useState(initialChecklist);
+  const [statusState, setStatusState] = useState(initialStatus);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [activeDateField, setActiveDateField] = useState('serviceDate');
   const [korisnici, setKorisnici] = useState([]);
@@ -151,6 +167,34 @@ export default function EditServiceScreen({ route, navigation }) {
   };
 
   const toggleChecklistItem = (key) => {
+    if (key === 'ups_check') {
+      setStatusState((prev) => {
+        const current = prev.ups ?? null;
+        const next = current === null
+          ? 'radi'
+          : current === 'radi'
+            ? 'ne_radi'
+            : null;
+        setChecklistState((prevChecklist) => ({ ...prevChecklist, ups_check: Boolean(next) }));
+        return { ...prev, ups: next };
+      });
+      return;
+    }
+
+    if (key === 'voice_comm') {
+      setStatusState((prev) => {
+        const current = prev.voice ?? null;
+        const next = current === null
+          ? 'radi'
+          : current === 'radi'
+            ? 'ne_radi'
+            : null;
+        setChecklistState((prevChecklist) => ({ ...prevChecklist, voice_comm: Boolean(next) }));
+        return { ...prev, voice: next };
+      });
+      return;
+    }
+
     setChecklistState((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
@@ -158,7 +202,11 @@ export default function EditServiceScreen({ route, navigation }) {
     Object.keys(checklistState).map((key) => ({
       stavka: key,
       provjereno: checklistState[key] ? 1 : 0,
-      napomena: '',
+      napomena: key === 'ups_check'
+        ? (checklistState[key] ? (statusState.ups || '') : '')
+        : key === 'voice_comm'
+          ? (checklistState[key] ? (statusState.voice || '') : '')
+          : '',
     }))
   );
 
@@ -321,16 +369,41 @@ export default function EditServiceScreen({ route, navigation }) {
 
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>Checklist</Text>
-            {Object.keys(checklistLabels).map((key) => (
-              <TouchableOpacity key={key} style={styles.checkItem} onPress={() => toggleChecklistItem(key)}>
-                <Ionicons
-                  name={checklistState[key] ? 'checkmark-circle' : 'ellipse-outline'}
-                  size={20}
-                  color={checklistState[key] ? '#16a34a' : '#94a3b8'}
-                />
-                <Text style={styles.checkLabel}>{checklistLabels[key]}</Text>
-              </TouchableOpacity>
-            ))}
+            {Object.keys(checklistLabels).map((key) => {
+              const status = key === 'ups_check'
+                ? statusState.ups
+                : key === 'voice_comm'
+                  ? statusState.voice
+                  : null;
+              const hasStatus = status === 'radi' || status === 'ne_radi';
+              return (
+                <View key={key} style={styles.checkItem}>
+                  <TouchableOpacity
+                    style={[
+                      styles.checkbox,
+                      status === 'radi' && styles.checkboxOk,
+                      status === 'ne_radi' && styles.checkboxFail,
+                    ]}
+                    onPress={() => toggleChecklistItem(key)}
+                    activeOpacity={0.7}
+                  >
+                    {checklistState[key] && (
+                      <Ionicons name="checkmark" size={18} color={hasStatus ? '#fff' : '#16a34a'} />
+                    )}
+                  </TouchableOpacity>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.checkLabel}>{checklistLabels[key]}</Text>
+                    {hasStatus && (
+                      <View style={styles.statusRow}>
+                        <View style={[styles.statusBadge, status === 'radi' ? styles.statusBadgeOk : styles.statusBadgeFail]}>
+                          <Text style={styles.statusBadgeText}>{status === 'radi' ? 'Radi' : 'Ne radi'}</Text>
+                        </View>
+                      </View>
+                    )}
+                  </View>
+                </View>
+              );
+            })}
           </View>
 
           <View style={styles.card}>
@@ -382,7 +455,29 @@ const styles = StyleSheet.create({
   userRowText: { fontSize: 14, color: '#0f172a' },
   userRowSelected: { backgroundColor: '#f0fdf4', borderRadius: 8, paddingHorizontal: 6 },
   checkItem: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6 },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderWidth: 2,
+    borderColor: '#d1d5db',
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxOk: {
+    backgroundColor: '#dcfce7',
+    borderColor: '#22c55e',
+  },
+  checkboxFail: {
+    backgroundColor: '#fee2e2',
+    borderColor: '#ef4444',
+  },
   checkLabel: { fontSize: 14, color: '#1f2937' },
+  statusRow: { flexDirection: 'row', alignItems: 'center', marginTop: 6 },
+  statusBadge: { paddingVertical: 4, paddingHorizontal: 10, borderRadius: 999, borderWidth: 1 },
+  statusBadgeOk: { backgroundColor: '#dcfce7', borderColor: '#22c55e' },
+  statusBadgeFail: { backgroundColor: '#fee2e2', borderColor: '#ef4444' },
+  statusBadgeText: { fontSize: 12, color: '#111827', fontWeight: '600' },
   textArea: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, padding: 12, minHeight: 100, textAlignVertical: 'top', color: '#0f172a' },
   saveBtn: { marginTop: 16, backgroundColor: '#2563eb', paddingVertical: 14, alignItems: 'center', borderRadius: 10, marginHorizontal: 16 },
   saveBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },

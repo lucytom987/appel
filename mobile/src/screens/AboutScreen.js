@@ -11,7 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function AboutScreen({ navigation }) {
-  const currentVersion = '21.1.2026';
+  const currentVersion = '13.2.2026';
   const [versionTapCount, setVersionTapCount] = React.useState(0);
 
   const handleVersionPress = () => {
@@ -59,6 +59,29 @@ export default function AboutScreen({ navigation }) {
             veza dostupna. Fokus je na brzom logiranju intervencija, preglednim listama i
             pouzdanom prikazu lokacija na karti.
           </Text>
+        </View>
+
+        {/* What's new */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Novosti (13.2.2026)</Text>
+          <View style={styles.featuresList}>
+            <View style={styles.featureItem}>
+              <Ionicons name="calendar" size={20} color="#2563eb" />
+              <Text style={styles.featureText}>Uveden je pregled "Događaji" koji objedinjava popravke, servisne napomene i aktivnosti u jednu kronološku listu.</Text>
+            </View>
+            <View style={styles.featureItem}>
+              <Ionicons name="add-circle" size={20} color="#2563eb" />
+              <Text style={styles.featureText}>Dodan je brzi unos popravaka i servisnih zapisa kroz novi FAB meni s jasnim akcijama.</Text>
+            </View>
+            <View style={styles.featureItem}>
+              <Ionicons name="document-text" size={20} color="#2563eb" />
+              <Text style={styles.featureText}>Popravci i servisi sada prikazuju status potpisanog radnog naloga s jasnim bojama.</Text>
+            </View>
+            <View style={styles.featureItem}>
+              <Ionicons name="list" size={20} color="#2563eb" />
+              <Text style={styles.featureText}>Liste popravaka su preglednije: prikaz je skraćen na osnovni naziv/adresu i opis kvara.</Text>
+            </View>
+          </View>
         </View>
 
         {/* Features */}

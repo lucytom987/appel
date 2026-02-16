@@ -4,7 +4,7 @@ import * as SQLite from 'expo-sqlite';
 const db = SQLite.openDatabaseSync('appel.db');
 
 // Database version
-const DB_VERSION = 13; // Add elevator tip + godišnji pregled datumsko polje
+const DB_VERSION = 15; // Add photos for services/repairs
 
 // Provjeri verziju baze i migriraj ako je potrebno
 const checkAndMigrate = () => {
@@ -29,7 +29,7 @@ const checkAndMigrate = () => {
       try {
         // Prvo obriši sve tablice osim db_version
         const tables = [
-          'elevators', 'services', 'repairs', 'chatrooms', 'messages', 
+          'elevators', 'services', 'repairs', 'events', 'chatrooms', 'messages', 
           'simcards', 'users', 'sync_queue', 'repairs_old', 'services_old'
         ];
         
@@ -123,6 +123,7 @@ export const initDatabase = () => {
         imaNedostataka INTEGER DEFAULT 0,
         nedostaci TEXT,
         napomene TEXT,
+        notePhotos TEXT,
         sljedeciServis TEXT,
         kreiranDatum TEXT,
         azuriranDatum TEXT,
@@ -149,6 +150,7 @@ export const initDatabase = () => {
         radniNalogPotpisan INTEGER DEFAULT 0,
         popravkaUPotpunosti INTEGER DEFAULT 0,
         napomene TEXT,
+        photos TEXT,
         prijavio TEXT,
         kontaktTelefon TEXT,
         primioPoziv TEXT,
@@ -202,6 +204,37 @@ export const initDatabase = () => {
         updated_at INTEGER
       );
 
+      -- Događaji (Repairs, Service Notes, Activities)
+      CREATE TABLE IF NOT EXISTS events (
+        id TEXT PRIMARY KEY,
+        elevatorId TEXT,
+        eventType TEXT,
+        datum TEXT,
+        repair_serviserID TEXT,
+        repair_opisKvara TEXT,
+        repair_opisPopravka TEXT,
+        repair_status TEXT DEFAULT 'pending',
+        repair_trebaloBi INTEGER DEFAULT 0,
+        repair_radniNalogPotpisan INTEGER DEFAULT 0,
+        repair_popravkaUPotpunosti INTEGER DEFAULT 0,
+        serviceNote_serviserID TEXT,
+        serviceNote_tekst TEXT,
+        serviceNote_fotografija TEXT,
+        activity_serviserID TEXT,
+        activity_opis TEXT,
+        activity_tip TEXT DEFAULT 'ostalo',
+        napomene TEXT,
+        is_deleted INTEGER DEFAULT 0,
+        deleted_at TEXT,
+        updated_by TEXT,
+        updated_at INTEGER,
+        sync_status TEXT DEFAULT 'synced',
+        synced INTEGER DEFAULT 0,
+        migratedFromRepairId TEXT,
+        migratedFromServiceId TEXT,
+        FOREIGN KEY (elevatorId) REFERENCES elevators(id)
+      );
+
       -- Offline queue - zahtjevi koji čekaju sync
       CREATE TABLE IF NOT EXISTS sync_queue (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -224,6 +257,12 @@ export const initDatabase = () => {
       CREATE INDEX IF NOT EXISTS idx_repairs_synced ON repairs(synced);
       CREATE INDEX IF NOT EXISTS idx_repairs_sync_status ON repairs(sync_status);
       CREATE INDEX IF NOT EXISTS idx_repairs_datumPrijave ON repairs(datumPrijave);
+      CREATE INDEX IF NOT EXISTS idx_events_elevator ON events(elevatorId);
+      CREATE INDEX IF NOT EXISTS idx_events_eventType ON events(eventType);
+      CREATE INDEX IF NOT EXISTS idx_events_repair_status ON events(repair_status);
+      CREATE INDEX IF NOT EXISTS idx_events_synced ON events(synced);
+      CREATE INDEX IF NOT EXISTS idx_events_sync_status ON events(sync_status);
+      CREATE INDEX IF NOT EXISTS idx_events_datum ON events(datum);
       CREATE INDEX IF NOT EXISTS idx_messages_chatroom ON messages(chatroomId);
       CREATE INDEX IF NOT EXISTS idx_messages_synced ON messages(synced);
     `);
@@ -236,11 +275,23 @@ export const initDatabase = () => {
     try { db.execSync('ALTER TABLE repairs ADD COLUMN deleted_at TEXT;'); } catch (e) {}
     try { db.execSync('ALTER TABLE repairs ADD COLUMN updated_by TEXT;'); } catch (e) {}
     try { db.execSync('ALTER TABLE repairs ADD COLUMN sync_status TEXT DEFAULT "synced";'); } catch (e) {}
+    try { db.execSync('ALTER TABLE repairs ADD COLUMN photos TEXT;'); } catch (e) {}
     try { db.execSync('ALTER TABLE services ADD COLUMN dodatniServiseri TEXT;'); } catch (e) {}
     try { db.execSync('ALTER TABLE services ADD COLUMN is_deleted INTEGER DEFAULT 0;'); } catch (e) {}
     try { db.execSync('ALTER TABLE services ADD COLUMN deleted_at TEXT;'); } catch (e) {}
     try { db.execSync('ALTER TABLE services ADD COLUMN updated_by TEXT;'); } catch (e) {}
     try { db.execSync('ALTER TABLE services ADD COLUMN sync_status TEXT DEFAULT "synced";'); } catch (e) {}
+    try { db.execSync('ALTER TABLE services ADD COLUMN notePhotos TEXT;'); } catch (e) {}
+    try { db.execSync('ALTER TABLE events ADD COLUMN elevatorId TEXT;'); } catch (e) {}
+    try { db.execSync('ALTER TABLE events ADD COLUMN eventType TEXT;'); } catch (e) {}
+    try { db.execSync('ALTER TABLE events ADD COLUMN datum TEXT;'); } catch (e) {}
+    try { db.execSync('ALTER TABLE events ADD COLUMN napomene TEXT;'); } catch (e) {}
+    try { db.execSync('ALTER TABLE events ADD COLUMN is_deleted INTEGER DEFAULT 0;'); } catch (e) {}
+    try { db.execSync('ALTER TABLE events ADD COLUMN deleted_at TEXT;'); } catch (e) {}
+    try { db.execSync('ALTER TABLE events ADD COLUMN updated_by TEXT;'); } catch (e) {}
+    try { db.execSync('ALTER TABLE events ADD COLUMN updated_at INTEGER;'); } catch (e) {}
+    try { db.execSync('ALTER TABLE events ADD COLUMN sync_status TEXT DEFAULT "synced";'); } catch (e) {}
+    try { db.execSync('ALTER TABLE events ADD COLUMN synced INTEGER DEFAULT 0;'); } catch (e) {}
     try { db.execSync('ALTER TABLE elevators ADD COLUMN is_deleted INTEGER DEFAULT 0;'); } catch (e) {}
     try { db.execSync('ALTER TABLE elevators ADD COLUMN deleted_at TEXT;'); } catch (e) {}
     try { db.execSync('ALTER TABLE elevators ADD COLUMN updated_by TEXT;'); } catch (e) {}
@@ -449,7 +500,8 @@ export const serviceDB = {
       ...s,
       dodatniServiseri: typeof s.dodatniServiseri === 'string' ? JSON.parse(s.dodatniServiseri || '[]') : (s.dodatniServiseri || []),
       checklist: typeof s.checklist === 'string' ? JSON.parse(s.checklist || '[]') : (s.checklist || []),
-      nedostaci: typeof s.nedostaci === 'string' ? JSON.parse(s.nedostaci || '[]') : (s.nedostaci || [])
+      nedostaci: typeof s.nedostaci === 'string' ? JSON.parse(s.nedostaci || '[]') : (s.nedostaci || []),
+      notePhotos: typeof s.notePhotos === 'string' ? JSON.parse(s.notePhotos || '[]') : (s.notePhotos || [])
     }));
   },
   
@@ -459,6 +511,7 @@ export const serviceDB = {
       service.checklist = typeof service.checklist === 'string' ? JSON.parse(service.checklist || '[]') : (service.checklist || []);
       service.dodatniServiseri = typeof service.dodatniServiseri === 'string' ? JSON.parse(service.dodatniServiseri || '[]') : (service.dodatniServiseri || []);
       service.nedostaci = typeof service.nedostaci === 'string' ? JSON.parse(service.nedostaci || '[]') : (service.nedostaci || []);
+      service.notePhotos = typeof service.notePhotos === 'string' ? JSON.parse(service.notePhotos || '[]') : (service.notePhotos || []);
     }
     return service;
   },
@@ -484,9 +537,9 @@ export const serviceDB = {
     }
     return db.runSync(
       `INSERT INTO services (id, elevatorId, serviserID, dodatniServiseri, datum, checklist, 
-       imaNedostataka, nedostaci, napomene, sljedeciServis, kreiranDatum, azuriranDatum, 
+       imaNedostataka, nedostaci, napomene, notePhotos, sljedeciServis, kreiranDatum, azuriranDatum, 
        is_deleted, deleted_at, updated_by, updated_at, sync_status, synced) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         elevatorId,
@@ -497,6 +550,7 @@ export const serviceDB = {
         service.imaNedostataka ? 1 : 0,
         JSON.stringify(service.nedostaci || []),
         service.napomene,
+        JSON.stringify(service.notePhotos || []),
         service.sljedeciServis,
         service.kreiranDatum || new Date().toISOString(),
         service.azuriranDatum || new Date().toISOString(),
@@ -524,7 +578,7 @@ export const serviceDB = {
     
     return db.runSync(
       `UPDATE services SET serviserID=?, dodatniServiseri=?, datum=?, checklist=?, imaNedostataka=?, 
-       nedostaci=?, napomene=?, sljedeciServis=?, azuriranDatum=?, is_deleted=?, deleted_at=?, updated_by=?, updated_at=?, sync_status=?, synced=? WHERE id=?`,
+       nedostaci=?, napomene=?, notePhotos=?, sljedeciServis=?, azuriranDatum=?, is_deleted=?, deleted_at=?, updated_by=?, updated_at=?, sync_status=?, synced=? WHERE id=?`,
       [
         serviserID,
         JSON.stringify(service.dodatniServiseri || []),
@@ -533,6 +587,7 @@ export const serviceDB = {
         service.imaNedostataka ? 1 : 0,
         JSON.stringify(service.nedostaci || []),
         service.napomene,
+        JSON.stringify(service.notePhotos || []),
         service.sljedeciServis,
         service.azuriranDatum || new Date().toISOString(),
         service.is_deleted ? 1 : 0,
@@ -562,7 +617,8 @@ export const serviceDB = {
         ...s,
         dodatniServiseri: typeof s.dodatniServiseri === 'string' ? JSON.parse(s.dodatniServiseri || '[]') : (s.dodatniServiseri || []),
         checklist: typeof s.checklist === 'string' ? JSON.parse(s.checklist || '[]') : (s.checklist || []),
-        nedostaci: typeof s.nedostaci === 'string' ? JSON.parse(s.nedostaci || '[]') : (s.nedostaci || [])
+        nedostaci: typeof s.nedostaci === 'string' ? JSON.parse(s.nedostaci || '[]') : (s.nedostaci || []),
+        notePhotos: typeof s.notePhotos === 'string' ? JSON.parse(s.notePhotos || '[]') : (s.notePhotos || [])
       }));
     } catch (e) {
       console.log('⚠️ services getUnsynced failed:', e?.message);
@@ -613,6 +669,52 @@ const toBoolean = (value) => {
   return Boolean(value);
 };
 
+// Parser za Event zapise iz SQLite
+const parseEvent = (row) => {
+  if (!row) return null;
+  
+  const repair = {
+    serviserID: row.repair_serviserID,
+    opisKvara: row.repair_opisKvara,
+    opisPopravka: row.repair_opisPopravka,
+    status: row.repair_status || 'pending',
+    trebaloBi: toBoolean(row.repair_trebaloBi),
+    radniNalogPotpisan: toBoolean(row.repair_radniNalogPotpisan),
+    popravkaUPotpunosti: toBoolean(row.repair_popravkaUPotpunosti)
+  };
+
+  const serviceNote = {
+    serviserID: row.serviceNote_serviserID,
+    tekst: row.serviceNote_tekst,
+    fotografija: row.serviceNote_fotografija
+  };
+
+  const activity = {
+    serviserID: row.activity_serviserID,
+    opis: row.activity_opis,
+    tip: row.activity_tip || 'ostalo'
+  };
+
+  return {
+    id: row.id,
+    elevatorId: row.elevatorId,
+    eventType: row.eventType,
+    datum: row.datum,
+    repair,
+    serviceNote,
+    activity,
+    napomene: row.napomene,
+    is_deleted: toBoolean(row.is_deleted),
+    deleted_at: row.deleted_at,
+    updated_by: row.updated_by,
+    updated_at: row.updated_at,
+    sync_status: row.sync_status,
+    synced: toBoolean(row.synced),
+    migratedFromRepairId: row.migratedFromRepairId,
+    migratedFromServiceId: row.migratedFromServiceId
+  };
+};
+
 // CRUD operacije za Repairs
 export const repairDB = {
   getAll: (elevatorId = null) => {
@@ -625,13 +727,18 @@ export const repairDB = {
     return repairs.map(r => ({
       ...r,
       trebaloBi: toBoolean(r.trebaloBi),
+      photos: typeof r.photos === 'string' ? JSON.parse(r.photos || '[]') : (r.photos || []),
       // Repair model doesn't have nested JSON fields, but keep consistent
     }));
   },
   
   getById: (id) => {
     const repair = db.getFirstSync('SELECT * FROM repairs WHERE id = ?', [id]);
-    return repair ? { ...repair, trebaloBi: toBoolean(repair.trebaloBi) } : null;
+    return repair ? { 
+      ...repair, 
+      trebaloBi: toBoolean(repair.trebaloBi),
+      photos: typeof repair.photos === 'string' ? JSON.parse(repair.photos || '[]') : (repair.photos || [])
+    } : null;
   },
   
   insert: (repair) => {
@@ -655,9 +762,9 @@ export const repairDB = {
     return db.runSync(
       `INSERT INTO repairs (id, elevatorId, serviserID, datumPrijave, datumPopravka, 
        opisKvara, opisPopravka, trebaloBi, status, radniNalogPotpisan, popravkaUPotpunosti, 
-       napomene, prijavio, kontaktTelefon, primioPoziv, kreiranDatum, azuriranDatum, 
+       napomene, photos, prijavio, kontaktTelefon, primioPoziv, kreiranDatum, azuriranDatum, 
        is_deleted, deleted_at, updated_by, updated_at, sync_status, synced) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         elevatorId,
@@ -671,6 +778,7 @@ export const repairDB = {
         repair.radniNalogPotpisan ? 1 : 0,
         repair.popravkaUPotpunosti ? 1 : 0,
         repair.napomene,
+        JSON.stringify(repair.photos || []),
         repair.prijavio,
         repair.kontaktTelefon,
         repair.primioPoziv,
@@ -706,7 +814,7 @@ export const repairDB = {
     return db.runSync(
       `UPDATE repairs SET elevatorId=?, serviserID=?, datumPrijave=?, datumPopravka=?, opisKvara=?, 
        opisPopravka=?, trebaloBi=?, status=?, radniNalogPotpisan=?, popravkaUPotpunosti=?, 
-       napomene=?, prijavio=?, kontaktTelefon=?, primioPoziv=?, azuriranDatum=?, is_deleted=?, deleted_at=?, updated_by=?, updated_at=?, sync_status=?, synced=? WHERE id=?`,
+       napomene=?, photos=?, prijavio=?, kontaktTelefon=?, primioPoziv=?, azuriranDatum=?, is_deleted=?, deleted_at=?, updated_by=?, updated_at=?, sync_status=?, synced=? WHERE id=?`,
       [
         elevatorId,
         serviserID,
@@ -719,6 +827,7 @@ export const repairDB = {
         repair.radniNalogPotpisan ? 1 : 0,
         repair.popravkaUPotpunosti ? 1 : 0,
         repair.napomene,
+        JSON.stringify(repair.photos || []),
         repair.prijavio,
         repair.kontaktTelefon,
         repair.primioPoziv,
@@ -745,7 +854,12 @@ export const repairDB = {
   
   getUnsynced: () => {
     try {
-      return db.getAllSync('SELECT * FROM repairs WHERE sync_status IN ("dirty","pending_delete") OR synced = 0');
+      const repairs = db.getAllSync('SELECT * FROM repairs WHERE sync_status IN ("dirty","pending_delete") OR synced = 0');
+      return repairs.map(r => ({
+        ...r,
+        trebaloBi: toBoolean(r.trebaloBi),
+        photos: typeof r.photos === 'string' ? JSON.parse(r.photos || '[]') : (r.photos || [])
+      }));
     } catch (e) {
       console.log('⚠️ repairs getUnsynced failed:', e?.message);
       return [];
@@ -764,6 +878,167 @@ export const repairDB = {
   },
   markSynced: (id, serverId) => {
     return db.runSync('UPDATE repairs SET synced = 1, sync_status = "synced", id = ?, updated_at = ? WHERE id = ?', [serverId, Date.now(), id]);
+  },
+};
+
+// Events DB
+export const eventDB = {
+  getAll: (elevatorId = null) => {
+    let events;
+    if (elevatorId) {
+      events = db.getAllSync('SELECT * FROM events WHERE elevatorId = ? AND is_deleted = 0 ORDER BY datum DESC', [elevatorId]);
+    } else {
+      events = db.getAllSync('SELECT * FROM events WHERE is_deleted = 0 ORDER BY datum DESC');
+    }
+    return events.map(e => parseEvent(e));
+  },
+  
+  getById: (id) => {
+    const event = db.getFirstSync('SELECT * FROM events WHERE id = ?', [id]);
+    return event ? parseEvent(event) : null;
+  },
+  
+  insert: (event) => {
+    const id = event.id || event._id || `local_${Date.now()}`;
+    const syncStatus = event.sync_status || (String(id).startsWith('local_') ? 'dirty' : 'synced');
+    const syncedFlag = syncStatus === 'synced' ? 1 : 0;
+    
+    let elevatorId = event.elevatorId || event.elevator;
+    if (elevatorId && typeof elevatorId === 'object') {
+      elevatorId = elevatorId._id || elevatorId.id || '';
+    }
+
+    const repair = event.repair || {};
+    const serviceNote = event.serviceNote || {};
+    const activity = event.activity || {};
+
+    let repair_serviserID = repair.serviserID;
+    if (repair_serviserID && typeof repair_serviserID === 'object') {
+      repair_serviserID = repair_serviserID._id || repair_serviserID.id || '';
+    }
+
+    let serviceNote_serviserID = serviceNote.serviserID;
+    if (serviceNote_serviserID && typeof serviceNote_serviserID === 'object') {
+      serviceNote_serviserID = serviceNote_serviserID._id || serviceNote_serviserID.id || '';
+    }
+
+    let activity_serviserID = activity.serviserID;
+    if (activity_serviserID && typeof activity_serviserID === 'object') {
+      activity_serviserID = activity_serviserID._id || activity_serviserID.id || '';
+    }
+
+    return db.runSync(
+      `INSERT INTO events (id, elevatorId, eventType, datum, 
+       repair_serviserID, repair_opisKvara, repair_opisPopravka, repair_status, 
+       repair_trebaloBi, repair_radniNalogPotpisan, repair_popravkaUPotpunosti,
+       serviceNote_serviserID, serviceNote_tekst, serviceNote_fotografija,
+       activity_serviserID, activity_opis, activity_tip,
+       napomene, is_deleted, deleted_at, updated_by, updated_at, sync_status, synced,
+       migratedFromRepairId, migratedFromServiceId) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        elevatorId,
+        event.eventType,
+        event.datum,
+        repair_serviserID,
+        repair.opisKvara,
+        repair.opisPopravka,
+        repair.status || 'pending',
+        repair.trebaloBi ? 1 : 0,
+        repair.radniNalogPotpisan ? 1 : 0,
+        repair.popravkaUPotpunosti ? 1 : 0,
+        serviceNote_serviserID,
+        serviceNote.tekst,
+        serviceNote.fotografija,
+        activity_serviserID,
+        activity.opis,
+        activity.tip || 'ostalo',
+        event.napomene,
+        event.is_deleted ? 1 : 0,
+        event.deleted_at || null,
+        event.updated_by || null,
+        event.updated_at || Date.now(),
+        syncStatus,
+        syncedFlag,
+        event.migratedFromRepairId || null,
+        event.migratedFromServiceId || null
+      ]
+    );
+  },
+  
+  update: (id, event) => {
+    const syncStatus = event.sync_status
+      || (event.synced === undefined ? 'dirty' : (event.synced ? 'synced' : 'dirty'));
+    const syncedFlag = syncStatus === 'synced' ? 1 : 0;
+
+    const repair = event.repair || {};
+    const serviceNote = event.serviceNote || {};
+    const activity = event.activity || {};
+
+    let repair_serviserID = repair.serviserID;
+    if (repair_serviserID && typeof repair_serviserID === 'object') {
+      repair_serviserID = repair_serviserID._id || repair_serviserID.id || '';
+    }
+
+    return db.runSync(
+      `UPDATE events SET eventType=?, datum=?, 
+       repair_serviserID=?, repair_opisKvara=?, repair_opisPopravka=?, repair_status=?, 
+       repair_trebaloBi=?, repair_radniNalogPotpisan=?, repair_popravkaUPotpunosti=?,
+       napomene=?, is_deleted=?, deleted_at=?, updated_by=?, updated_at=?, sync_status=?, synced=? WHERE id=?`,
+      [
+        event.eventType,
+        event.datum,
+        repair_serviserID,
+        repair.opisKvara,
+        repair.opisPopravka,
+        repair.status,
+        repair.trebaloBi ? 1 : 0,
+        repair.radniNalogPotpisan ? 1 : 0,
+        repair.popravkaUPotpunosti ? 1 : 0,
+        event.napomene,
+        event.is_deleted ? 1 : 0,
+        event.deleted_at || null,
+        event.updated_by || null,
+        event.updated_at || Date.now(),
+        syncStatus,
+        syncedFlag,
+        id
+      ]
+    );
+  },
+  
+  delete: (id) => {
+    const now = Date.now();
+    return db.runSync('UPDATE events SET is_deleted = 1, deleted_at = ?, updated_at = ?, sync_status = "pending_delete", synced = 0 WHERE id = ?', [
+      new Date(now).toISOString(),
+      now,
+      id,
+    ]);
+  },
+  
+  getUnsynced: () => {
+    try {
+      return db.getAllSync('SELECT * FROM events WHERE sync_status IN ("dirty","pending_delete") OR synced = 0');
+    } catch (e) {
+      console.log('⚠️ events getUnsynced failed:', e?.message);
+      return [];
+    }
+  },
+  
+  bulkInsert: (events) => {
+    events.forEach(event => {
+      try {
+        eventDB.insert(event);
+      } catch (error) {
+        const eid = event.id || event._id || 'unknown';
+        console.log(`Event ${eid} već postoji (skip insert)`);
+      }
+    });
+  },
+  
+  markSynced: (id, serverId) => {
+    return db.runSync('UPDATE events SET synced = 1, sync_status = "synced", id = ?, updated_at = ? WHERE id = ?', [serverId, Date.now(), id]);
   },
 };
 
@@ -949,6 +1224,7 @@ export const resetDatabase = () => {
       DROP TABLE IF EXISTS elevators;
       DROP TABLE IF EXISTS services;
       DROP TABLE IF EXISTS repairs;
+      DROP TABLE IF EXISTS events;
       DROP TABLE IF EXISTS simcards;
       DROP TABLE IF EXISTS chatrooms;
       DROP TABLE IF EXISTS messages;

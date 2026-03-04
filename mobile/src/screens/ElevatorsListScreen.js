@@ -20,7 +20,7 @@ export default function ElevatorsListScreen({ navigation }) {
   const [filteredElevators, setFilteredElevators] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
-  const [filter, setFilter] = useState('aktivan'); // aktivan, neaktivan
+  const [filter, setFilter] = useState('aktivan'); // aktivan, neaktivan, obrisano
   const online = Boolean(isOnline && serverAwake);
 
   useEffect(() => {
@@ -33,7 +33,8 @@ export default function ElevatorsListScreen({ navigation }) {
 
   const loadElevators = () => {
     try {
-      const data = elevatorDB.getAll() || [];
+      // Učitaj sva dizala uključujući obrisana
+      const data = elevatorDB.getAllIncludingDeleted() || [];
       setElevators(data);
     } catch (error) {
       console.error('Greška pri učitavanju dizala:', error);
@@ -55,7 +56,12 @@ export default function ElevatorsListScreen({ navigation }) {
   const filterElevators = () => {
     let filtered = elevators;
 
-    filtered = filtered.filter(e => e.status === filter);
+    // Filtriraj po statusu soft delete i aktivnosti
+    if (filter === 'obrisano') {
+      filtered = filtered.filter(e => e.is_deleted === 1);
+    } else {
+      filtered = filtered.filter(e => e.is_deleted !== 1 && e.status === filter);
+    }
 
     if (searchQuery) {
       const q = normalize(searchQuery);
@@ -117,76 +123,197 @@ export default function ElevatorsListScreen({ navigation }) {
     setRefreshing(false);
   };
 
-  const renderElevator = ({ item }) => (
-    <TouchableOpacity
-      style={styles.elevatorCard}
-      onPress={() => navigation.navigate('ElevatorDetails', { elevator: item })}
-    >
-      <View style={styles.elevatorHeader}>
-        <View style={styles.elevatorInfo}>
-          {(() => {
-            const tip = item.tip || item.tipObjekta;
-            const primary = tip === 'privreda'
-              ? (item.nazivStranke || `${item.ulica || ''}, ${item.mjesto || ''}`)
-              : `${item.ulica || ''}, ${item.mjesto || ''}`;
-            const secondary = tip === 'privreda'
-              ? `${item.ulica || ''}${item.mjesto ? `, ${item.mjesto}` : ''}`
-              : (item.nazivStranke || '');
-            return (
-              <>
-                <Text style={styles.buildingCode}>{primary}</Text>
-                {!!secondary && <Text style={styles.address}>{secondary}</Text>}
-              </>
-            );
-          })()}
-        </View>
-      </View>
+  const handleRestoreElevator = (elevator) => {
+    const elevatorId = elevator._id || elevator.id;
+    Alert.alert(
+      'Vrati dizalo',
+      `Pravi sigurno da želiš vratiti "${elevator.nazivStranke || elevator.ulica}" na listu aktivnih dizala?`,
+      [
+        {
+          text: 'Otkaži',
+          style: 'cancel'
+        },
+        {
+          text: 'Vrati',
+          style: 'destructive',
+          onPress: () => {
+            try {
+              // Vrati na status 'aktivan'
+              elevatorDB.update(elevatorId, {
+                ...elevator,
+                is_deleted: 0,
+                status: 'aktivan',
+                deleted_at: null,
+                sync_status: 'dirty',
+                synced: 0
+              });
+              loadElevators();
+              Alert.alert('Uspjeh', 'Dizalo je vraćeno u listu aktivnih');
+            } catch (error) {
+              console.error('Greška pri vraćanju dizala:', error);
+              Alert.alert('Greška', 'Nije moguće vratiti dizalo');
+            }
+          }
+        }
+      ]
+    );
+  };
 
-      <View style={styles.elevatorDetails}>
-        <View style={styles.detailRow}>
-          <View style={styles.detailLeft}>
-            <Ionicons name="barcode-outline" size={16} color="#6b7280" />
-            <Text style={styles.detailText}>Dizalo: {item.brojDizala}</Text>
+  const handlePermanentlyDeleteElevator = (elevator) => {
+    const elevatorId = elevator._id || elevator.id;
+    Alert.alert(
+      'Trajno brisanje',
+      `Ovo će zauvijek obrisati "${elevator.nazivStranke || elevator.ulica}".\n\nOva akcija se NE MOŽE poništiti!`,
+      [
+        {
+          text: 'Otkaži',
+          style: 'cancel'
+        },
+        {
+          text: 'Trajno obriši',
+          style: 'destructive',
+          onPress: () => {
+            try {
+              elevatorDB.permanentlyDelete(elevatorId);
+              loadElevators();
+              Alert.alert('Trajno obrisano', 'Dizalo je zauvijek obrisano iz sustava');
+            } catch (error) {
+              console.error('Greška pri trajnom brisanju:', error);
+              Alert.alert('Greška', 'Nije moguće obrisati dizalo');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const renderElevator = ({ item }) => {
+    const isDeleted = filter === 'obrisano' && item.is_deleted === 1;
+    
+    return (
+      <TouchableOpacity
+        style={styles.elevatorCard}
+        onPress={() => !isDeleted && navigation.navigate('ElevatorDetails', { elevator: item })}
+        disabled={isDeleted}
+      >
+        <View style={styles.elevatorHeader}>
+          <View style={styles.elevatorInfo}>
+            {(() => {
+              const tip = item.tip || item.tipObjekta;
+              const primary = tip === 'privreda'
+                ? (item.nazivStranke || `${item.ulica || ''}, ${item.mjesto || ''}`)
+                : `${item.ulica || ''}, ${item.mjesto || ''}`;
+              const secondary = tip === 'privreda'
+                ? `${item.ulica || ''}${item.mjesto ? `, ${item.mjesto}` : ''}`
+                : (item.nazivStranke || '');
+              return (
+                <>
+                  <Text style={[styles.buildingCode, isDeleted && { opacity: 0.5 }]}>{primary}</Text>
+                  {!!secondary && <Text style={[styles.address, isDeleted && { opacity: 0.5 }]}>{secondary}</Text>}
+                </>
+              );
+            })()}
           </View>
-          {(() => {
-            const isSynced = item.sync_status === 'synced' || item.synced;
-            const isPendingDelete = item.sync_status === 'pending_delete';
-            const syncLabel = isPendingDelete ? 'čeka brisanje' : (isSynced ? '' : 'čeka sync');
-
-            return (
-              <View style={[
-                styles.syncBadge,
-                isSynced && styles.syncBadgeCompact,
-                isSynced ? styles.syncBadgeOk
-                  : isPendingDelete ? styles.syncBadgeDelete
-                  : styles.syncBadgeDirty,
-              ]}>
-                <Ionicons
-                  name={
-                    isPendingDelete ? 'trash-outline'
-                      : isSynced ? 'cloud-done-outline'
-                      : 'cloud-offline-outline'
-                  }
-                  size={14}
-                  color="#fff"
-                />
-                {syncLabel ? (
-                  <Text style={styles.syncBadgeText}>
-                    {syncLabel}
-                  </Text>
-                ) : null}
-              </View>
-            );
-          })()}
+          {isDeleted && (
+            <View style={styles.deletedActions}>
+              <TouchableOpacity 
+                style={styles.restoreButton}
+                onPress={() => handleRestoreElevator(item)}
+              >
+                <Ionicons name="refresh-outline" size={18} color="#fff" />
+                <Text style={styles.restoreButtonText}>Vrati</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.permanentDeleteButton}
+                onPress={() => handlePermanentlyDeleteElevator(item)}
+              >
+                <Ionicons name="trash-bin-outline" size={18} color="#fff" />
+                <Text style={styles.permanentDeleteButtonText}>Trajno</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
-      </View>
 
-    </TouchableOpacity>
-  );
+        {!isDeleted && (
+          <View style={styles.elevatorDetails}>
+            <View style={styles.detailRow}>
+              <View style={styles.detailLeft}>
+                <Ionicons name="barcode-outline" size={16} color="#6b7280" />
+                <Text style={styles.detailText}>Dizalo: {item.brojDizala}</Text>
+              </View>
+              {(() => {
+                const isSynced = item.sync_status === 'synced' || item.synced;
+                const isPendingDelete = item.sync_status === 'pending_delete';
+                const syncLabel = isPendingDelete ? 'čeka brisanje' : (isSynced ? '' : 'čeka sync');
 
-  const activeCount = elevators.filter(e => e.status === 'aktivan').length;
-  const inactiveCount = elevators.filter(e => e.status === 'neaktivan').length;
-  const isActiveFilter = filter === 'aktivan';
+                return (
+                  <View style={[
+                    styles.syncBadge,
+                    isSynced && styles.syncBadgeCompact,
+                    isSynced ? styles.syncBadgeOk
+                      : isPendingDelete ? styles.syncBadgeDelete
+                      : styles.syncBadgeDirty,
+                  ]}>
+                    <Ionicons
+                      name={
+                        isPendingDelete ? 'trash-outline'
+                          : isSynced ? 'cloud-done-outline'
+                          : 'cloud-offline-outline'
+                      }
+                      size={14}
+                      color="#fff"
+                    />
+                    {syncLabel ? (
+                      <Text style={styles.syncBadgeText}>
+                        {syncLabel}
+                      </Text>
+                    ) : null}
+                  </View>
+                );
+              })()}
+            </View>
+          </View>
+        )}
+      </TouchableOpacity>
+    );
+  };
+
+  const activeCount = elevators.filter(e => !e.is_deleted && e.status === 'aktivan').length;
+  const inactiveCount = elevators.filter(e => !e.is_deleted && e.status === 'neaktivan').length;
+  const deletedCount = elevators.filter(e => e.is_deleted === 1).length;
+
+  const getFilterLabel = () => {
+    switch (filter) {
+      case 'aktivan':
+        return `Aktivna · ${activeCount}`;
+      case 'neaktivan':
+        return `Neaktivna · ${inactiveCount}`;
+      case 'obrisano':
+        return `Obrisana · ${deletedCount}`;
+      default:
+        return 'Filtri';
+    }
+  };
+
+  const getFilterColor = () => {
+    switch (filter) {
+      case 'aktivan':
+        return '#10b981';
+      case 'neaktivan':
+        return '#6b7280';
+      case 'obrisano':
+        return '#ef4444';
+      default:
+        return '#6b7280';
+    }
+  };
+
+  const handleFilterPress = () => {
+    const filterSequence = ['aktivan', 'neaktivan', 'obrisano'];
+    const currentIndex = filterSequence.indexOf(filter);
+    const nextIndex = (currentIndex + 1) % filterSequence.length;
+    setFilter(filterSequence[nextIndex]);
+  };
 
   return (
     <View style={styles.container}>
@@ -197,13 +324,13 @@ export default function ElevatorsListScreen({ navigation }) {
         </TouchableOpacity>
         <Text style={styles.title}>Dizala</Text>
         <TouchableOpacity
-          style={[styles.filterChip, isActiveFilter ? styles.filterChipActive : styles.filterChipInactive]}
-          onPress={() => setFilter(isActiveFilter ? 'neaktivan' : 'aktivan')}
+          style={[styles.filterChip, { borderColor: getFilterColor() }]}
+          onPress={handleFilterPress}
           activeOpacity={0.8}
         >
-          <View style={[styles.chipDot, { backgroundColor: isActiveFilter ? '#10b981' : '#6b7280' }]} />
+          <View style={[styles.chipDot, { backgroundColor: getFilterColor() }]} />
           <Text style={styles.chipText}>
-            {isActiveFilter ? `Aktivna · ${activeCount}` : `Neaktivna · ${inactiveCount}`}
+            {getFilterLabel()}
           </Text>
         </TouchableOpacity>
       </View>
@@ -411,6 +538,39 @@ const styles = StyleSheet.create({
   syncBadgeDirty: { backgroundColor: '#f59e0b' },
   syncBadgeDelete: { backgroundColor: '#ef4444' },
   syncBadgeText: { color: '#fff', fontSize: 12, fontWeight: '600' },
+  deletedActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  restoreButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#10b981',
+  },
+  restoreButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  permanentDeleteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#dc2626',
+  },
+  permanentDeleteButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
   emptyContainer: {
     alignItems: 'center',
     justifyContent: 'center',

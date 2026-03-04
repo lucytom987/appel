@@ -443,6 +443,11 @@ export const elevatorDB = {
       ]
     );
   },
+
+  permanentlyDelete: (id) => {
+    // Trajno briši dizalo iz baze (ne soft delete)
+    return db.runSync('DELETE FROM elevators WHERE id = ?', [id]);
+  },
   
   bulkInsert: (elevators) => {
     elevators.forEach(elevator => {

@@ -1,14 +1,16 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, BackHandler, Image, Modal, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, BackHandler, Image, Modal, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { elevatorDB, userDB, serviceDB } from '../database/db';
+import { servicesAPI } from '../services/api';
 import ImageViewer from 'react-native-image-zoom-viewer';
 
 export default function ServiceDetailsScreen({ route, navigation }) {
   const { service: routeService } = route.params;
   const [service, setService] = useState(routeService);
   const [activePhotoUrl, setActivePhotoUrl] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const serviceId = routeService?._id || routeService?.id;
 
@@ -126,6 +128,88 @@ export default function ServiceDetailsScreen({ route, navigation }) {
     return uniq.join(', ');
   })();
 
+  // Pronađi sve servise na adresi za isti datum
+  const findServicesOnAddressAndDate = () => {
+    if (!elevator) return [];
+    
+    const serviceDate = service.datum ? new Date(service.datum).toISOString().split('T')[0] : '';
+    const allServices = serviceDB.getAll() || [];
+    
+    return allServices.filter(svc => {
+      if (!serviceDate) return false;
+      const svcDate = new Date(svc.datum).toISOString().split('T')[0];
+      if (svcDate !== serviceDate) return false;
+      
+      const svcElevator = elevatorDB.getById(svc.elevatorId);
+      if (!svcElevator) return false;
+      
+      const svcStreet = (svcElevator.ulica || '').trim().toLowerCase();
+      const svcCity = (svcElevator.mjesto || '').trim().toLowerCase();
+      const currentStreet = (elevator.ulica || '').trim().toLowerCase();
+      const currentCity = (elevator.mjesto || '').trim().toLowerCase();
+      
+      return svcStreet === currentStreet && svcCity === currentCity;
+    });
+  };
+
+  const handleDeleteService = async (deleteAll = false) => {
+    setDeleteLoading(true);
+    try {
+      let servicesToDelete = [];
+      
+      if (deleteAll) {
+        servicesToDelete = findServicesOnAddressAndDate();
+      } else {
+        servicesToDelete = [service];
+      }
+      
+      if (servicesToDelete.length === 0) {
+        Alert.alert('Greška', 'Nema servisa za brisanje');
+        setDeleteLoading(false);
+        return;
+      }
+      
+      let successCount = 0;
+      let failCount = 0;
+      
+      for (const svc of servicesToDelete) {
+        const svcId = svc._id || svc.id;
+        try {
+          // Pokušaj obrisati sa servera ako je synced
+          if (svc.synced) {
+            try {
+              await servicesAPI.delete(svcId);
+            } catch (err) {
+              console.log('API delete failed, marking locally deleted', err);
+            }
+          }
+          
+          // Obriši iz lokalnog DB-a
+          serviceDB.delete(svcId);
+          successCount++;
+        } catch (err) {
+          console.error('Local delete failed for service', svcId, err);
+          failCount++;
+        }
+      }
+      
+      const message = deleteAll
+        ? `Obrisano ${successCount} servisa na adresi za taj datum`
+        : `Servis obrisan`;
+      
+      Alert.alert('Uspjeh', message, [
+        { text: 'OK', onPress: () => {
+          setDeleteLoading(false);
+          navigation.goBack();
+        } }
+      ]);
+    } catch (error) {
+      console.error('Delete error:', error);
+      Alert.alert('Greška', 'Greška pri brisanju servisa: ' + error.message);
+      setDeleteLoading(false);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -139,9 +223,39 @@ export default function ServiceDetailsScreen({ route, navigation }) {
           <Ionicons name="arrow-back" size={24} color="#1f2937" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Detalji servisa</Text>
-        <TouchableOpacity onPress={() => navigation.navigate('EditService', { service, onSave: (updated) => setService(updated) })}>
-          <Ionicons name="create-outline" size={22} color="#2563eb" />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <TouchableOpacity onPress={() => navigation.navigate('EditService', { service, onSave: (updated) => setService(updated) })}>
+            <Ionicons name="create-outline" size={22} color="#2563eb" />
+          </TouchableOpacity>
+          <TouchableOpacity 
+            onPress={() => {
+              const servicesOnAddress = findServicesOnAddressAndDate();
+              const hasMultiple = servicesOnAddress.length > 1;
+              
+              const options = [
+                { text: 'Otkaži', style: 'cancel' },
+                {
+                  text: 'Obriši samo ovaj',
+                  style: 'destructive',
+                  onPress: () => handleDeleteService(false)
+                }
+              ];
+              
+              if (hasMultiple) {
+                options.splice(1, 0, {
+                  text: `Obriši sve ${servicesOnAddress.length} na adresi`,
+                  style: 'destructive',
+                  onPress: () => handleDeleteService(true)
+                });
+              }
+              
+              Alert.alert('Obriši servis', 'Odaberite opciju:', options);
+            }}
+            disabled={deleteLoading}
+          >
+            <Ionicons name={deleteLoading ? "hourglass" : "trash-outline"} size={22} color={deleteLoading ? "#9ca3af" : "#ef4444"} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView style={styles.content}>

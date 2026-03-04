@@ -1,8 +1,8 @@
 module.exports = ({ config }) => ({
   ...config,
   expo: {
-    name: "mobile",
-    slug: "mobile",
+    name: "APPEL",
+    slug: "appel",
     version: "1.2.1",
     orientation: "portrait",
     icon: "./assets/icon.png",

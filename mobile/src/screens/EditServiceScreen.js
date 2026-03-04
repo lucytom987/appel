@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,7 @@ import {
   Platform,
   BackHandler,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
@@ -44,6 +44,9 @@ const checklistLabels = {
 export default function EditServiceScreen({ route, navigation }) {
   const { service, onSave } = route.params;
   const { user, isOnline, serverAwake } = useAuth();
+  const insets = useSafeAreaInsets();
+  const scrollViewRef = useRef(null);
+  const napomeneInputRef = useRef(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -269,6 +272,19 @@ export default function EditServiceScreen({ route, navigation }) {
 
   const formatDate = (date) => date ? date.toLocaleDateString('hr-HR') : 'Nije postavljeno';
 
+  const handleNapomeneInputFocus = () => {
+    // Scrollaj do napomena polja kada se fokusira
+    setTimeout(() => {
+      napomeneInputRef.current?.measureLayout?.(
+        scrollViewRef.current,
+        (x, y) => {
+          scrollViewRef.current?.scrollTo({ y: y - 100, animated: true });
+        },
+        () => {}
+      );
+    }, 100);
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <View style={styles.header}>
@@ -282,12 +298,13 @@ export default function EditServiceScreen({ route, navigation }) {
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 80 : 0}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? (insets.top + 60) : 0}
       >
         <ScrollView
+          ref={scrollViewRef}
           style={styles.content}
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ paddingBottom: 24 }}
+          contentContainerStyle={{ paddingBottom: Math.max((insets?.bottom || 0) + 120, 160) }}
         >
           {elevator && (
             <View style={styles.card}>
@@ -409,11 +426,13 @@ export default function EditServiceScreen({ route, navigation }) {
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>Napomene</Text>
             <TextInput
+              ref={napomeneInputRef}
               style={styles.textArea}
               multiline
               placeholder="Napomene"
               value={form.napomene}
               onChangeText={(t) => setForm((prev) => ({ ...prev, napomene: t }))}
+              onFocus={handleNapomeneInputFocus}
             />
           </View>
 

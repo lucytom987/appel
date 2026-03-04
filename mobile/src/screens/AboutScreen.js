@@ -11,7 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function AboutScreen({ navigation }) {
-  const currentVersion = '13.2.2026';
+  const currentVersion = '16.02.2026';
   const [versionTapCount, setVersionTapCount] = React.useState(0);
 
   const handleVersionPress = () => {
@@ -63,8 +63,20 @@ export default function AboutScreen({ navigation }) {
 
         {/* What's new */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Novosti (13.2.2026)</Text>
+          <Text style={styles.sectionTitle}>Novosti (16.02.2026)</Text>
           <View style={styles.featuresList}>
+            <View style={styles.featureItem}>
+              <Ionicons name="camera" size={20} color="#2563eb" />
+              <Text style={styles.featureText}>Dodano je fotografiranje i upload slika uz popravke i servisne napomene.</Text>
+            </View>
+            <View style={styles.featureItem}>
+              <Ionicons name="expand" size={20} color="#2563eb" />
+              <Text style={styles.featureText}>Uveden je zoom na fotografije (fullscreen + pinch to zoom).</Text>
+            </View>
+            <View style={styles.featureItem}>
+              <Ionicons name="cloud-upload" size={20} color="#2563eb" />
+              <Text style={styles.featureText}>Cloudinary integracija za spremanje fotografija.</Text>
+            </View>
             <View style={styles.featureItem}>
               <Ionicons name="calendar" size={20} color="#2563eb" />
               <Text style={styles.featureText}>Uveden je pregled "Događaji" koji objedinjava popravke, servisne napomene i aktivnosti u jednu kronološku listu.</Text>
@@ -180,10 +192,10 @@ export default function AboutScreen({ navigation }) {
         {/* Footer */}
         <View style={styles.footer}>
           <Text style={styles.footerText}>
-            © 2025 APPEL • Elevator Management
+            © 2026 APPEL • Elevator Management
           </Text>
           <Text style={styles.footerSubtext}>
-            Prosinac 2025 • Android
+            Veljaca 2026 • Android
           </Text>
         </View>
 

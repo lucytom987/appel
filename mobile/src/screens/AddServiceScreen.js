@@ -240,10 +240,69 @@ export default function AddServiceScreen({ navigation, route }) {
     }));
   };
 
-  const handleSubmit = async () => {
-    // Nema obaveznog opisa – redovni servis
+  // Funkcija koja pronalazi duplikate servisa na adresi za isti datum
+  const findDuplicateServices = () => {
+    const serviceDate = formData.serviceDate.toISOString().split('T')[0]; // DD-MM-YYYY format
+    const allServices = serviceDB.getAll() || [];
+    
+    const duplicates = allServices.filter(service => {
+      const svcDate = new Date(service.datum).toISOString().split('T')[0];
+      if (svcDate !== serviceDate) return false;
+      
+      // Pronađi dizalo
+      const svcElevator = elevatorDB.getById(service.elevatorId);
+      if (!svcElevator) return false;
+      
+      // Provjeri je li na istoj adresi
+      const svcStreet = (svcElevator.ulica || '').trim().toLowerCase();
+      const svcCity = (svcElevator.mjesto || '').trim().toLowerCase();
+      const currentStreet = (elevator.ulica || '').trim().toLowerCase();
+      const currentCity = (elevator.mjesto || '').trim().toLowerCase();
+      
+      return svcStreet === currentStreet && svcCity === currentCity;
+    });
+    
+    return duplicates;
+  };
 
+  const handleSubmit = async () => {
+    // Provjeri duplikate prije slanja
     setLoading(true);
+    const duplicates = findDuplicateServices();
+    if (duplicates.length > 0) {
+      Alert.alert(
+        'Duplikati servisa detektirani',
+        `Na adresi ${elevator.ulica}, ${elevator.mjesto} već postoji ${duplicates.length} servis(a) za datum ${formData.serviceDate.toLocaleDateString('hr-HR')}.\n\nDa li želite:\n1) Nastaviti i dodati novi\n2) Vidjeti postojeće servise`,
+        [
+          {
+            text: 'Otkaži',
+            style: 'cancel',
+            onPress: () => setLoading(false)
+          },
+          {
+            text: 'Vidi servise',
+            onPress: () => {
+              setLoading(false);
+              navigation.navigate('Services');
+            }
+          },
+          {
+            text: 'Nastavi',
+            style: 'destructive',
+            onPress: () => {
+              proceedWithSubmit();
+            }
+          }
+        ]
+      );
+      return;
+    }
+    
+    proceedWithSubmit();
+  };
+
+  const proceedWithSubmit = async () => {
+    // Nema obaveznog opisa – redovni servis
 
     try {
       const targetsAll = applyToAll && elevatorsOnAddress.length > 1 ? elevatorsOnAddress : [elevator];

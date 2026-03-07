@@ -11,7 +11,7 @@ router.get('/', authenticate, async (req, res) => {
     const { elevatorId, status, startDate, endDate, serviserId, updatedAfter, limit = 100, skip = 0, includeDeleted } = req.query;
     const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 0, 1), 200);
     const parsedSkip = Math.max(parseInt(skip, 10) || 0, 0);
-    const filter = {};
+    const filter = { companyId: req.companyId };
     if (!includeDeleted) filter.is_deleted = { $ne: true };
 
     if (elevatorId) filter.elevatorId = elevatorId;
@@ -48,7 +48,7 @@ router.get('/', authenticate, async (req, res) => {
 // GET /api/repairs/stats/overview - osnovna statistika
 router.get('/stats/overview', authenticate, async (req, res) => {
   try {
-    const baseFilter = { is_deleted: { $ne: true } };
+    const baseFilter = { companyId: req.companyId, is_deleted: { $ne: true } };
     const total = await Repair.countDocuments(baseFilter);
     const pending = await Repair.countDocuments({ ...baseFilter, status: 'pending' });
     const inProgress = await Repair.countDocuments({ ...baseFilter, status: 'in_progress' });
@@ -70,18 +70,21 @@ router.get('/stats/monthly', authenticate, async (req, res) => {
     const startDate = new Date(currentYear, currentMonth - 1, 1);
     const endDate = new Date(currentYear, currentMonth, 0, 23, 59, 59);
 
-    const prijavljeni = await Repair.countDocuments({
+    const prijavljeni = await  Repair.countDocuments({
+      companyId: req.companyId,
       datumPrijave: { $gte: startDate, $lte: endDate },
       is_deleted: { $ne: true },
     });
 
     const zavrseni = await Repair.countDocuments({
+      companyId: req.companyId,
       datumPopravka: { $gte: startDate, $lte: endDate },
       status: 'completed',
       is_deleted: { $ne: true },
     });
 
     const otvoreni = await Repair.countDocuments({
+      companyId: req.companyId,
       datumPrijave: { $gte: startDate, $lte: endDate },
       status: { $in: ['pending', 'in_progress'] },
       is_deleted: { $ne: true },
@@ -106,7 +109,7 @@ router.get('/stats/monthly', authenticate, async (req, res) => {
 // GET /api/repairs/:id - detalj popravka
 router.get('/:id', authenticate, async (req, res) => {
   try {
-    const repair = await Repair.findOne({ _id: req.params.id, is_deleted: { $ne: true } })
+    const repair = await Repair.findOne({ _id: req.params.id, companyId: req.companyId, is_deleted: { $ne: true } })
       .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala')
       .populate('serviserID', 'ime prezime email uloga')
       .lean();
@@ -125,9 +128,9 @@ router.get('/:id', authenticate, async (req, res) => {
 // POST /api/repairs - kreiraj popravak
 router.post('/', authenticate, async (req, res) => {
   try {
-    const elevator = await Elevator.findById(req.body.elevatorId || req.body.elevator);
+    const elevator = await Elevator.findOne({ _id: req.body.elevatorId || req.body.elevator, companyId: req.companyId });
     if (!elevator) {
-      return res.status(404).json({ success: false, message: 'Dizalo nije pronađeno' });
+      return res.status(404).json({ success: false, message: 'Dizalo nije pronađeno ili ne pripada vašoj firmi' });
     }
 
     // Legacy cleanup: ukloni polje "flag" ako dolazi iz starog klijenta
@@ -145,6 +148,7 @@ router.post('/', authenticate, async (req, res) => {
     const now = new Date();
     const repair = new Repair({
       ...req.body,
+      companyId: req.companyId,
       elevatorId: req.body.elevatorId || req.body.elevator,
       serviserID: req.user._id,
       status: req.body.status || 'pending',
@@ -181,9 +185,9 @@ router.post('/', authenticate, async (req, res) => {
 // PUT /api/repairs/:id - ažuriraj popravak (serviser može ažurirati svoj rad)
 router.put('/:id', authenticate, async (req, res) => {
   try {
-    const existing = await Repair.findById(req.params.id);
+    const existing = await Repair.findOne({ _id: req.params.id, companyId: req.companyId });
     if (!existing) {
-      return res.status(404).json({ success: false, message: 'Popravak nije pronađen' });
+      return res.status(404).json({ success: false, message: 'Popravak nije pronađen ili ne pripada vašoj firmi' });
     }
 
     if (existing.is_deleted) {
@@ -244,9 +248,9 @@ router.put('/:id', authenticate, async (req, res) => {
 // DELETE /api/repairs/:id - brisanje
 router.delete('/:id', authenticate, checkRole(['menadzer', 'admin']), async (req, res) => {
   try {
-    const repair = await Repair.findById(req.params.id);
+    const repair = await Repair.findOne({ _id: req.params.id, companyId: req.companyId });
     if (!repair) {
-      return res.status(404).json({ success: false, message: 'Popravak nije pronađen' });
+      return res.status(404).json({ success: false, message: 'Popravak nije pronađen ili ne pripada vašoj firmi' });
     }
 
     const now = new Date();

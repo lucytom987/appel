@@ -170,6 +170,12 @@ export const workOrdersAPI = {
   sign: (id, data) => api.post(`/work-orders/${id}/sign`, data),
 };
 
+// Company API - Company Settings
+export const companyAPI = {
+  getInfo: () => api.get('/company'),
+  update: (data) => api.put('/company', data),
+};
+
 // Users API - Admin Management
 export const usersAPI = {
   getAll: () => api.get('/users'),

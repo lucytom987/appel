@@ -35,6 +35,7 @@ mongoose.connect(process.env.MONGODB_URI)
 
 // Routes
 app.use('/api/auth', require('./routes/auth'));
+app.use('/api/company', require('./routes/company'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/elevators', require('./routes/elevators'));
 app.use('/api/services', require('./routes/services'));

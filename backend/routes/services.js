@@ -29,14 +29,15 @@ const calculateNextServiceDate = (datum, intervalServisa = 1) => {
   return nextDate;
 };
 
-const recalculateElevatorServiceDates = async (elevatorId) => {
+const recalculateElevatorServiceDates = async (elevatorId, companyId) => {
   if (!elevatorId) return null;
 
-  const elevator = await Elevator.findById(elevatorId);
+  const elevator = await Elevator.findOne({ _id: elevatorId, companyId });
   if (!elevator) return null;
 
   const latestService = await Service.findOne({
     elevatorId,
+    companyId,
     is_deleted: { $ne: true },
   })
     .sort({ datum: -1, updated_at: -1 })
@@ -61,7 +62,7 @@ router.get('/', authenticate, async (req, res) => {
     const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 0, 1), 200);
     const parsedSkip = Math.max(parseInt(skip, 10) || 0, 0);
     const includeDeletedBool = String(includeDeleted).toLowerCase() === 'true';
-    const filter = {};
+    const filter = { companyId: req.companyId };
     if (!includeDeletedBool) filter.is_deleted = { $ne: true };
 
     if (elevatorId) filter.elevatorId = elevatorId;
@@ -138,7 +139,7 @@ router.get('/stats/monthly', authenticate, async (req, res) => {
 // GET /api/services/:id
 router.get('/:id', authenticate, async (req, res) => {
   try {
-    const service = await Service.findOne({ _id: req.params.id, is_deleted: { $ne: true } })
+    const service = await Service.findOne({ _id: req.params.id, companyId: req.companyId, is_deleted: { $ne: true } })
       .populate('elevatorId', 'brojUgovora nazivStranke ulica mjesto brojDizala')
       .populate('serviserID', 'ime prezime email uloga')
       .populate('dodatniServiseri', 'ime prezime email uloga')
@@ -163,9 +164,9 @@ router.post('/', authenticate, async (req, res) => {
       return res.status(400).json({ success: false, message: 'elevatorId je obavezan' });
     }
 
-    const elevator = await Elevator.findById(elevatorId);
+    const elevator = await Elevator.findOne({ _id: elevatorId, companyId: req.companyId });
     if (!elevator) {
-      return res.status(404).json({ success: false, message: 'Dizalo nije pronađeno', elevatorId });
+      return res.status(404).json({ success: false, message: 'Dizalo nije pronađeno ili ne pripada vašoj firmi', elevatorId });
     }
 
     const now = new Date();
@@ -178,6 +179,7 @@ router.post('/', authenticate, async (req, res) => {
 
     const service = new Service({
       ...req.body,
+      companyId: req.companyId,
       sljedeciServis: calculatedNextService,
       dodatniServiseri: uniqueAssistants,
       elevatorId,
@@ -188,7 +190,7 @@ router.post('/', authenticate, async (req, res) => {
     });
 
     await service.save();
-  await recalculateElevatorServiceDates(elevatorId);
+  await recalculateElevatorServiceDates(elevatorId, req.companyId);
 
     await logAction({
       korisnikId: req.user._id,
@@ -226,9 +228,9 @@ router.post('/', authenticate, async (req, res) => {
 // PUT /api/services/:id
 router.put('/:id', authenticate, async (req, res) => {
   try {
-    const existingService = await Service.findById(req.params.id);
+    const existingService = await Service.findOne({ _id: req.params.id, companyId: req.companyId });
     if (!existingService) {
-      return res.status(404).json({ success: false, message: 'Servis nije pronađen' });
+      return res.status(404).json({ success: false, message: 'Servis nije pronađen ili ne pripada vašoj firmi' });
     }
 
     if (existingService.is_deleted) {
@@ -280,7 +282,7 @@ router.put('/:id', authenticate, async (req, res) => {
       .populate('serviserID', 'ime prezime email')
       .populate('dodatniServiseri', 'ime prezime email');
 
-    await recalculateElevatorServiceDates(existingService.elevatorId);
+    await recalculateElevatorServiceDates(existingService.elevatorId, req.companyId);
 
     await logAction({
       korisnikId: req.user._id,
@@ -320,9 +322,9 @@ router.put('/:id', authenticate, async (req, res) => {
 // DELETE /api/services/:id
 router.delete('/:id', authenticate, async (req, res) => {
   try {
-    const service = await Service.findById(req.params.id);
+    const service = await Service.findOne({ _id: req.params.id, companyId: req.companyId });
     if (!service) {
-      return res.status(404).json({ success: false, message: 'Servis nije pronađen' });
+      return res.status(404).json({ success: false, message: 'Servis nije pronađen ili ne pripada vašoj firmi' });
     }
 
     const role = (req.user.normalizedRole || req.user.uloga || '').toLowerCase();
@@ -338,7 +340,7 @@ router.delete('/:id', authenticate, async (req, res) => {
     service.ažuriranDatum = now;
     await service.save();
 
-    await recalculateElevatorServiceDates(service.elevatorId);
+    await recalculateElevatorServiceDates(service.elevatorId, req.companyId);
 
     await logAction({
       korisnikId: req.user._id,

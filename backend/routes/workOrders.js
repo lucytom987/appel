@@ -170,12 +170,12 @@ const mapWorkOrderResponse = (workOrder, req) => {
 // Kreiraj draft radnog naloga iz postojećeg popravka
 router.post('/from-repair/:repairId', authenticate, async (req, res) => {
   try {
-    const repair = await Repair.findOne({ _id: req.params.repairId, is_deleted: { $ne: true } })
+    const repair = await Repair.findOne({ _id: req.params.repairId, companyId: req.companyId, is_deleted: { $ne: true } })
       .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala brojUgovora')
       .populate('serviserID', 'ime prezime email');
 
     if (!repair) {
-      return res.status(404).json({ success: false, message: 'Popravak nije pronađen' });
+      return res.status(404).json({ success: false, message: 'Popravak nije pronađen ili ne pripada vašoj firmi' });
     }
 
     if (repair.status !== 'completed') {
@@ -184,13 +184,14 @@ router.post('/from-repair/:repairId', authenticate, async (req, res) => {
 
     const baseUrl = resolveBaseUrl(req);
 
-    let workOrder = await WorkOrder.findOne({ repairId: repair._id });
+    let workOrder = await WorkOrder.findOne({ repairId: repair._id, companyId: req.companyId });
     if (!workOrder) {
       const numbering = await nextWorkOrderNumber(new Date());
       const token = crypto.randomBytes(24).toString('hex');
       const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
       workOrder = new WorkOrder({
+        companyId: req.companyId,
         repairId: repair._id,
         elevatorId: repair.elevatorId?._id || repair.elevatorId,
         serviserID: repair.serviserID?._id || repair.serviserID,
@@ -244,9 +245,9 @@ router.post('/from-repair/:repairId', authenticate, async (req, res) => {
 
 router.get('/:id', authenticate, async (req, res) => {
   try {
-    const workOrder = await WorkOrder.findById(req.params.id).lean();
+    const workOrder = await WorkOrder.findOne({ _id: req.params.id, companyId: req.companyId }).lean();
     if (!workOrder) {
-      return res.status(404).json({ success: false, message: 'Radni nalog nije pronađen' });
+      return res.status(404).json({ success: false, message: 'Radni nalog nije pronađen ili ne pripada vašoj firmi' });
     }
 
     res.json({ success: true, data: mapWorkOrderResponse(workOrder, req) });
@@ -259,16 +260,16 @@ router.get('/:id', authenticate, async (req, res) => {
 // Potpisuje i finalizira dokument. sendNow=true postavlja status sent
 router.post('/:id/sign', authenticate, async (req, res) => {
   try {
-    const workOrder = await WorkOrder.findById(req.params.id);
+    const workOrder = await WorkOrder.findOne({ _id: req.params.id, companyId: req.companyId });
     if (!workOrder) {
-      return res.status(404).json({ success: false, message: 'Radni nalog nije pronađen' });
+      return res.status(404).json({ success: false, message: 'Radni nalog nije pronađen ili ne pripada vašoj firmi' });
     }
 
-    const repair = await Repair.findById(workOrder.repairId)
+    const repair = await Repair.findOne({ _id: workOrder.repairId, companyId: req.companyId })
       .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala brojUgovora')
       .populate('serviserID', 'ime prezime email');
     if (!repair) {
-      return res.status(404).json({ success: false, message: 'Povezani popravak nije pronađen' });
+      return res.status(404).json({ success: false, message: 'Povezani popravak nije pronađen ili ne pripada vašoj firmi' });
     }
 
     const signerName = req.body.signedByName || `${req.user.ime || ''} ${req.user.prezime || ''}`.trim() || req.user.email;
@@ -399,11 +400,11 @@ router.get('/download/:id', async (req, res) => {
 // Get work order by repair ID (authenticated)
 router.get('/by-repair/:repairId', authenticate, async (req, res) => {
   try {
-    const workOrder = await WorkOrder.findOne({ repairId: req.params.repairId })
+    const workOrder = await WorkOrder.findOne({ repairId: req.params.repairId, companyId: req.companyId })
       .sort({ created_at: -1 }); // najnoviji prvi
     
     if (!workOrder) {
-      return res.status(404).json({ message: 'Radni nalog nije pronađen za ovaj popravak' });
+      return res.status(404).json({ message: 'Radni nalog nije pronađen za ovaj popravak ili ne pripada vašoj firmi' });
     }
 
     const baseUrl = resolveBaseUrl(req);

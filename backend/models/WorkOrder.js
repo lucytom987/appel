@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 
 const workOrderSchema = new mongoose.Schema({
+  companyId: { type: mongoose.Schema.Types.ObjectId, ref: 'Company', required: true },
   repairId: { type: mongoose.Schema.Types.ObjectId, ref: 'Repair', required: true },
   elevatorId: { type: mongoose.Schema.Types.ObjectId, ref: 'Elevator', required: true },
   serviserID: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },

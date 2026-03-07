@@ -9,7 +9,7 @@ const router = express.Router();
 // GET /api/users - Lista svih korisnika
 router.get('/', authenticate, async (req, res) => {
   try {
-    const users = await User.find({}, { lozinka: 0 });
+    const users = await User.find({ companyId: req.companyId }, { lozinka: 0 });
     res.json(users);
   } catch (error) {
     console.error('Greska pri dohvacanju korisnika:', error);
@@ -20,7 +20,7 @@ router.get('/', authenticate, async (req, res) => {
 // GET /api/users/lite - Ograniceni popis
 router.get('/lite', authenticate, async (req, res) => {
   try {
-    const users = await User.find({}, 'ime prezime uloga aktivan email telefon').sort({ prezime: 1, ime: 1 }).lean();
+    const users = await User.find({ companyId: req.companyId }, 'ime prezime uloga aktivan email telefon').sort({ prezime: 1, ime: 1 }).lean();
     res.json(users);
   } catch (error) {
     console.error('Greska pri dohvacanju korisnika (lite):', error);
@@ -31,9 +31,9 @@ router.get('/lite', authenticate, async (req, res) => {
 // GET /api/users/:id - Detalji korisnika
 router.get('/:id', authenticate, async (req, res) => {
   try {
-    const user = await User.findById(req.params.id, { lozinka: 0 });
+    const user = await User.findOne({ _id: req.params.id, companyId: req.companyId }, { lozinka: 0 });
     if (!user) {
-      return res.status(404).json({ message: 'Korisnik nije pronadjen' });
+      return res.status(404).json({ message: 'Korisnik nije pronadjen ili ne pripada vašoj firmi' });
     }
     res.json(user);
   } catch (error) {
@@ -51,9 +51,9 @@ router.post('/', authenticate, async (req, res) => {
       return res.status(400).json({ message: 'Svi obavezni podaci su potrebni' });
     }
 
-    const postojeciKorisnik = await User.findOne({ email });
+    const postojeciKorisnik = await User.findOne({ email, companyId: req.companyId });
     if (postojeciKorisnik) {
-      return res.status(400).json({ message: 'Korisnik sa tim emailom vec postoji' });
+      return res.status(400).json({ message: 'Korisnik sa tim emailom vec postoji u vašoj firmi' });
     }
 
     if (!['serviser', 'menadzer', 'admin', 'technician', 'manager'].includes(uloga)) {
@@ -61,6 +61,7 @@ router.post('/', authenticate, async (req, res) => {
     }
 
     const noviKorisnik = new User({
+      companyId: req.companyId,
       ime,
       prezime,
       email,
@@ -97,9 +98,9 @@ router.post('/', authenticate, async (req, res) => {
 router.put('/:id', authenticate, async (req, res) => {
   try {
     const { ime, prezime, lozinka, uloga, telefon, aktivan } = req.body;
-    const user = await User.findById(req.params.id);
+    const user = await User.findOne({ _id: req.params.id, companyId: req.companyId });
     if (!user) {
-      return res.status(404).json({ message: 'Korisnik nije pronadjen' });
+      return res.status(404).json({ message: 'Korisnik nije pronadjen ili ne pripada vašoj firmi' });
     }
 
     const stareVrijednosti = {
@@ -151,9 +152,9 @@ router.put('/:id', authenticate, async (req, res) => {
 // DELETE /api/users/:id - Obrisi korisnika (samo menadzer/admin)
 router.delete('/:id', authenticate, checkRole(['menadzer', 'admin']), async (req, res) => {
   try {
-    const user = await User.findById(req.params.id);
+    const user = await User.findOne({ _id: req.params.id, companyId: req.companyId });
     if (!user) {
-      return res.status(404).json({ message: 'Korisnik nije pronadjen' });
+      return res.status(404).json({ message: 'Korisnik nije pronadjen ili ne pripada vašoj firmi' });
     }
 
     if (user._id.toString() === req.user._id.toString()) {
@@ -190,9 +191,9 @@ router.delete('/:id', authenticate, checkRole(['menadzer', 'admin']), async (req
 // GET /api/users/:id/password - Prikazi lozinku (logirano)
 router.get('/:id/password', authenticate, async (req, res) => {
   try {
-    const user = await User.findById(req.params.id);
+    const user = await User.findOne({ _id: req.params.id, companyId: req.companyId });
     if (!user) {
-      return res.status(404).json({ message: 'Korisnik nije pronadjen' });
+      return res.status(404).json({ message: 'Korisnik nije pronadjen ili ne pripada vašoj firmi' });
     }
 
     await logAction({
@@ -216,9 +217,9 @@ router.get('/:id/password', authenticate, async (req, res) => {
 // PUT /api/users/:id/reset-password - Resetiraj lozinku
 router.put('/:id/reset-password', authenticate, async (req, res) => {
   try {
-    const user = await User.findById(req.params.id);
+    const user = await User.findOne({ _id: req.params.id, companyId: req.companyId });
     if (!user) {
-      return res.status(404).json({ message: 'Korisnik nije pronadjen' });
+      return res.status(404).json({ message: 'Korisnik nije pronadjen ili ne pripada vašoj firmi' });
     }
 
     const { novaLozinka } = req.body;

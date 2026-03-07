@@ -26,6 +26,7 @@ import ChatRoomsScreen from '../screens/ChatRoomsScreen';
 import ChatRoomScreen from '../screens/ChatRoomScreen';
 import UserManagementScreen from '../screens/UserManagementScreen';
 import AddUserScreen from '../screens/AddUserScreen';
+import CompanySettingsScreen from '../screens/CompanySettingsScreen';
 import MapScreen from '../screens/MapScreen';
 import AboutScreen from '../screens/AboutScreen';
 
@@ -68,6 +69,7 @@ export default function Navigation() {
             <Stack.Screen name="ChatRoom" component={ChatRoomScreen} />
             <Stack.Screen name="UserManagement" component={UserManagementScreen} />
             <Stack.Screen name="AddUser" component={AddUserScreen} />
+            <Stack.Screen name="CompanySettings" component={CompanySettingsScreen} />
             <Stack.Screen name="Map" component={MapScreen} />
             <Stack.Screen name="About" component={AboutScreen} />
           </>

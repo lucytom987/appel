@@ -94,20 +94,20 @@ const generatePdfForWorkOrder = async ({ workOrder, repair, elevator, company, b
 
   // Naziv firme
   doc.fillColor('#ffffff')
-    .fontSize(22)
-    .font('Helvetica-Bold')
+    .fontSize(20)
+    .font('Courier-Bold')
     .text(company?.naziv || 'SERVISNA FIRMA', margin, margin - 45);
 
   // Kontakt firme
-  doc.fontSize(10)
-    .font('Helvetica')
+  doc.fontSize(9)
+    .font('Courier')
     .text(company?.adresa || '', margin, margin - 10)
     .text(`OIB: ${company?.oib || '-'} | Email: ${company?.email || '-'}`, margin);
 
   // ============ METADATA O RADNOM NALOGU ============
   doc.moveDown(1.5);
-  doc.fillColor('#111827').fontSize(16).font('Helvetica-Bold').text('RADNI NALOG');
-  doc.fontSize(11).font('Helvetica');
+  doc.fillColor('#111827').fontSize(16).font('Courier-Bold').text('RADNI NALOG');
+  doc.fontSize(10).font('Courier');
 
   doc.fillColor('#374151')
     .text(`Broj: ${workOrder.workOrderNumber}`)
@@ -115,7 +115,7 @@ const generatePdfForWorkOrder = async ({ workOrder, repair, elevator, company, b
     .text(`Status: ${workOrder.status === 'sent' ? 'POSLAN' : workOrder.status === 'signed' ? 'POTPISAN' : 'NACRT'}`);
 
   if (workOrder.status === 'draft') {
-    doc.fillColor('#dc2626').fontSize(10).text('⚠️ PREDPREGLED - NIJE POSLAN');
+    doc.fillColor('#dc2626').fontSize(9).font('Courier-Bold').text('PREDPREGLED - NIJE POSLAN');
     doc.fillColor('#111827');
   }
 
@@ -127,8 +127,8 @@ const generatePdfForWorkOrder = async ({ workOrder, repair, elevator, company, b
 
   // ============ SEKCIJA: PODACI O STRANCI I DIZALU ============
   doc.moveDown(0.8);
-  doc.fillColor('#1e40af').fontSize(13).font('Helvetica-Bold').text('📍 Podaci o stranci i dizalu');
-  doc.fontSize(11).font('Helvetica').fillColor('#374151');
+  doc.fillColor('#1e40af').fontSize(12).font('Courier-Bold').text('Podaci o stranci i dizalu');
+  doc.fontSize(10).font('Courier').fillColor('#374151');
 
   doc.text(`Stranka: ${elevator?.nazivStranke || '-'}`, { width: 500 });
   doc.text(`Adresa: ${elevator?.ulica || '-'}, ${elevator?.mjesto || '-'}`);
@@ -143,23 +143,25 @@ const generatePdfForWorkOrder = async ({ workOrder, repair, elevator, company, b
 
   // ============ SEKCIJA: PODACI O POPRAVKU ============
   doc.moveDown(0.8);
-  doc.fillColor('#1e40af').fontSize(13).font('Helvetica-Bold').text('🔧 Podaci o popravku');
-  doc.fontSize(11).font('Helvetica').fillColor('#374151');
+  doc.fillColor('#1e40af').fontSize(12).font('Courier-Bold').text('Podaci o popravku');
+  doc.fontSize(10).font('Courier').fillColor('#374151');
 
   doc.text(`Datum prijave: ${formatDateHR(repair?.datumPrijave)}`);
   doc.text(`Datum popravke: ${formatDateHR(repair?.datumPopravka)}`);
-  doc.text(`Status: ${repair?.status === 'completed' ? 'ZAVRŠENO' : repair?.status === 'in_progress' ? 'U TIJEKU' : 'PRIJAVLJEN'}`);
+  doc.text(`Status: ${repair?.status === 'completed' ? 'ZAVRSENO' : repair?.status === 'in_progress' ? 'U TIJEKU' : 'PRIJAVLJEN'}`);
   
   if (repair?.opisKvara) {
-    doc.text(`Opis kvara:`);
-    doc.fontSize(10).text(repair.opisKvara, { width: 450, align: 'left' });
-    doc.fontSize(11);
+    doc.moveDown(0.3);
+    doc.text('Opis kvara:');
+    doc.fontSize(9).text(repair.opisKvara, { width: 450, align: 'left' });
+    doc.fontSize(10);
   }
   
   if (repair?.opisPopravka) {
-    doc.text(`Opis popravke:`);
-    doc.fontSize(10).text(repair.opisPopravka, { width: 450, align: 'left' });
-    doc.fontSize(11);
+    doc.moveDown(0.3);
+    doc.text('Opis popravke:');
+    doc.fontSize(9).text(repair.opisPopravka, { width: 450, align: 'left' });
+    doc.fontSize(10);
   }
 
   // ============ SEPARATOR LINIJA ============
@@ -171,8 +173,8 @@ const generatePdfForWorkOrder = async ({ workOrder, repair, elevator, company, b
   // ============ SEKCIJA: POTPIS ============
   if (workOrder.signedByName || workOrder.signedAt) {
     doc.moveDown(0.8);
-    doc.fillColor('#1e40af').fontSize(13).font('Helvetica-Bold').text('✅ Potpis');
-    doc.fontSize(10).font('Helvetica').fillColor('#374151');
+    doc.fillColor('#1e40af').fontSize(12).font('Courier-Bold').text('Potpis');
+    doc.fontSize(10).font('Courier').fillColor('#374151');
 
     doc.text(`Potpisao: ${workOrder.signedByName || '-'}`);
     if (workOrder.signedAt) {
@@ -190,7 +192,7 @@ const generatePdfForWorkOrder = async ({ workOrder, repair, elevator, company, b
         doc.text('Digitalni potpis:', { underline: false });
         doc.image(signatureBuffer, margin, doc.y + 5, { fit: [150, 60] });
       } catch (err) {
-        doc.text('Digitalni potpis: [nije moguće prikazati]');
+        doc.text('Digitalni potpis: [greska pri ucitavanju]');
       }
     }
 
@@ -203,7 +205,7 @@ const generatePdfForWorkOrder = async ({ workOrder, repair, elevator, company, b
 
   // ============ QR KOD I FOOTER ============
   doc.moveDown(0.8);
-  doc.fontSize(9).fillColor('#6b7280').text('Skeniraj QR kod za online pregled i preuzimanje dokumenta.');
+  doc.fontSize(8).fillColor('#6b7280').font('Courier').text('Skeniraj QR kod za online pregled i preuzimanje dokumenta.');
   doc.moveDown(0.3);
   
   // Postavi QR kod u donji desni kut
@@ -212,7 +214,7 @@ const generatePdfForWorkOrder = async ({ workOrder, repair, elevator, company, b
 
   // Footer s kompanijom
   doc.moveDown(1);
-  doc.fontSize(9).fillColor('#9ca3af');
+  doc.fontSize(8).fillColor('#9ca3af').font('Courier');
   doc.text(`${company?.naziv || 'Servisna firma'} | ${company?.telefon || company?.mobitel || 'Kontakt'}`);
   doc.text(`${company?.email || ''}`);
   doc.text(`Generirano: ${new Date().toLocaleString('hr-HR')}`, { align: 'right' });

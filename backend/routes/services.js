@@ -44,6 +44,7 @@ const recalculateElevatorServiceDates = async (elevatorId) => {
 
   if (latestService?.datum) {
     elevator.zadnjiServis = latestService.datum;
+    elevator.sljedeciServis = calculateNextServiceDate(latestService.datum, elevator.intervalServisa);
   } else {
     elevator.zadnjiServis = null;
     elevator.sljedeciServis = null;

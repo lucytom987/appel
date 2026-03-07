@@ -68,10 +68,15 @@ elevatorSchema.pre('save', function (next) {
   this.updated_at = now;
   
   // Automatski izračunaj sljedeći servis ako je postavljen zadnji servis
-  if (this.zadnjiServis && this.intervalServisa) {
+  if (this.zadnjiServis) {
+    const interval = (typeof this.intervalServisa === 'number' && this.intervalServisa > 0)
+      ? this.intervalServisa
+      : 1;
     const nextDate = new Date(this.zadnjiServis);
-    nextDate.setMonth(nextDate.getMonth() + this.intervalServisa);
+    nextDate.setMonth(nextDate.getMonth() + interval);
     this.sljedeciServis = nextDate;
+  } else {
+    this.sljedeciServis = null;
   }
   
   next();

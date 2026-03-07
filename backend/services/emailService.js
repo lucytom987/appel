@@ -6,6 +6,10 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 // Slanje emaila nakon potpisivanja radnog naloga
 const sendWorkOrderEmail = async (workOrder, company, repair, elevator, downloadUrl) => {
   try {
+    console.log('📧 Email servis - početak slanja');
+    console.log('   API Key postoji:', !!process.env.RESEND_API_KEY);
+    console.log('   Na email:', company?.email);
+    
     // Ako nema API key-a, koristi test mode
     if (!process.env.RESEND_API_KEY) {
       console.log('📧 [TEST MODE] Email bi bio poslan na:', company.email);
@@ -101,6 +105,7 @@ const sendWorkOrderEmail = async (workOrder, company, repair, elevator, download
       </html>
     `;
 
+    console.log('📧 Slanje emaila preko Resend...');
     // Slanje emaila preko Resend
     const response = await resend.emails.send({
       from: 'noreply@appel.hr',
@@ -110,14 +115,18 @@ const sendWorkOrderEmail = async (workOrder, company, repair, elevator, download
       html: htmlTemplate,
     });
 
+    console.log('📧 Resend response:', JSON.stringify(response));
+
     if (response.error) {
-      throw new Error(response.error.message);
+      console.error('❌ Resend error:', response.error);
+      throw new Error(response.error.message || 'Resend API error');
     }
 
-    console.log('✅ Email poslan via Resend:', response.id);
+    console.log('✅ Email poslan uspješno via Resend:', response.id);
     return { success: true, messageId: response.id };
   } catch (error) {
-    console.error('❌ Greška pri slanju emaila:', error);
+    console.error('❌ Greška pri slanju emaila:', error.message);
+    console.error('❌ Stack trace:', error.stack);
     return { success: false, error: error.message };
   }
 };

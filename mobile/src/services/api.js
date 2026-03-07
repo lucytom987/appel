@@ -166,6 +166,7 @@ export const servicesAPI = {
 export const workOrdersAPI = {
   createFromRepair: (repairId) => api.post(`/work-orders/from-repair/${repairId}`),
   getOne: (id) => api.get(`/work-orders/${id}`),
+  getByRepair: (repairId) => api.get(`/work-orders/by-repair/${repairId}`),
   sign: (id, data) => api.post(`/work-orders/${id}/sign`, data),
 };
 

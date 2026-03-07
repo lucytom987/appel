@@ -86,6 +86,31 @@ export default function RepairDetailsScreen({ route, navigation }) {
   const [status, setStatus] = useState(repairData.status === 'completed' ? 'completed' : 'pending');
   const [radniNalogPotpisan, setRadniNalogPotpisan] = useState(Boolean(repairData.radniNalogPotpisan));
   const [saving, setSaving] = useState(false);
+  const [workOrder, setWorkOrder] = useState(null);
+  const [loadingWorkOrder, setLoadingWorkOrder] = useState(false);
+
+  // Učitaj postojeći radni nalog (ako postoji)
+  useEffect(() => {
+    const loadWorkOrder = async () => {
+      const id = repairData._id || repairData.id;
+      if (!id || !online) return;
+      
+      setLoadingWorkOrder(true);
+      try {
+        const res = await workOrdersAPI.getByRepair(id);
+        setWorkOrder(res?.data?.data || null);
+      } catch (err) {
+        // 404 je OK - znači nema radnog naloga
+        if (err?.response?.status !== 404) {
+          console.log('Greška pri dohvaćanju radnog naloga:', err?.message);
+        }
+      } finally {
+        setLoadingWorkOrder(false);
+      }
+    };
+
+    loadWorkOrder();
+  }, [repairData._id, repairData.id, online]);
 
   const promptWorkOrderFlow = (repairId) => {
     Alert.alert(
@@ -98,18 +123,19 @@ export default function RepairDetailsScreen({ route, navigation }) {
           onPress: async () => {
             try {
               const draftRes = await workOrdersAPI.createFromRepair(repairId);
-              const workOrder = draftRes?.data?.data;
+              const newWorkOrder = draftRes?.data?.data;
+              setWorkOrder(newWorkOrder); // Spremi u state
 
               Alert.alert(
                 'Draft kreiran',
-                `Radni nalog ${workOrder?.workOrderNumber || ''} je kreiran.\n\nLink za pregled:\n${workOrder?.viewUrl || '-'}\n\nŽeliš li odmah potpisati i označiti kao poslano?`,
+                `Radni nalog ${newWorkOrder?.workOrderNumber || ''} je kreiran.\n\nLink za pregled:\n${newWorkOrder?.viewUrl || '-'}\n\nŽeliš li odmah potpisati i označiti kao poslano?`,
                 [
                   {
                     text: 'Otvori pregled',
                     onPress: async () => {
-                      if (!workOrder?.viewUrl) return;
+                      if (!newWorkOrder?.viewUrl) return;
                       try {
-                        await Linking.openURL(workOrder.viewUrl);
+                        await Linking.openURL(newWorkOrder.viewUrl);
                       } catch (openErr) {
                         Alert.alert('Greška', 'Ne mogu otvoriti pregled dokumenta.');
                       }
@@ -121,11 +147,12 @@ export default function RepairDetailsScreen({ route, navigation }) {
                     onPress: async () => {
                       try {
                         const signerName = `${user?.ime || ''} ${user?.prezime || ''}`.trim() || user?.email || 'Serviser';
-                        const signRes = await workOrdersAPI.sign(workOrder.id, {
+                        const signRes = await workOrdersAPI.sign(newWorkOrder.id, {
                           signedByName: signerName,
                           sendNow: true,
                         });
                         const signed = signRes?.data?.data;
+                        setWorkOrder(signed); // Ažuriraj state s potpisanom verzijom
                         Alert.alert(
                           'Radni nalog potpisan',
                           `Status: ${signed?.status || 'signed'}\nBroj: ${signed?.workOrderNumber || ''}\n\nLink za pregled:\n${signed?.viewUrl || '-'}`
@@ -408,6 +435,93 @@ export default function RepairDetailsScreen({ route, navigation }) {
             <Text style={styles.toggleLabel}>Radni nalog potpisan</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Postojeći radni nalog */}
+        {online && loadingWorkOrder && (
+          <View style={styles.card}>
+            <ActivityIndicator size="small" color="#2563eb" />
+            <Text style={{ textAlign: 'center', marginTop: ms(8), color: '#6b7280' }}>Učitavam radni nalog...</Text>
+          </View>
+        )}
+
+        {online && !loadingWorkOrder && workOrder && (
+          <View style={[styles.card, { backgroundColor: '#eff6ff' }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: ms(8) }}>
+              <Ionicons name="document-text" size={20} color="#2563eb" />
+              <Text style={[styles.sectionTitle, { marginLeft: ms(8), flex: 1 }]}>Radni nalog</Text>
+              <View style={{
+                paddingHorizontal: ms(8),
+                paddingVertical: ms(4),
+                borderRadius: ms(6),
+                backgroundColor: workOrder.status === 'draft' ? '#fef3c7' : workOrder.status === 'signed' ? '#d1fae5' : '#e0e7ff'
+              }}>
+                <Text style={{
+                  fontSize: ms(11),
+                  fontWeight: '700',
+                  color: workOrder.status === 'draft' ? '#92400e' : workOrder.status === 'signed' ? '#065f46' : '#3730a3'
+                }}>
+                  {workOrder.status === 'draft' ? 'NACRT' : workOrder.status === 'signed' ? 'POTPISAN' : workOrder.status.toUpperCase()}
+                </Text>
+              </View>
+            </View>
+            
+            <Text style={{ fontSize: ms(13), color: '#374151', marginBottom: ms(4) }}>
+              <Text style={{ fontWeight: '700' }}>Broj:</Text> {workOrder.workOrderNumber}
+            </Text>
+            <Text style={{ fontSize: ms(13), color: '#374151', marginBottom: ms(12) }}>
+              <Text style={{ fontWeight: '700' }}>Kreiran:</Text> {new Date(workOrder.created_at).toLocaleString('hr-HR')}
+            </Text>
+
+            <TouchableOpacity
+              style={[styles.secondaryButton, { marginTop: 0, backgroundColor: '#2563eb', borderColor: '#2563eb' }]}
+              onPress={async () => {
+                try {
+                  await Linking.openURL(workOrder.viewUrl);
+                } catch (err) {
+                  Alert.alert('Greška', 'Ne mogu otvoriti pregled dokumenta.');
+                }
+              }}
+            >
+              <Ionicons name="eye-outline" size={18} color="#fff" />
+              <Text style={[styles.secondaryText, { color: '#fff', fontWeight: '700' }]}>Pregledaj PDF</Text>
+            </TouchableOpacity>
+
+            {workOrder.status === 'draft' && (
+              <TouchableOpacity
+                style={[styles.secondaryButton, { marginTop: ms(8), backgroundColor: '#10b981', borderColor: '#10b981' }]}
+                onPress={async () => {
+                  Alert.alert(
+                    'Potpisivanje radnog naloga',
+                    'Želiš li potpisati i označiti radni nalog kao poslano?',
+                    [
+                      { text: 'Odustani', style: 'cancel' },
+                      {
+                        text: 'Potpiši',
+                        onPress: async () => {
+                          try {
+                            const signerName = `${user?.ime || ''} ${user?.prezime || ''}`.trim() || user?.email || 'Serviser';
+                            const signRes = await workOrdersAPI.sign(workOrder._id || workOrder.id, {
+                              signedByName: signerName,
+                              sendNow: true,
+                            });
+                            const signed = signRes?.data?.data;
+                            setWorkOrder(signed); // Ažuriraj lokalni state
+                            Alert.alert('Uspjeh', `Radni nalog ${signed?.workOrderNumber || ''} je potpisan i označen kao poslan.`);
+                          } catch (err) {
+                            Alert.alert('Greška', err?.response?.data?.message || err?.message || 'Potpis nije uspio');
+                          }
+                        }
+                      }
+                    ]
+                  );
+                }}
+              >
+                <Ionicons name="create-outline" size={18} color="#fff" />
+                <Text style={[styles.secondaryText, { color: '#fff', fontWeight: '700' }]}>Potpiši i označi kao poslano</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
 
         <TouchableOpacity style={styles.primaryButton} onPress={handleSave} disabled={saving}>
           <Ionicons name="save-outline" size={18} color="#fff" />

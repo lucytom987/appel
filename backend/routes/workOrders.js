@@ -396,4 +396,31 @@ router.get('/download/:id', async (req, res) => {
   }
 });
 
+// Get work order by repair ID (authenticated)
+router.get('/by-repair/:repairId', authenticate, async (req, res) => {
+  try {
+    const workOrder = await WorkOrder.findOne({ repairId: req.params.repairId })
+      .sort({ created_at: -1 }); // najnoviji prvi
+    
+    if (!workOrder) {
+      return res.status(404).json({ message: 'Radni nalog nije pronađen za ovaj popravak' });
+    }
+
+    const baseUrl = resolveBaseUrl(req);
+    const viewUrl = `${baseUrl}/api/work-orders/view/${workOrder._id}?token=${workOrder.viewToken}`;
+    const downloadUrl = `${baseUrl}/api/work-orders/download/${workOrder._id}?token=${workOrder.viewToken}`;
+
+    return res.json({
+      data: {
+        ...workOrder.toObject(),
+        viewUrl,
+        downloadUrl,
+      },
+    });
+  } catch (error) {
+    console.error('Greška pri dohvaćanju radnog naloga:', error);
+    return res.status(500).json({ message: 'Greška poslužitelja' });
+  }
+});
+
 module.exports = router;

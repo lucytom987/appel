@@ -112,6 +112,98 @@ export default function RepairDetailsScreen({ route, navigation }) {
     loadWorkOrder();
   }, [repairData._id, repairData.id, online]);
 
+  const handleCreateWorkOrder = async () => {
+    const id = repairData._id || repairData.id;
+    
+    if (!online) {
+      Alert.alert('Offline', 'Potrebna je internet veza za kreiranje radnog naloga.');
+      return;
+    }
+
+    // Provjeri postoji li već radni nalog
+    if (workOrder) {
+      Alert.alert(
+        'Radni nalog već postoji',
+        `Broj: ${workOrder.workOrderNumber}\nStatus: ${workOrder.status}\n\nŽeliš li otvoriti pregled?`,
+        [
+          { text: 'Odustani', style: 'cancel' },
+          {
+            text: 'Otvori pregled',
+            onPress: async () => {
+              if (!workOrder?.viewUrl) return;
+              try {
+                await Linking.openURL(workOrder.viewUrl);
+              } catch (openErr) {
+                Alert.alert('Greška', 'Ne mogu otvoriti pregled dokumenta.');
+              }
+            }
+          }
+        ]
+      );
+      return;
+    }
+
+    // Kreiraj novi radni nalog
+    Alert.alert(
+      'Kreiranje radnog naloga',
+      'Želiš li kreirati radni nalog za ovaj popravak?',
+      [
+        { text: 'Odustani', style: 'cancel' },
+        {
+          text: 'Kreiraj',
+          onPress: async () => {
+            try {
+              const draftRes = await workOrdersAPI.createFromRepair(id);
+              const newWorkOrder = draftRes?.data?.data;
+              setWorkOrder(newWorkOrder);
+
+              Alert.alert(
+                'Radni nalog kreiran',
+                `Broj: ${newWorkOrder?.workOrderNumber || ''}\nStatus: Draft\n\nLink za pregled:\n${newWorkOrder?.viewUrl || '-'}\n\nŽeliš li odmah potpisati i označiti kao poslano?`,
+                [
+                  {
+                    text: 'Otvori pregled',
+                    onPress: async () => {
+                      if (!newWorkOrder?.viewUrl) return;
+                      try {
+                        await Linking.openURL(newWorkOrder.viewUrl);
+                      } catch (openErr) {
+                        Alert.alert('Greška', 'Ne mogu otvoriti pregled dokumenta.');
+                      }
+                    }
+                  },
+                  { text: 'Kasnije', style: 'cancel' },
+                  {
+                    text: 'Potpiši i pošalji',
+                    onPress: async () => {
+                      try {
+                        const signerName = `${user?.ime || ''} ${user?.prezime || ''}`.trim() || user?.email || 'Serviser';
+                        const signRes = await workOrdersAPI.sign(newWorkOrder.id, {
+                          signedByName: signerName,
+                          sendNow: true,
+                        });
+                        const signed = signRes?.data?.data;
+                        setWorkOrder(signed);
+                        Alert.alert(
+                          'Radni nalog potpisan i poslan',
+                          `Broj: ${signed?.workOrderNumber || ''}\nStatus: ${signed?.status || 'sent'}\n\nLink za pregled:\n${signed?.viewUrl || '-'}`
+                        );
+                      } catch (err) {
+                        Alert.alert('Greška', err?.response?.data?.message || err?.message || 'Potpis nije uspio');
+                      }
+                    }
+                  }
+                ]
+              );
+            } catch (err) {
+              Alert.alert('Greška', err?.response?.data?.message || err?.message || 'Kreiranje radnog naloga nije uspjelo');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const promptWorkOrderFlow = (repairId) => {
     Alert.alert(
       'Kreiranje radnog naloga',
@@ -530,6 +622,18 @@ export default function RepairDetailsScreen({ route, navigation }) {
           <Text style={styles.primaryButtonText}>{saving ? 'Spremam...' : 'Spremi'}</Text>
         </TouchableOpacity>
 
+        {/* Tipka za kreiranje radnog naloga */}
+        <TouchableOpacity
+          style={[styles.workOrderButton, !online && styles.workOrderButtonDisabled]}
+          onPress={handleCreateWorkOrder}
+          disabled={!online || loadingWorkOrder}
+        >
+          <Ionicons name="document-text-outline" size={18} color={online ? "#fff" : "#9ca3af"} />
+          <Text style={[styles.workOrderButtonText, !online && { color: '#9ca3af' }]}>
+            {loadingWorkOrder ? 'Učitavam...' : workOrder ? 'Pregled radnog naloga' : 'Kreiraj radni nalog'}
+          </Text>
+        </TouchableOpacity>
+
         <TouchableOpacity
           style={[styles.secondaryButton, { marginTop: ms(12) }]}
           onPress={() => navigation.navigate('EditRepair', { repair: repairData })}
@@ -567,6 +671,25 @@ const styles = StyleSheet.create({
     gap: ms(8),
   },
   primaryButtonText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: ms(15),
+  },
+  workOrderButton: {
+    marginTop: ms(12),
+    marginHorizontal: ms(20),
+    backgroundColor: '#059669',
+    borderRadius: ms(10),
+    padding: ms(14),
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: ms(8),
+  },
+  workOrderButtonDisabled: {
+    backgroundColor: '#e5e7eb',
+  },
+  workOrderButtonText: {
     color: '#fff',
     fontWeight: '700',
     fontSize: ms(15),

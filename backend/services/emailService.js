@@ -108,7 +108,7 @@ const sendWorkOrderEmail = async (workOrder, company, repair, elevator, download
     console.log('📧 Slanje emaila preko Resend...');
     // Slanje emaila preko Resend
     const response = await resend.emails.send({
-      from: 'noreply@appel.hr',
+      from: 'onboarding@resend.dev',  // Resend sandbox email (radi odmah)
       to: company.email,
       replyTo: company.email,  // Odgovori idu na company email
       subject: `Radni nalog ${workOrder.workOrderNumber} - Potpisan`,

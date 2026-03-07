@@ -15,6 +15,44 @@ const ALLOWED_CHECKLIST = [
   'cable_inspection'
 ];
 
+const calculateNextServiceDate = (datum, intervalServisa = 1) => {
+  if (!datum) return null;
+  const baseDate = new Date(datum);
+  if (Number.isNaN(baseDate.getTime())) return null;
+
+  const months = (typeof intervalServisa === 'number' && intervalServisa > 0)
+    ? intervalServisa
+    : 1;
+
+  const nextDate = new Date(baseDate);
+  nextDate.setMonth(nextDate.getMonth() + months);
+  return nextDate;
+};
+
+const recalculateElevatorServiceDates = async (elevatorId) => {
+  if (!elevatorId) return null;
+
+  const elevator = await Elevator.findById(elevatorId);
+  if (!elevator) return null;
+
+  const latestService = await Service.findOne({
+    elevatorId,
+    is_deleted: { $ne: true },
+  })
+    .sort({ datum: -1, updated_at: -1 })
+    .lean();
+
+  if (latestService?.datum) {
+    elevator.zadnjiServis = latestService.datum;
+  } else {
+    elevator.zadnjiServis = null;
+    elevator.sljedeciServis = null;
+  }
+
+  await elevator.save();
+  return elevator;
+};
+
 // GET /api/services - lista servisa (filtri + delta)
 router.get('/', authenticate, async (req, res) => {
   try {
@@ -130,6 +168,7 @@ router.post('/', authenticate, async (req, res) => {
     }
 
     const now = new Date();
+    const calculatedNextService = calculateNextServiceDate(req.body.datum || now, elevator.intervalServisa);
     const dodatniServiseri = Array.isArray(req.body.dodatniServiseri || req.body.additionalTechnicians)
       ? (req.body.dodatniServiseri || req.body.additionalTechnicians).filter(Boolean)
       : (req.body.kolegaId ? [req.body.kolegaId] : []);
@@ -138,6 +177,7 @@ router.post('/', authenticate, async (req, res) => {
 
     const service = new Service({
       ...req.body,
+      sljedeciServis: calculatedNextService,
       dodatniServiseri: uniqueAssistants,
       elevatorId,
       serviserID: req.user._id,
@@ -147,10 +187,7 @@ router.post('/', authenticate, async (req, res) => {
     });
 
     await service.save();
-
-    elevator.zadnjiServis = service.datum;
-    if (service.sljedećiServis) elevator.sljedećiServis = service.sljedećiServis;
-    await elevator.save();
+  await recalculateElevatorServiceDates(elevatorId);
 
     await logAction({
       korisnikId: req.user._id,
@@ -197,6 +234,12 @@ router.put('/:id', authenticate, async (req, res) => {
       return res.status(404).json({ success: false, message: 'Servis je obrisan' });
     }
 
+    const elevator = await Elevator.findById(existingService.elevatorId);
+    const calculatedNextService = calculateNextServiceDate(
+      req.body.datum || existingService.datum,
+      elevator?.intervalServisa
+    );
+
     let checklist = Array.isArray(req.body.checklist) ? req.body.checklist : undefined;
     if (checklist) {
       checklist = checklist
@@ -217,9 +260,11 @@ router.put('/:id', authenticate, async (req, res) => {
     const updateData = {
       ...req.body,
       checklist,
+      sljedeciServis: calculatedNextService,
       dodatniServiseri: uniqueAssistants,
       serviserID: existingService.serviserID,
       elevatorId: existingService.elevatorId,
+      azuriranDatum: now,
       ažuriranDatum: now,
       updated_at: now,
       updated_by: req.user._id,
@@ -233,6 +278,8 @@ router.put('/:id', authenticate, async (req, res) => {
       .populate('elevatorId', 'brojUgovora nazivStranke brojDizala')
       .populate('serviserID', 'ime prezime email')
       .populate('dodatniServiseri', 'ime prezime email');
+
+    await recalculateElevatorServiceDates(existingService.elevatorId);
 
     await logAction({
       korisnikId: req.user._id,
@@ -289,6 +336,8 @@ router.delete('/:id', authenticate, async (req, res) => {
     service.updated_by = req.user._id;
     service.ažuriranDatum = now;
     await service.save();
+
+    await recalculateElevatorServiceDates(service.elevatorId);
 
     await logAction({
       korisnikId: req.user._id,

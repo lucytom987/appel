@@ -24,33 +24,45 @@ appel/
 │   ├── services/      ✅ Audit logging
 │   └── server.js      ✅ Express server sa Socket.io
 │
-└── mobile/            ⏳ React Native + Expo + SQLite (čeka se)
+└── mobile/            ✅ React Native + Expo + SQLite
     ├── src/
-    │   ├── screens/   ⏳ UI zasloni
-    │   ├── services/  ⏳ Offline sync + SQLite
-    │   ├── context/   ⏳ State management
-    │   └── components/⏳ Reusable komponente
-    └── app.json       ⏳ Expo config
+    │   ├── screens/   ✅ 18 UI zaslona
+    │   ├── services/  ✅ Offline sync + SQLite
+    │   ├── context/   ✅ Auth state management
+    │   ├── database/  ✅ SQLite wrapper
+    │   └── components/✅ Reusable komponente
+    ├── android/       ✅ Native Android build setup
+    └── app.config.js  ✅ Expo config
 ```
 
-## ✅ Status: Backend Ready
+## ✅ Status: Backend & Mobile Ready
 
 ### Implementirano:
+
+**Backend:**
 - ✅ MongoDB modeli (User, Elevator, Service, Repair, ChatRoom, Message, SimCard, AuditLog)
 - ✅ API endpoints za sve operacije (CRUD + statistika)
 - ✅ JWT autentifikacija + role-based access control
 - ✅ Socket.io za real-time chat
 - ✅ Audit logging za sve akcije
 - ✅ Filteri, pagination, sorting
-- ✅ Server pokrenut i testiran
+- ✅ Deployed na Render.com
+
+**Mobile (React Native + Expo):**
+- ✅ SQLite offline baza
+- ✅ Sync mehanizam (offline → online)
+- ✅ UI/UX zasloni (18 screens)
+- ✅ Google Maps integracija
+- ✅ Real-time chat
+- ✅ Service duplicate prevention
+- ✅ Elevator recovery system (soft-delete + restore)
+- ✅ Keyboard handling fixes
+- ✅ APK build za Android (Gradle)
 
 ### Sljedeći koraci:
-1. ⏳ Kreirati mobilnu aplikaciju (React Native + Expo)
-2. ⏳ Implementirati SQLite offline bazu
-3. ⏳ Sync mehanizam (offline → online)
-4. ⏳ UI/UX zasloni
-5. ⏳ Testing i debugging
-6. ⏳ APK build za Android
+1. 🚀 Google Play Store deployment
+2. 📱 iOS build (opciono)
+3. 🔄 Over-the-air (OTA) updates setup
 
 ## 🚀 Pokretanje
 
@@ -63,16 +75,29 @@ npm run dev
 
 Server će biti na `http://localhost:5000`
 
-### Mobile app (kada bude kreirana):
+### Mobile app:
 ```powershell
 cd mobile
 npm install
 npx expo start
+
+# Za Android build (release APK):
+cd android
+.\gradlew.bat assembleRelease
+
+# Za Google Play Store (AAB):
+.\gradlew.bat bundleRelease
 ```
+
+Vidi [DEPLOYMENT.md](./DEPLOYMENT.md) za kompletnu build proceduru.
 
 ## 📚 Dokumentacija
 
 - [Backend README](./backend/README.md) - API endpoints, modeli, autentifikacija
+- [DEPLOYMENT.md](./DEPLOYMENT.md) - Backend deployment (Render) + Mobile build procedure
+- [GOOGLE_PLAY_STORE.md](./GOOGLE_PLAY_STORE.md) - Kompletni guide za Google Play Store objavu
+- [PLAY_STORE_SETUP.md](./PLAY_STORE_SETUP.md) - Quick start guide za Play Store
+- [PRIVACY_POLICY.md](./PRIVACY_POLICY.md) - Privacy Policy (EN/HR) za app store
 - [SPECIFICATION.md](./SPECIFICATION.md) - Puna specifikacija projekta
 - [CONVERSATION_TRANSCRIPT.md](./CONVERSATION_TRANSCRIPT.md) - Sažetak konverzacije
 
@@ -142,6 +167,6 @@ Proprietary - APPEL Development Team
 
 ---
 
-**Verzija:** 2.0.0  
-**Datum:** Studeni 2025  
-**Status:** Backend ✅ | Mobile ⏳
+**Verzija:** 1.2.1  
+**Datum:** Ožujak 2026  
+**Status:** Backend ✅ | Mobile ✅ | Google Play Store 🚀

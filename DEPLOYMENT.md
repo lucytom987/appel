@@ -132,3 +132,162 @@ Ako želiš da backend **nikad ne zaspi**:
 - Uvijek online
 
 Ali za development, **free tier je sasvim OK**! ✅
+
+---
+
+## 📱 MOBILE BUILD & DEPLOY - Kompletna Procedura
+
+### Kada kažeš "BUILD I DEPLOJ" - slijedi ove korake:
+
+#### 1️⃣ Provjeri Backend
+
+```powershell
+# Navigiraj u backend direktorij
+Set-Location C:\Users\vidac\appel\backend
+
+# Instaliraj dependencies (ako ima novih)
+npm install
+
+# Testiraj da li server radi lokalno
+npm start
+# Očekujem: Server running on port 5000, MongoDB connected
+# Ctrl+C za zaustaviti
+```
+
+#### 2️⃣ Pripremi Mobile Build
+
+```powershell
+# Navigiraj u mobile direktorij
+Set-Location C:\Users\vidac\appel\mobile
+
+# Instaliraj dependencies
+npm install
+```
+
+#### 3️⃣ Build Android APK
+
+```powershell
+# Navigiraj u android direktorij
+Set-Location C:\Users\vidac\appel\mobile\android
+
+# CLEAN BUILD (ako je potrebno - ako build faila ili ima problema)
+.\gradlew.bat --stop
+Remove-Item -Recurse -Force .\.cxx -ErrorAction SilentlyContinue
+Remove-Item -Recurse -Force .\app\.cxx -ErrorAction SilentlyContinue
+
+# BUILD RELEASE APK
+.\gradlew.bat assembleRelease
+```
+
+**Očekivani output:**
+```
+BUILD SUCCESSFUL in 12-15m
+605 actionable tasks: 478 executed, 127 up-to-date
+```
+
+**APK lokacija:**
+```
+mobile/android/app/build/outputs/apk/release/app-release.apk
+```
+
+#### 4️⃣ Verificiraj Build
+
+```powershell
+# Vrati se u root direktorij
+Set-Location C:\Users\vidac\appel
+
+# Provjeri git status
+git status --short
+
+# Provjeri da li APK postoji
+Test-Path mobile/android/app/build/outputs/apk/release/app-release.apk
+# Očekujem: True
+```
+
+#### 5️⃣ Deploy (Git Push)
+
+```powershell
+# Stage sve promjene
+git add .
+
+# Commit s opisnom porukom
+git commit -m "Feature: [opis promjena]"
+
+# Push na GitHub (triggerira Render auto-deploy)
+git push origin main
+```
+
+**Što se događa nakon pusha:**
+- ✅ GitHub prima promjene
+- ✅ Render detektira push na `main` branch
+- ✅ Render automatski redeploya backend (2-3 minute)
+- ✅ Backend dostupan na: `https://appel-backend.onrender.com`
+
+---
+
+### 🔧 Troubleshooting - Najčešći Problemi
+
+#### Problem: Gradle build failed s CMake greškama
+
+**Rješenje:**
+```powershell
+# Zaustavi sve Gradle daemone
+.\gradlew.bat --stop
+
+# Obriši native cache
+Remove-Item -Recurse -Force .\.cxx -ErrorAction SilentlyContinue
+Remove-Item -Recurse -Force .\app\.cxx -ErrorAction SilentlyContinue
+
+# Buildaj bez clean stepa
+.\gradlew.bat assembleRelease
+```
+
+#### Problem: Metro bundler timeout
+
+**Rješenje:**
+```powershell
+# Povećaj Node memoriju
+$env:NODE_OPTIONS="--max-old-space-size=4096"
+.\gradlew.bat assembleRelease
+```
+
+#### Problem: Git push odbijen (rejected)
+
+**Rješenje:**
+```powershell
+# Pull latest prvo
+git pull origin main --rebase
+
+# Pa onda push
+git push origin main
+```
+
+---
+
+### 📋 Brzi Checklist - "BUILD I DEPLOJ"
+
+- [ ] Backend: `npm install` + `npm start` test
+- [ ] Mobile: `npm install`
+- [ ] Android: Clean `.cxx` ako treba
+- [ ] Build: `.\gradlew.bat assembleRelease` (12-15min)
+- [ ] Verify: APK postoji u `build/outputs/apk/release/`
+- [ ] Git: `add` → `commit` → `push origin main`
+- [ ] Check: Render dashboard za deployment status
+
+**Trajanje:** ~15-20 minuta (većinu vremena build APK)
+
+---
+
+### 🎯 Skraćena verzija (Ako je sve već instalirano)
+
+```powershell
+# Build APK
+Set-Location C:\Users\vidac\appel\mobile\android
+.\gradlew.bat assembleRelease
+
+# Deploy
+Set-Location C:\Users\vidac\appel
+git add .
+git commit -m "Feature: [opis]"
+git push origin main
+```

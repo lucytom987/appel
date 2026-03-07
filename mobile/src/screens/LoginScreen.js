@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
+  Image,
   TextInput,
   TouchableOpacity,
   StyleSheet,
@@ -42,8 +43,11 @@ export default function LoginScreen() {
       <View style={styles.formContainer}>
         {/* Logo/Header */}
         <View style={styles.header}>
-          <Text style={styles.logo}>APPEL</Text>
-          <Text style={styles.subtitle}>Elevator Service Management</Text>
+          <Image 
+            source={require('../../assets/login-banner.png')} 
+            style={styles.bannerImage}
+            resizeMode="contain"
+          />
         </View>
 
         {/* Login Form */}
@@ -105,7 +109,7 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#1976D2',
   },
   formContainer: {
     flex: 1,
@@ -114,17 +118,11 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
-    marginBottom: 50,
+    marginBottom: 40,
   },
-  logo: {
-    fontSize: 48,
-    fontWeight: 'bold',
-    color: '#2563eb',
-    marginBottom: 10,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#666',
+  bannerImage: {
+    width: '100%',
+    height: 120,
   },
   form: {
     width: '100%',
@@ -160,14 +158,14 @@ const styles = StyleSheet.create({
     fontSize: 20,
   },
   button: {
-    backgroundColor: '#2563eb',
+    backgroundColor: '#1565C0',
     borderRadius: 10,
     padding: 16,
     alignItems: 'center',
     marginTop: 10,
   },
   buttonDisabled: {
-    backgroundColor: '#94a3b8',
+    backgroundColor: '#90CAF9',
   },
   buttonText: {
     color: '#fff',
@@ -176,7 +174,7 @@ const styles = StyleSheet.create({
   },
   footer: {
     textAlign: 'center',
-    color: '#999',
+    color: '#E3F2FD',
     marginTop: 40,
     fontSize: 12,
   },

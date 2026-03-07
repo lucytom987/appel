@@ -191,7 +191,6 @@ export default function RepairDetailsScreen({ route, navigation }) {
     const id = repairData._id || repairData.id;
     const wasCompleted = repairData.status === 'completed';
     const existsInDB = repairDB.getById(id);
-    const isSynced = existsInDB && (existsInDB.synced === 1 || existsInDB.sync_status === 'synced');
     
     const payload = {
       id,
@@ -208,6 +207,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
     setSaving(true);
     try {
       const onlineNow = online;
+      let savedSuccessfully = false;
       
       // Provjeri postoji li već u lokalnoj bazi
       
@@ -215,25 +215,27 @@ export default function RepairDetailsScreen({ route, navigation }) {
         // NOVA popravka - spremi localno prvo
         repairDB.insert({ ...repairData, ...payload, synced: 0, sync_status: 'dirty' });
         setRepairData((prev) => ({ ...prev, ...payload, synced: 0, sync_status: 'dirty' }));
+        savedSuccessfully = true;
       } else {
         // Postojeća popravka - ažuriraj
         if (!onlineNow) {
           repairDB.update(id, { ...repairData, ...payload, synced: 0, sync_status: 'dirty' });
           setRepairData((prev) => ({ ...prev, ...payload, synced: 0, sync_status: 'dirty' }));
+          savedSuccessfully = true;
         } else {
           const response = await repairsAPI.update(id, payload);
           const updated = response.data?.data || response.data;
           repairDB.update(id, { ...repairData, ...updated, synced: 1, sync_status: 'synced' });
           setRepairData((prev) => ({ ...prev, ...updated, synced: 1, sync_status: 'synced' }));
+          savedSuccessfully = true;
         }
       }
       
       Alert.alert('Spremljeno', 'Popravka je spremljena', [
         { text: 'OK', onPress: () => {
-          if (!wasCompleted && status === 'completed' && online && isSynced) {
+          // Provjeri trebali li pitati o radnom nalogu
+          if (savedSuccessfully && !wasCompleted && status === 'completed' && online) {
             promptWorkOrderFlow(id);
-          } else if (!wasCompleted && status === 'completed' && online && !isSynced) {
-            Alert.alert('Info', 'Popravak je spremljen lokalno. Radni nalog možeš kreirati nakon što se popravak sinkronizira s serverom.');
           }
           if (navigation.canGoBack()) {
             navigation.goBack();

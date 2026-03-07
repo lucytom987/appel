@@ -57,6 +57,7 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
   const [simStart, setSimStart] = useState('');
   const [simEnd, setSimEnd] = useState('');
   const [savingSim, setSavingSim] = useState(false);
+  const [currentElevator, setCurrentElevator] = useState(rawElevator);
   const online = Boolean(isOnline && serverAwake);
   
   const parseDateSafe = (value) => {
@@ -109,30 +110,36 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
 
   // Osiguraj da je elevator pravilno strukturiran
   const elevator = {
-    ...rawElevator,
-    kontaktOsoba: typeof rawElevator.kontaktOsoba === 'string' 
-      ? JSON.parse(rawElevator.kontaktOsoba || '{}') 
-      : (rawElevator.kontaktOsoba || {}),
-    koordinate: Array.isArray(rawElevator.koordinate)
-      ? { latitude: rawElevator.koordinate[0], longitude: rawElevator.koordinate[1] }
-      : (rawElevator.koordinate || { latitude: 0, longitude: 0 })
+    ...currentElevator,
+    kontaktOsoba: typeof currentElevator.kontaktOsoba === 'string' 
+      ? JSON.parse(currentElevator.kontaktOsoba || '{}') 
+      : (currentElevator.kontaktOsoba || {}),
+    koordinate: Array.isArray(currentElevator.koordinate)
+      ? { latitude: currentElevator.koordinate[0], longitude: currentElevator.koordinate[1] }
+      : (currentElevator.koordinate || { latitude: 0, longitude: 0 })
   };
 
   const loadData = useCallback(() => {
     try {
-      const servicesData = serviceDB.getAll(elevator.id) || [];
+      // Osvježi elevator iz baze da dobiješ najnovije zadnjiServis i sljedeciServis
+      const freshElevator = elevatorDB.getById(rawElevator.id);
+      if (freshElevator) {
+        setCurrentElevator(freshElevator);
+      }
+
+      const servicesData = serviceDB.getAll(rawElevator.id) || [];
       const sortedServices = [...servicesData].sort((a, b) => {
         const ad = parseDateSafe(a?.datum || a?.serviceDate);
         const bd = parseDateSafe(b?.datum || b?.serviceDate);
         return (bd?.getTime() || 0) - (ad?.getTime() || 0);
       });
-      const repairsData = repairDB.getAll(elevator.id) || [];
+      const repairsData = repairDB.getAll(rawElevator.id) || [];
       const sortedRepairs = [...repairsData].sort((a, b) => {
         const ad = parseDateSafe(a?.datumPrijave || a?.reportedDate || a?.datum);
         const bd = parseDateSafe(b?.datumPrijave || b?.reportedDate || b?.datum);
         return (bd?.getTime() || 0) - (ad?.getTime() || 0);
       });
-      const eventsData = eventDB.getAll(elevator.id) || [];
+      const eventsData = eventDB.getAll(rawElevator.id) || [];
       const sortedEvents = [...eventsData].sort((a, b) => {
         const ad = parseDateSafe(a?.datum);
         const bd = parseDateSafe(b?.datum);
@@ -146,18 +153,19 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
       // Grupiraj dizala na istoj adresi (isti brojUgovora + nazivStranke + ulica + mjesto)
       const normalize = (str) => (str || '').toString().trim().toLowerCase();
       const all = elevatorDB.getAll();
+      const currentElevData = freshElevator || rawElevator;
       const grouped = Array.isArray(all) ? all.filter(e => {
         if (!e) return false;
-        const sameAddress = normalize(e.ulica) === normalize(elevator.ulica)
-          && normalize(e.mjesto) === normalize(elevator.mjesto);
-        const sameClient = normalize(e.nazivStranke) === normalize(elevator.nazivStranke);
+        const sameAddress = normalize(e.ulica) === normalize(currentElevData.ulica)
+          && normalize(e.mjesto) === normalize(currentElevData.mjesto);
+        const sameClient = normalize(e.nazivStranke) === normalize(currentElevData.nazivStranke);
         return sameAddress && sameClient;
       }).sort((a,b) => (a?.brojDizala || '').localeCompare(b?.brojDizala || '')) : [];
       setGroupElevators(grouped);
     } catch (error) {
       console.error('Greška pri učitavanju podataka:', error);
     }
-  }, [elevator.id]);
+  }, [rawElevator.id]);
 
   useEffect(() => {
     loadData();

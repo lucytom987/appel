@@ -163,6 +163,12 @@ export const servicesAPI = {
   getMonthlyStats: (year, month) => api.get('/services/stats/monthly', { params: { year, month } }),
 };
 
+export const workOrdersAPI = {
+  createFromRepair: (repairId) => api.post(`/work-orders/from-repair/${repairId}`),
+  getOne: (id) => api.get(`/work-orders/${id}`),
+  sign: (id, data) => api.post(`/work-orders/${id}/sign`, data),
+};
+
 // Users API - Admin Management
 export const usersAPI = {
   getAll: () => api.get('/users'),
@@ -179,6 +185,7 @@ export const usersAPI = {
 export const repairsAPI = {
   getAll: (params) => api.get('/repairs', { params }),
   getOne: (id) => api.get(`/repairs/${id}`),
+  createWorkOrderDraft: (id) => api.post(`/work-orders/from-repair/${id}`),
   create: (data) =>
     api.post('/repairs', {
       elevatorId: data.elevatorId || data.elevator,

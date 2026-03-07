@@ -1,8 +1,8 @@
 ﻿import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, BackHandler, Image, ActivityIndicator, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, BackHandler, Image, ActivityIndicator, Modal, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { elevatorDB, repairDB } from '../database/db';
-import { repairsAPI } from '../services/api';
+import { repairsAPI, workOrdersAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useFocusEffect } from '@react-navigation/native';
 import { usePhotoUpload } from '../hooks/usePhotoUpload';
@@ -87,6 +87,65 @@ export default function RepairDetailsScreen({ route, navigation }) {
   const [radniNalogPotpisan, setRadniNalogPotpisan] = useState(Boolean(repairData.radniNalogPotpisan));
   const [saving, setSaving] = useState(false);
 
+  const promptWorkOrderFlow = (repairId) => {
+    Alert.alert(
+      'Kreiranje radnog naloga',
+      'Popravak je završen. Želiš li kreirati radni nalog?',
+      [
+        { text: 'Kasnije', style: 'cancel' },
+        {
+          text: 'Kreiraj',
+          onPress: async () => {
+            try {
+              const draftRes = await workOrdersAPI.createFromRepair(repairId);
+              const workOrder = draftRes?.data?.data;
+
+              Alert.alert(
+                'Draft kreiran',
+                `Radni nalog ${workOrder?.workOrderNumber || ''} je kreiran.\n\nLink za pregled:\n${workOrder?.viewUrl || '-'}\n\nŽeliš li odmah potpisati i označiti kao poslano?`,
+                [
+                  {
+                    text: 'Otvori pregled',
+                    onPress: async () => {
+                      if (!workOrder?.viewUrl) return;
+                      try {
+                        await Linking.openURL(workOrder.viewUrl);
+                      } catch (openErr) {
+                        Alert.alert('Greška', 'Ne mogu otvoriti pregled dokumenta.');
+                      }
+                    }
+                  },
+                  { text: 'Samo pregled', style: 'cancel' },
+                  {
+                    text: 'Potpiši',
+                    onPress: async () => {
+                      try {
+                        const signerName = `${user?.ime || ''} ${user?.prezime || ''}`.trim() || user?.email || 'Serviser';
+                        const signRes = await workOrdersAPI.sign(workOrder.id, {
+                          signedByName: signerName,
+                          sendNow: true,
+                        });
+                        const signed = signRes?.data?.data;
+                        Alert.alert(
+                          'Radni nalog potpisan',
+                          `Status: ${signed?.status || 'signed'}\nBroj: ${signed?.workOrderNumber || ''}\n\nLink za pregled:\n${signed?.viewUrl || '-'}`
+                        );
+                      } catch (err) {
+                        Alert.alert('Greška', err?.response?.data?.message || err?.message || 'Potpis nije uspio');
+                      }
+                    }
+                  }
+                ]
+              );
+            } catch (err) {
+              Alert.alert('Greška', err?.response?.data?.message || err?.message || 'Kreiranje radnog naloga nije uspjelo');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   useEffect(() => {
     setIsTrebaloBi(Boolean(
       repairData.trebaloBi ||
@@ -103,7 +162,9 @@ export default function RepairDetailsScreen({ route, navigation }) {
 
   const handleSave = async () => {
     const id = repairData._id || repairData.id;
-    const isNew = String(id).startsWith('local_');
+    const wasCompleted = repairData.status === 'completed';
+    const existsInDB = repairDB.getById(id);
+    const isSynced = existsInDB && (existsInDB.synced === 1 || existsInDB.sync_status === 'synced');
     
     const payload = {
       id,
@@ -121,7 +182,9 @@ export default function RepairDetailsScreen({ route, navigation }) {
     try {
       const onlineNow = online;
       
-      if (isNew) {
+      // Provjeri postoji li već u lokalnoj bazi
+      
+      if (!existsInDB) {
         // NOVA popravka - spremi localno prvo
         repairDB.insert({ ...repairData, ...payload, synced: 0, sync_status: 'dirty' });
         setRepairData((prev) => ({ ...prev, ...payload, synced: 0, sync_status: 'dirty' }));
@@ -140,6 +203,11 @@ export default function RepairDetailsScreen({ route, navigation }) {
       
       Alert.alert('Spremljeno', 'Popravka je spremljena', [
         { text: 'OK', onPress: () => {
+          if (!wasCompleted && status === 'completed' && online && isSynced) {
+            promptWorkOrderFlow(id);
+          } else if (!wasCompleted && status === 'completed' && online && !isSynced) {
+            Alert.alert('Info', 'Popravak je spremljen lokalno. Radni nalog možeš kreirati nakon što se popravak sinkronizira s serverom.');
+          }
           if (navigation.canGoBack()) {
             navigation.goBack();
           } else {

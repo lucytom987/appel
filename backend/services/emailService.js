@@ -1,52 +1,13 @@
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 
-// Kreiraj transporter za email slanje
-const createTransporter = () => {
-  // Za razvoj: koristi Mailtrap ili test email servis
-  // Za produkciju: koristi pravi SMTP (Gmail, Sendgrid, itd.)
-  
-  const mailService = process.env.MAIL_SERVICE || 'gmail';
-  const mailUser = process.env.MAIL_USER;
-  const mailPassword = process.env.MAIL_PASSWORD;
-  const mailHost = process.env.MAIL_HOST;
-  const mailPort = process.env.MAIL_PORT;
-
-  // Ako su postavljeni custom SMTP parametri
-  if (mailHost && mailPort) {
-    return nodemailer.createTransport({
-      host: mailHost,
-      port: parseInt(mailPort, 10),
-      secure: mailPort === '465',
-      auth: {
-        user: mailUser,
-        pass: mailPassword,
-      },
-    });
-  }
-
-  // Fallback na Gmail (ako su postavljeni kredencijali)
-  if (mailUser && mailPassword) {
-    return nodemailer.createTransport({
-      service: mailService,
-      auth: {
-        user: mailUser,
-        pass: mailPassword,
-      },
-    });
-  }
-
-  // Testni modo - ispis u console
-  console.warn('⚠️  Email servis nije konfiguriran. Koristim test mode.');
-  return null;
-};
+// Kreiraj Resend instance
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 // Slanje emaila nakon potpisivanja radnog naloga
 const sendWorkOrderEmail = async (workOrder, company, repair, elevator, downloadUrl) => {
   try {
-    const transporter = createTransporter();
-
-    // Ako nema transporter-a, samo ispis u log
-    if (!transporter) {
+    // Ako nema API key-a, koristi test mode
+    if (!process.env.RESEND_API_KEY) {
       console.log('📧 [TEST MODE] Email bi bio poslan na:', company.email);
       console.log('📧 [TEST MODE] Predmet: Radni nalog', workOrder.workOrderNumber);
       return { success: true, mode: 'test' };
@@ -140,17 +101,21 @@ const sendWorkOrderEmail = async (workOrder, company, repair, elevator, download
       </html>
     `;
 
-    // Slanje emaila
-    const mailOptions = {
-      from: process.env.MAIL_FROM || process.env.MAIL_USER,
+    // Slanje emaila preko Resend
+    const response = await resend.emails.send({
+      from: 'noreply@appel.hr',
       to: company.email,
+      replyTo: company.email,  // Odgovori idu na company email
       subject: `Radni nalog ${workOrder.workOrderNumber} - Potpisan`,
       html: htmlTemplate,
-    };
+    });
 
-    const info = await transporter.sendMail(mailOptions);
-    console.log('✅ Email poslan:',info.messageId);
-    return { success: true, messageId: info.messageId };
+    if (response.error) {
+      throw new Error(response.error.message);
+    }
+
+    console.log('✅ Email poslan via Resend:', response.id);
+    return { success: true, messageId: response.id };
   } catch (error) {
     console.error('❌ Greška pri slanju emaila:', error);
     return { success: false, error: error.message };

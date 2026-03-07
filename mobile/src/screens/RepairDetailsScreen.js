@@ -120,6 +120,19 @@ export default function RepairDetailsScreen({ route, navigation }) {
       return;
     }
 
+    // Provjeri je li popravak sinkroniziran sa serverom
+    const isLocalId = String(id).startsWith('local_');
+    const isSynced = repairData.synced === 1 || repairData.sync_status === 'synced';
+    
+    if (isLocalId || !isSynced) {
+      Alert.alert(
+        'Popravak nije sinkroniziran',
+        'Radni nalog se može kreirati samo za popravke koji su sinkronizirani sa serverom.\n\nMolimo prvo spremite ovaj popravak s internet vezom.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
     // Provjeri postoji li već radni nalog
     if (workOrder) {
       Alert.alert(
@@ -326,7 +339,11 @@ export default function RepairDetailsScreen({ route, navigation }) {
       Alert.alert('Spremljeno', 'Popravka je spremljena', [
         { text: 'OK', onPress: () => {
           // Provjeri trebali li pitati o radnom nalogu
-          if (savedSuccessfully && !wasCompleted && status === 'completed' && online) {
+          // Samo ako je sinkronizirano s serverom (ne lokalni ID)
+          const isLocalId = String(id).startsWith('local_');
+          const nowSynced = savedSuccessfully && onlineNow && !isLocalId;
+          
+          if (nowSynced && !wasCompleted && status === 'completed') {
             promptWorkOrderFlow(id);
           }
           if (navigation.canGoBack()) {
@@ -624,12 +641,22 @@ export default function RepairDetailsScreen({ route, navigation }) {
 
         {/* Tipka za kreiranje radnog naloga */}
         <TouchableOpacity
-          style={[styles.workOrderButton, !online && styles.workOrderButtonDisabled]}
+          style={[
+            styles.workOrderButton, 
+            (!online || String(repairData._id || repairData.id).startsWith('local_')) && styles.workOrderButtonDisabled
+          ]}
           onPress={handleCreateWorkOrder}
-          disabled={!online || loadingWorkOrder}
+          disabled={!online || loadingWorkOrder || String(repairData._id || repairData.id).startsWith('local_')}
         >
-          <Ionicons name="document-text-outline" size={18} color={online ? "#fff" : "#9ca3af"} />
-          <Text style={[styles.workOrderButtonText, !online && { color: '#9ca3af' }]}>
+          <Ionicons 
+            name="document-text-outline" 
+            size={18} 
+            color={(online && !String(repairData._id || repairData.id).startsWith('local_')) ? "#fff" : "#9ca3af"} 
+          />
+          <Text style={[
+            styles.workOrderButtonText, 
+            (!online || String(repairData._id || repairData.id).startsWith('local_')) && { color: '#9ca3af' }
+          ]}>
             {loadingWorkOrder ? 'Učitavam...' : workOrder ? 'Pregled radnog naloga' : 'Kreiraj radni nalog'}
           </Text>
         </TouchableOpacity>

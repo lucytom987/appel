@@ -32,11 +32,10 @@ const auth = async (req, res, next) => {
       return res.status(401).json({ message: 'Korisnik nije pronađen ili nije aktivan' });
     }
 
-    console.log('✅ Auth: Uspješna autentifikacija korisnika:', user.email, '(ID:', user._id, ', Company:', user.companyId, ')');
+    console.log('✅ Auth: Uspješna autentifikacija korisnika:', user.email, '(ID:', user._id, ')');
     user.uloga = normalizeRole(user.uloga); // ne sprema se u bazu, samo u request kontekstu
     user.normalizedRole = user.uloga;
     req.user = user;
-    req.companyId = user.companyId; // Dodaj companyId za lakše filtriranje
     next();
   } catch (error) {
     console.error('❌ Auth greška:', error.message);

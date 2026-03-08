@@ -2,10 +2,9 @@ const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
 const userSchema = new mongoose.Schema({
-  companyId: { type: mongoose.Schema.Types.ObjectId, ref: 'Company', required: true },
   ime: { type: String, required: true },
   prezime: { type: String, required: true },
-  email: { type: String, required: true }, // Unique per company
+  email: { type: String, required: true, unique: true },
   lozinka: { type: String, required: true },
   privremenaLozinka: { type: String }, // Za admin reset - prikazuje se samo jednom
   uloga: {
@@ -18,9 +17,6 @@ const userSchema = new mongoose.Schema({
   kreiranDatum: { type: Date, default: Date.now },
   azuriranDatum: { type: Date, default: Date.now }
 });
-
-// Compound unique index: email mora biti unique UNUTAR firme
-userSchema.index({ email: 1, companyId: 1 }, { unique: true });
 
 // Hash lozinku prije spremanja
 userSchema.pre('save', async function (next) {

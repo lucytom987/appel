@@ -2,7 +2,7 @@ module.exports = ({ config }) => ({
   ...config,
   expo: {
     name: "APPEL",
-    slug: "mobile",
+    slug: "appel",
     version: "1.2.2",
     orientation: "portrait",
     icon: "./assets/icon.png",

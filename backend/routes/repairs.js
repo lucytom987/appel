@@ -176,6 +176,24 @@ router.post('/', authenticate, async (req, res) => {
     );
 
     const now = new Date();
+    
+    // Provjeri duplikate - ako postoji popravka sa istim poljem i datumom, vrati postojeću
+    const existingRepair = await Repair.findOne({
+      companyId: req.companyId,
+      elevatorId: req.body.elevatorId || req.body.elevator,
+      opisKvara: req.body.opisKvara,
+      datumPrijave: req.body.datumPrijave || { $gte: new Date(now.getTime() - 60000) }, // zadnjih 60s
+      is_deleted: { $ne: true },
+    }).lean();
+
+    if (existingRepair) {
+      console.log(`⚠️ Duplikat popravka pronađen, vraćam postojeću: ${existingRepair._id}`);
+      const populated = await Repair.findById(existingRepair._id)
+        .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala')
+        .populate('serviserID', 'ime prezime email');
+      return res.status(201).json({ success: true, message: 'Popravak već postoji', data: populated });
+    }
+
     const normalizedAdditionalTechnicians = await normalizeAdditionalTechnicians(req.body.dodatniServiseri, req.companyId);
     const normalizedWorkHours = normalizeWorkHours(req.body.radniSati);
     const repair = new Repair({

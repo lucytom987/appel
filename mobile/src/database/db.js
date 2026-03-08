@@ -900,7 +900,14 @@ export const repairDB = {
     });
   },
   markSynced: (id, serverId) => {
-    return db.runSync('UPDATE repairs SET synced = 1, sync_status = "synced", id = ?, updated_at = ? WHERE id = ?', [serverId, Date.now(), id]);
+    try {
+      const result = db.runSync('UPDATE repairs SET synced = 1, sync_status = "synced", id = ?, updated_at = ? WHERE id = ?', [serverId, Date.now(), id]);
+      console.log(`✅ markSynced: ${id} → ${serverId}`);
+      return result;
+    } catch (e) {
+      console.error(`❌ markSynced failed: ${id} → ${serverId}:`, e?.message);
+      throw e;
+    }
   },
 };
 

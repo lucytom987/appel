@@ -2,8 +2,10 @@ import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import { syncQueue } from '../database/db';
 
-// Backend URL - produkcija na Render
-export const API_URL = 'https://appel-q97a.onrender.com/api';
+// Backend URL - koristi EXPO_PUBLIC_API_URL ako je postavljen, inače produkcija
+const DEFAULT_API_URL = 'https://appel-q97a.onrender.com/api';
+const rawApiUrl = process.env.EXPO_PUBLIC_API_URL || '';
+export const API_URL = rawApiUrl.trim().replace(/\/+$/, '') || DEFAULT_API_URL;
 
 // Axios instance sa default konfiguracijom
 const api = axios.create({

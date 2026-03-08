@@ -37,6 +37,13 @@ const formatDateHR = (value) => {
   });
 };
 
+const formatHoursHR = (value) => {
+  if (value === null || value === undefined || value === '') return '-';
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return '-';
+  return `${String(numeric).replace('.', ',')} h`;
+};
+
 const pad2 = (value) => String(value).padStart(2, '0');
 const formatDayKey = (date = new Date()) => {
   const day = pad2(date.getDate());
@@ -77,7 +84,10 @@ const isTokenValid = (workOrder, token) => {
 
 const buildWorkOrderTemplateData = async (workOrder, req, token) => {
   const company = await Company.findById(workOrder.companyId).lean();
-  const repair = await Repair.findById(workOrder.repairId).lean();
+  const repair = await Repair.findById(workOrder.repairId)
+    .populate('serviserID', 'ime prezime email')
+    .populate('dodatniServiseri', 'ime prezime email')
+    .lean();
   const elevator = await Elevator.findById(workOrder.elevatorId).lean();
 
   const viewUrl = `${resolveBaseUrl(req)}/api/work-orders/view/${workOrder._id}?token=${encodeURIComponent(token)}`;
@@ -91,6 +101,7 @@ const buildWorkOrderTemplateData = async (workOrder, req, token) => {
     elevator,
     qrCodeDataUrl,
     formatDateHR,
+    formatHoursHR,
   };
 };
 

@@ -543,6 +543,56 @@
       </div>
     </section>
 
+    <!-- SEKCIJA: SERVISERI I RADNI SATI -->
+    <section class="section">
+      <div class="section-head">
+        <h2 class="section-title">Serviseri i radni sati</h2>
+      </div>
+      <div class="section-body">
+        <table class="info-table">
+          <tr>
+            <td>Glavni serviser</td>
+            <td>
+              <%= repair && repair.serviserID
+                ? `${repair.serviserID.ime || ''} ${repair.serviserID.prezime || ''}`.trim() || repair.serviserID.email || '-'
+                : '-' %>
+              (<%= formatHoursHR(repair && repair.radniSati && repair.radniSati.glavni) %>)
+            </td>
+          </tr>
+          <% if (repair && Array.isArray(repair.dodatniServiseri) && repair.dodatniServiseri.length) { %>
+            <% repair.dodatniServiseri.forEach((k, idx) => { %>
+              <tr>
+                <td><%= `Kolega ${idx + 1}` %></td>
+                <td>
+                  <%= `${k.ime || ''} ${k.prezime || ''}`.trim() || k.email || '-' %>
+                  (<%= formatHoursHR(repair && repair.radniSati && repair.radniSati.kolega) %>)
+                </td>
+              </tr>
+            <% }) %>
+          <% } else { %>
+            <tr>
+              <td>Kolega</td>
+              <td>-</td>
+            </tr>
+          <% } %>
+        </table>
+      </div>
+    </section>
+
+    <!-- SEKCIJA: UTROŠENI MATERIJAL -->
+    <section class="section">
+      <div class="section-head">
+        <h2 class="section-title">Utrošeni materijal</h2>
+      </div>
+      <div class="section-body">
+        <% if (repair && repair.utroseniMaterijal) { %>
+          <div class="desc-box"><%= repair.utroseniMaterijal %></div>
+        <% } else { %>
+          <div class="desc-box" style="color: var(--muted);">Materijal nije upisan.</div>
+        <% } %>
+      </div>
+    </section>
+
     <!-- SEKCIJA: POTVRDA IZVRŠENJA -->
     <section class="section">
       <div class="section-head">

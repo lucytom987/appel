@@ -31,6 +31,7 @@ router.get('/', authenticate, async (req, res) => {
     const repairs = await Repair.find(filter)
       .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala')
       .populate('serviserID', 'ime prezime email')
+      .populate('dodatniServiseri', 'ime prezime email')
       .sort({ datumPrijave: -1 })
       .skip(parsedSkip)
       .limit(parsedLimit)
@@ -112,6 +113,7 @@ router.get('/:id', authenticate, async (req, res) => {
     const repair = await Repair.findOne({ _id: req.params.id, companyId: req.companyId, is_deleted: { $ne: true } })
       .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala')
       .populate('serviserID', 'ime prezime email uloga')
+      .populate('dodatniServiseri', 'ime prezime email')
       .lean();
 
     if (!repair) {
@@ -174,6 +176,7 @@ router.post('/', authenticate, async (req, res) => {
 
     await repair.populate('elevatorId', 'nazivStranke ulica mjesto brojDizala');
     await repair.populate('serviserID', 'ime prezime email');
+    await repair.populate('dodatniServiseri', 'ime prezime email');
 
     res.status(201).json({ success: true, message: 'Popravak kreiran', data: repair });
   } catch (error) {
@@ -225,7 +228,8 @@ router.put('/:id', authenticate, async (req, res) => {
 
     const repair = await Repair.findByIdAndUpdate(req.params.id, updatePayload, { new: true, runValidators: true })
       .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala')
-      .populate('serviserID', 'ime prezime email');
+      .populate('serviserID', 'ime prezime email')
+      .populate('dodatniServiseri', 'ime prezime email');
 
     await logAction({
       korisnikId: req.user._id,

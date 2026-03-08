@@ -1,8 +1,8 @@
 ﻿import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, BackHandler, Image, ActivityIndicator, Modal, Linking } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { elevatorDB, repairDB } from '../database/db';
-import { repairsAPI, workOrdersAPI } from '../services/api';
+import { elevatorDB, repairDB, userDB } from '../database/db';
+import { repairsAPI, workOrdersAPI, usersAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useFocusEffect } from '@react-navigation/native';
 import { usePhotoUpload } from '../hooks/usePhotoUpload';
@@ -98,6 +98,20 @@ export default function RepairDetailsScreen({ route, navigation }) {
   const [saving, setSaving] = useState(false);
   const [workOrder, setWorkOrder] = useState(null);
   const [loadingWorkOrder, setLoadingWorkOrder] = useState(false);
+  const [korisnici, setKorisnici] = useState([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [showKolege, setShowKolege] = useState(false);
+  const initialKolegaId = Array.isArray(repairData.dodatniServiseri) && repairData.dodatniServiseri.length
+    ? (repairData.dodatniServiseri[0]?._id || repairData.dodatniServiseri[0]?.id || repairData.dodatniServiseri[0])
+    : null;
+  const [kolegaId, setKolegaId] = useState(initialKolegaId);
+  const [radniSatiGlavni, setRadniSatiGlavni] = useState(
+    repairData.radniSati?.glavni != null ? String(repairData.radniSati.glavni) : ''
+  );
+  const [radniSatiKolega, setRadniSatiKolega] = useState(
+    repairData.radniSati?.kolega != null ? String(repairData.radniSati.kolega) : ''
+  );
+  const [utroseniMaterijal, setUtroseniMaterijal] = useState(repairData.utroseniMaterijal || '');
 
   // Učitaj postojeći radni nalog (ako postoji)
   useEffect(() => {
@@ -121,6 +135,38 @@ export default function RepairDetailsScreen({ route, navigation }) {
 
     loadWorkOrder();
   }, [repairData._id, repairData.id, online]);
+
+  useEffect(() => {
+    const fetchUsers = async () => {
+      setLoadingUsers(true);
+      const filterOutCurrent = (arr = []) => (Array.isArray(arr) ? arr : []).filter(
+        (u) => (u._id || u.id) !== (user?._id || user?.id)
+      );
+
+      try {
+        if (online) {
+          const res = await usersAPI.getLite();
+          const data = res.data?.data || res.data || [];
+          const filtered = filterOutCurrent(data);
+          try {
+            userDB.bulkInsert(filtered);
+          } catch (cacheErr) {
+            console.log('Cache users failed', cacheErr?.message);
+          }
+          setKorisnici(filtered);
+        } else {
+          setKorisnici(filterOutCurrent(userDB.getAll()));
+        }
+      } catch (e) {
+        console.log('Load users failed', e?.message);
+        setKorisnici(filterOutCurrent(userDB.getAll()));
+      } finally {
+        setLoadingUsers(false);
+      }
+    };
+
+    fetchUsers();
+  }, [online, user]);
 
   const handleCreateWorkOrder = async () => {
     const id = repairData._id || repairData.id;
@@ -306,6 +352,16 @@ export default function RepairDetailsScreen({ route, navigation }) {
     const id = repairData._id || repairData.id;
     const wasCompleted = repairData.status === 'completed';
     const existsInDB = repairDB.getById(id);
+
+    const parseHours = (value) => {
+      const normalized = String(value || '').replace(',', '.').trim();
+      if (!normalized) return null;
+      const parsed = Number.parseFloat(normalized);
+      return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+    };
+
+    const glavniSati = parseHours(radniSatiGlavni);
+    const kolegaSati = parseHours(radniSatiKolega);
     
     const payload = {
       id,
@@ -315,6 +371,12 @@ export default function RepairDetailsScreen({ route, navigation }) {
       status,
       trebaloBi: isTrebaloBi,
       radniNalogPotpisan,
+      dodatniServiseri: kolegaId ? [kolegaId] : [],
+      radniSati: {
+        glavni: glavniSati,
+        kolega: kolegaId ? kolegaSati : null,
+      },
+      utroseniMaterijal,
       photos,
       updated_at: Date.now(),
     };
@@ -428,6 +490,89 @@ export default function RepairDetailsScreen({ route, navigation }) {
             value={opisPopravka}
             onChangeText={setOpisPopravka}
             placeholder="Što je rađeno na popravku"
+            multiline
+          />
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Sudionici i radni sati</Text>
+
+          <Text style={styles.fieldLabel}>Radni sati (ti)</Text>
+          <TextInput
+            style={styles.input}
+            value={radniSatiGlavni}
+            onChangeText={setRadniSatiGlavni}
+            keyboardType="decimal-pad"
+            placeholder="npr. 2.5"
+          />
+
+          <Text style={[styles.sectionTitle, { fontSize: ms(15), marginTop: ms(14), marginBottom: ms(8) }]}>Kolega (opcionalno)</Text>
+          <TouchableOpacity style={styles.kolegaToggle} onPress={() => setShowKolege((v) => !v)}>
+            <Ionicons name={showKolege ? 'chevron-up' : 'chevron-down'} size={18} color="#0f172a" />
+            <Text style={styles.kolegaToggleText}>
+              {kolegaId
+                ? (() => {
+                    const found = korisnici.find((k) => (k._id || k.id) === kolegaId);
+                    return found ? `${found.ime || ''} ${found.prezime || ''}`.trim() || 'Kolega odabran' : 'Kolega odabran';
+                  })()
+                : 'Dodaj kolegu'}
+            </Text>
+          </TouchableOpacity>
+
+          {showKolege && (
+            loadingUsers ? (
+              <View style={styles.userRow}>
+                <ActivityIndicator size="small" color="#0ea5e9" />
+                <Text style={styles.userRowText}>Učitavanje...</Text>
+              </View>
+            ) : (
+              <View style={styles.kolegeList}>
+                <TouchableOpacity
+                  style={[styles.userRow, !kolegaId && styles.userRowSelected]}
+                  onPress={() => setKolegaId(null)}
+                >
+                  <Ionicons name={!kolegaId ? 'radio-button-on' : 'radio-button-off'} size={18} color={!kolegaId ? '#0ea5e9' : '#94a3b8'} />
+                  <Text style={styles.userRowText}>Bez kolege</Text>
+                </TouchableOpacity>
+                {korisnici.map((k) => {
+                  const kid = k._id || k.id;
+                  const selected = kolegaId === kid;
+                  return (
+                    <TouchableOpacity
+                      key={kid}
+                      style={[styles.userRow, selected && styles.userRowSelected]}
+                      onPress={() => setKolegaId(kid)}
+                    >
+                      <Ionicons name={selected ? 'radio-button-on' : 'radio-button-off'} size={18} color={selected ? '#0ea5e9' : '#94a3b8'} />
+                      <Text style={styles.userRowText}>{`${k.ime || ''} ${k.prezime || ''}`.trim() || k.email}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )
+          )}
+
+          {kolegaId && (
+            <>
+              <Text style={[styles.fieldLabel, { marginTop: ms(12) }]}>Radni sati (kolega)</Text>
+              <TextInput
+                style={styles.input}
+                value={radniSatiKolega}
+                onChangeText={setRadniSatiKolega}
+                keyboardType="decimal-pad"
+                placeholder="npr. 2"
+              />
+            </>
+          )}
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Utrošeni materijal</Text>
+          <TextInput
+            style={[styles.input, styles.textArea]}
+            value={utroseniMaterijal}
+            onChangeText={setUtroseniMaterijal}
+            placeholder="Upiši utrošeni materijal (npr. osigurač 10A x2, kontaktor, vijci...)"
             multiline
           />
         </View>
@@ -766,6 +911,12 @@ const styles = StyleSheet.create({
     color: '#1f2937',
     marginBottom: ms(8),
   },
+  fieldLabel: {
+    fontSize: ms(14),
+    fontWeight: '600',
+    color: '#1f2937',
+    marginBottom: ms(8),
+  },
   input: {
     borderWidth: 1,
     borderColor: '#e5e7eb',
@@ -815,6 +966,48 @@ const styles = StyleSheet.create({
     fontSize: ms(14),
     color: '#111827',
     fontWeight: '600',
+  },
+  kolegaToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: ms(8),
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: ms(10),
+    paddingHorizontal: ms(12),
+    paddingVertical: ms(10),
+    backgroundColor: '#f8fafc',
+  },
+  kolegaToggleText: {
+    flex: 1,
+    fontSize: ms(14),
+    color: '#0f172a',
+    fontWeight: '600',
+  },
+  kolegeList: {
+    marginTop: ms(8),
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: ms(10),
+    overflow: 'hidden',
+    backgroundColor: '#fff',
+  },
+  userRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: ms(8),
+    paddingHorizontal: ms(12),
+    paddingVertical: ms(10),
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  userRowSelected: {
+    backgroundColor: '#eff6ff',
+  },
+  userRowText: {
+    fontSize: ms(14),
+    color: '#0f172a',
+    fontWeight: '500',
   },
   modalActions: {
     flexDirection: 'row',

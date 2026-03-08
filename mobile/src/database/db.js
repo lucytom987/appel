@@ -150,6 +150,9 @@ export const initDatabase = () => {
         radniNalogPotpisan INTEGER DEFAULT 0,
         popravkaUPotpunosti INTEGER DEFAULT 0,
         napomene TEXT,
+        dodatniServiseri TEXT,
+        radniSati TEXT,
+        utroseniMaterijal TEXT,
         photos TEXT,
         prijavio TEXT,
         kontaktTelefon TEXT,
@@ -276,6 +279,9 @@ export const initDatabase = () => {
     try { db.execSync('ALTER TABLE repairs ADD COLUMN updated_by TEXT;'); } catch (e) {}
     try { db.execSync('ALTER TABLE repairs ADD COLUMN sync_status TEXT DEFAULT "synced";'); } catch (e) {}
     try { db.execSync('ALTER TABLE repairs ADD COLUMN photos TEXT;'); } catch (e) {}
+    try { db.execSync('ALTER TABLE repairs ADD COLUMN dodatniServiseri TEXT;'); } catch (e) {}
+    try { db.execSync('ALTER TABLE repairs ADD COLUMN radniSati TEXT;'); } catch (e) {}
+    try { db.execSync('ALTER TABLE repairs ADD COLUMN utroseniMaterijal TEXT;'); } catch (e) {}
     try { db.execSync('ALTER TABLE services ADD COLUMN dodatniServiseri TEXT;'); } catch (e) {}
     try { db.execSync('ALTER TABLE services ADD COLUMN is_deleted INTEGER DEFAULT 0;'); } catch (e) {}
     try { db.execSync('ALTER TABLE services ADD COLUMN deleted_at TEXT;'); } catch (e) {}
@@ -732,6 +738,8 @@ export const repairDB = {
     return repairs.map(r => ({
       ...r,
       trebaloBi: toBoolean(r.trebaloBi),
+      dodatniServiseri: typeof r.dodatniServiseri === 'string' ? JSON.parse(r.dodatniServiseri || '[]') : (r.dodatniServiseri || []),
+      radniSati: typeof r.radniSati === 'string' ? JSON.parse(r.radniSati || '{}') : (r.radniSati || {}),
       photos: typeof r.photos === 'string' ? JSON.parse(r.photos || '[]') : (r.photos || []),
       // Repair model doesn't have nested JSON fields, but keep consistent
     }));
@@ -742,6 +750,8 @@ export const repairDB = {
     return repair ? { 
       ...repair, 
       trebaloBi: toBoolean(repair.trebaloBi),
+      dodatniServiseri: typeof repair.dodatniServiseri === 'string' ? JSON.parse(repair.dodatniServiseri || '[]') : (repair.dodatniServiseri || []),
+      radniSati: typeof repair.radniSati === 'string' ? JSON.parse(repair.radniSati || '{}') : (repair.radniSati || {}),
       photos: typeof repair.photos === 'string' ? JSON.parse(repair.photos || '[]') : (repair.photos || [])
     } : null;
   },
@@ -767,9 +777,9 @@ export const repairDB = {
     return db.runSync(
       `INSERT INTO repairs (id, elevatorId, serviserID, datumPrijave, datumPopravka, 
        opisKvara, opisPopravka, trebaloBi, status, radniNalogPotpisan, popravkaUPotpunosti, 
-       napomene, photos, prijavio, kontaktTelefon, primioPoziv, kreiranDatum, azuriranDatum, 
+       napomene, dodatniServiseri, radniSati, utroseniMaterijal, photos, prijavio, kontaktTelefon, primioPoziv, kreiranDatum, azuriranDatum, 
        is_deleted, deleted_at, updated_by, updated_at, sync_status, synced) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         elevatorId,
@@ -783,6 +793,9 @@ export const repairDB = {
         repair.radniNalogPotpisan ? 1 : 0,
         repair.popravkaUPotpunosti ? 1 : 0,
         repair.napomene,
+        JSON.stringify(repair.dodatniServiseri || []),
+        JSON.stringify(repair.radniSati || {}),
+        repair.utroseniMaterijal || null,
         JSON.stringify(repair.photos || []),
         repair.prijavio,
         repair.kontaktTelefon,
@@ -819,7 +832,7 @@ export const repairDB = {
     return db.runSync(
       `UPDATE repairs SET elevatorId=?, serviserID=?, datumPrijave=?, datumPopravka=?, opisKvara=?, 
        opisPopravka=?, trebaloBi=?, status=?, radniNalogPotpisan=?, popravkaUPotpunosti=?, 
-       napomene=?, photos=?, prijavio=?, kontaktTelefon=?, primioPoziv=?, azuriranDatum=?, is_deleted=?, deleted_at=?, updated_by=?, updated_at=?, sync_status=?, synced=? WHERE id=?`,
+       napomene=?, dodatniServiseri=?, radniSati=?, utroseniMaterijal=?, photos=?, prijavio=?, kontaktTelefon=?, primioPoziv=?, azuriranDatum=?, is_deleted=?, deleted_at=?, updated_by=?, updated_at=?, sync_status=?, synced=? WHERE id=?`,
       [
         elevatorId,
         serviserID,
@@ -832,6 +845,9 @@ export const repairDB = {
         repair.radniNalogPotpisan ? 1 : 0,
         repair.popravkaUPotpunosti ? 1 : 0,
         repair.napomene,
+        JSON.stringify(repair.dodatniServiseri || []),
+        JSON.stringify(repair.radniSati || {}),
+        repair.utroseniMaterijal || null,
         JSON.stringify(repair.photos || []),
         repair.prijavio,
         repair.kontaktTelefon,
@@ -863,6 +879,8 @@ export const repairDB = {
       return repairs.map(r => ({
         ...r,
         trebaloBi: toBoolean(r.trebaloBi),
+        dodatniServiseri: typeof r.dodatniServiseri === 'string' ? JSON.parse(r.dodatniServiseri || '[]') : (r.dodatniServiseri || []),
+        radniSati: typeof r.radniSati === 'string' ? JSON.parse(r.radniSati || '{}') : (r.radniSati || {}),
         photos: typeof r.photos === 'string' ? JSON.parse(r.photos || '[]') : (r.photos || [])
       }));
     } catch (e) {

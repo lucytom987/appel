@@ -4,6 +4,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 const ejs = require('ejs');
 const QRCode = require('qrcode');
+const mongoose = require('mongoose');
 
 const router = express.Router();
 const { authenticate } = require('../middleware/auth');
@@ -346,6 +347,10 @@ router.get('/download/:id', async (req, res) => {
 // Get work order by repair ID (authenticated)
 router.get('/by-repair/:repairId', authenticate, async (req, res) => {
   try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.repairId)) {
+      return res.status(404).json({ message: 'Radni nalog nije pronađen za ovaj popravak ili ne pripada vašoj firmi' });
+    }
+
     const workOrder = await WorkOrder.findOne({ repairId: req.params.repairId, companyId: req.companyId })
       .sort({ created_at: -1 }); // najnoviji prvi
     

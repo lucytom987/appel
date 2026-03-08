@@ -117,7 +117,11 @@ export default function RepairDetailsScreen({ route, navigation }) {
   useEffect(() => {
     const loadWorkOrder = async () => {
       const id = repairData._id || repairData.id;
-      if (!id || !online) return;
+      if (!id || !online || String(id).startsWith('local_')) {
+        setWorkOrder(null);
+        setLoadingWorkOrder(false);
+        return;
+      }
       
       setLoadingWorkOrder(true);
       try {

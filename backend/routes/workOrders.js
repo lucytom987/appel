@@ -7,7 +7,7 @@ const router = express.Router();
 const { authenticate } = require('../middleware/auth');
 const { logAction } = require('../services/auditService');
 const { sendWorkOrderEmail } = require('../services/emailService');
-const { generatePdfFromHtml, generateQRCode } = require('../services/workOrderPdfService');
+// const { generatePdfFromHtml, generateQRCode } = require('../services/workOrderPdfService'); // PRIVREMENO ISKLJUČENO
 const WorkOrder = require('../models/WorkOrder');
 const WorkOrderCounter = require('../models/WorkOrderCounter');
 const Repair = require('../models/Repair');
@@ -20,6 +20,18 @@ const ensureDir = () => {
   if (!fs.existsSync(OUTPUT_DIR)) {
     fs.mkdirSync(OUTPUT_DIR, { recursive: true });
   }
+};
+
+const formatDateHR = (value) => {
+  if (!value) return '-';
+  const date = value instanceof Date ? value : new Date(value);
+  return date.toLocaleString('hr-HR', { 
+    day: '2-digit', 
+    month: '2-digit', 
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
 };
 
 const pad2 = (value) => String(value).padStart(2, '0');
@@ -123,21 +135,13 @@ router.post('/from-repair/:repairId', authenticate, async (req, res) => {
       workOrder.updated_at = new Date();
     }
 
-    // Generiraj QR kod i PDF sa novim servisom
-    const qrUrl = `${baseUrl}/api/work-orders/view/${workOrder._id}?token=${encodeURIComponent(workOrder.viewToken)}`;
-    const qrCodeDataUrl = await generateQRCode(qrUrl);
-
-    const generated = await generatePdfFromHtml({
-      workOrder,
-      repair,
-      elevator: repair.elevatorId,
-      company,
-      qrCodeDataUrl,
-    });
-
-    workOrder.pdfFileName = generated.fileName;
-    workOrder.pdfPath = generated.filePath;
-    workOrder.lastGeneratedAt = new Date();
+    // PRIVREMENO ISKLJUČENO - PDF generiranje
+    // const qrUrl = `${baseUrl}/api/work-orders/view/${workOrder._id}?token=${encodeURIComponent(workOrder.viewToken)}`;
+    // const qrCodeDataUrl = await generateQRCode(qrUrl);
+    // const generated = await generatePdfFromHtml({ workOrder, repair, elevator: repair.elevatorId, company, qrCodeDataUrl });
+    // workOrder.pdfFileName = generated.fileName;
+    // workOrder.pdfPath = generated.filePath;
+    // workOrder.lastGeneratedAt = new Date();
     await workOrder.save();
 
     await logAction({
@@ -209,21 +213,13 @@ router.post('/:id/sign', authenticate, async (req, res) => {
     const baseUrl = resolveBaseUrl(req);
     const company = await Company.findById(req.companyId);
     
-    // Generiraj QR kod i PDF sa novim servisom
-    const qrUrl = `${baseUrl}/api/work-orders/view/${workOrder._id}?token=${encodeURIComponent(workOrder.viewToken)}`;
-    const qrCodeDataUrl = await generateQRCode(qrUrl);
-
-    const generated = await generatePdfFromHtml({
-      workOrder,
-      repair,
-      elevator: repair.elevatorId,
-      company,
-      qrCodeDataUrl,
-    });
-
-    workOrder.pdfFileName = generated.fileName;
-    workOrder.pdfPath = generated.filePath;
-    workOrder.lastGeneratedAt = new Date();
+    // PRIVREMENO ISKLJUČENO - PDF generiranje
+    // const qrUrl = `${baseUrl}/api/work-orders/view/${workOrder._id}?token=${encodeURIComponent(workOrder.viewToken)}`;
+    // const qrCodeDataUrl = await generateQRCode(qrUrl);
+    // const generated = await generatePdfFromHtml({ workOrder, repair, elevator: repair.elevatorId, company, qrCodeDataUrl });
+    // workOrder.pdfFileName = generated.fileName;
+    // workOrder.pdfPath = generated.filePath;
+    // workOrder.lastGeneratedAt = new Date();
     await workOrder.save();
 
     // Pošalji email ako je radni nalog označen kao poslan i ako firma ima email

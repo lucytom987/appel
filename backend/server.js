@@ -120,7 +120,7 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 5000;
-const HOST = process.env.NODE_ENV === 'production' ? '0.0.0.0' : 'localhost';
+const HOST = process.env.NODE_ENV === 'development' ? 'localhost' : '0.0.0.0';
 
 server.listen(PORT, HOST, () => {
   console.log(`🚀 APPEL Backend pokrenut na portu ${PORT}`);

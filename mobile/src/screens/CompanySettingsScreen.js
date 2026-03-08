@@ -17,7 +17,7 @@ import { useAuth } from '../context/AuthContext';
 import ms from '../utils/scale';
 
 const CompanySettingsScreen = ({ navigation }) => {
-  const { user, isOnline, serverAwake } = useAuth();
+  const { user, isOnline, serverAwake, companySetupRequired, setCompanySetupRequired } = useAuth();
   const online = Boolean(isOnline && serverAwake);
 
   const [loading, setLoading] = useState(true);
@@ -26,15 +26,13 @@ const CompanySettingsScreen = ({ navigation }) => {
   const [editValues, setEditValues] = useState({});
 
   useEffect(() => {
-    loadCompanyInfo();
-  }, []);
+    if (online) {
+      loadCompanyInfo();
+    }
+  }, [online]);
 
   const loadCompanyInfo = async () => {
-    if (!online) {
-      Alert.alert('Nema konekcije', 'Trebate biti online za pregled/ažuriranje podataka firme');
-      setLoading(false);
-      return;
-    }
+    if (!online) return;
 
     try {
       setLoading(true);
@@ -59,8 +57,19 @@ const CompanySettingsScreen = ({ navigation }) => {
   };
 
   const handleSave = async () => {
+    // Validacija obaveznih polja
     if (!editValues.naziv?.trim()) {
       Alert.alert('Greška', 'Naziv firme je obavezan');
+      return;
+    }
+
+    if (!editValues.adresa?.trim()) {
+      Alert.alert('Greška', 'Adresa firme je obavezna');
+      return;
+    }
+
+    if (!editValues.email?.trim()) {
+      Alert.alert('Greška', 'Email firme je obavezan (koristi se za slanje radnih naloga)');
       return;
     }
 
@@ -70,6 +79,12 @@ const CompanySettingsScreen = ({ navigation }) => {
       const updated = response.data?.data || response.data;
       setCompany(updated);
       Alert.alert('Uspjeh', 'Podaci firme su ažurirani');
+
+      // Ako je ovo bio forced setup ekran, resetiraj flag i idi na Home
+      if (companySetupRequired) {
+        setCompanySetupRequired(false);
+        setTimeout(() => navigation.navigate('Home'), 500);
+      }
     } catch (error) {
       console.error('❌ Greška pri ažuriranju firme:', error);
       Alert.alert('Greška', error.response?.data?.message || 'Nije moguće ažurirati podatke');
@@ -99,7 +114,7 @@ const CompanySettingsScreen = ({ navigation }) => {
   if (!online) {
     return (
       <View style={styles.centeredContainer}>
-        <Ionicons name="wifi-off" size={64} color="#FF6B6B" />
+        <Ionicons name="wifi-outline" size={64} color="#FF6B6B" />
         <Text style={styles.errorText}>Trebate biti online!</Text>
         <Text style={styles.infoText}>Podaci firme mogu se ažurirati samo na internetu.</Text>
         <TouchableOpacity
@@ -123,25 +138,41 @@ const CompanySettingsScreen = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+      <StatusBar barStyle="dark-content" backgroundColor="#F5F5F5" />
       
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.headerBack}
-          onPress={() => navigation.goBack()}
-        >
-          <Ionicons name="chevron-back" size={24} color="#1f2937" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Postavke firme</Text>
-        <View style={{ width: 40 }} />
+      <View style={styles.pageHeader}>
+        {!companySetupRequired ? (
+          <TouchableOpacity
+            style={styles.pageBackButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Ionicons name="arrow-back" size={22} color="#111827" />
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 34 }} />
+        )}
+        <View style={{ flex: 1 }}>
+          <Text style={styles.pageTitle}>Postavke firme</Text>
+          <Text style={styles.pageSubtitle}>Uredi podatke firme za dokumente i komunikaciju</Text>
+        </View>
       </View>
+
+      {/* Info poruka ako je forced setup */}
+      {companySetupRequired && (
+        <View style={styles.forcedSetupBanner}>
+          <Ionicons name="alert-circle" size={20} color="#2563eb" />
+          <Text style={styles.forcedSetupText}>
+            Trebate popuniti podatke firme prije nego što nastavite s aplikacijom
+          </Text>
+        </View>
+      )}
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Osnovni podaci */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Osnovni podaci</Text>
 
-          <Text style={styles.label}>Naziv firme *</Text>
+          <Text style={styles.label}>Naziv firme * (obavezno)</Text>
           <TextInput
             style={styles.input}
             placeholder="Naziv firme"
@@ -150,7 +181,7 @@ const CompanySettingsScreen = ({ navigation }) => {
             editable={!saving}
           />
 
-          <Text style={styles.label}>Adresa</Text>
+          <Text style={styles.label}>Adresa * (obavezno)</Text>
           <TextInput
             style={[styles.input, styles.multilineInput]}
             placeholder="Ulica i broj, grad"
@@ -175,7 +206,7 @@ const CompanySettingsScreen = ({ navigation }) => {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Kontakt podaci</Text>
 
-          <Text style={styles.label}>Email</Text>
+          <Text style={styles.label}>Email * (obavezno - koristi se za slanje radnih naloga)</Text>
           <TextInput
             style={styles.input}
             placeholder="email@firma.com"
@@ -216,7 +247,14 @@ const CompanySettingsScreen = ({ navigation }) => {
           />
         </View>
 
-        <View style={{ height: 100 }} />
+        <View style={styles.bottomDescriptionCard}>
+          <Ionicons name="information-circle-outline" size={16} color="#6b7280" />
+          <Text style={styles.bottomDescriptionText}>
+            Ovi podaci se koriste na radnim nalozima i u kontakt informacijama prema klijentima.
+          </Text>
+        </View>
+
+        <View style={{ height: 20 }} />
       </ScrollView>
 
       {/* Akcije */}
@@ -230,14 +268,16 @@ const CompanySettingsScreen = ({ navigation }) => {
           <Text style={styles.buttonText}>{saving ? 'Sprema...' : 'Spremi'}</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.button, styles.cancelButton]}
-          onPress={() => navigation.goBack()}
-          disabled={saving}
-        >
-          <Ionicons name="close-circle-outline" size={18} color="#6b7280" />
-          <Text style={[styles.buttonText, { color: '#6b7280' }]}>Odustani</Text>
-        </TouchableOpacity>
+        {!companySetupRequired && (
+          <TouchableOpacity
+            style={[styles.button, styles.cancelButton]}
+            onPress={() => navigation.goBack()}
+            disabled={saving}
+          >
+            <Ionicons name="close-circle-outline" size={18} color="#6b7280" />
+            <Text style={[styles.buttonText, { color: '#6b7280' }]}>Odustani</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -246,7 +286,10 @@ const CompanySettingsScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#F5F5F5',
+    paddingTop: Platform.OS === 'android'
+      ? (StatusBar.currentHeight || 0) + 12
+      : 24,
   },
   centeredContainer: {
     flex: 1,
@@ -255,24 +298,26 @@ const styles = StyleSheet.create({
     backgroundColor: '#f5f5f5',
     padding: ms(20),
   },
-  header: {
+  pageHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#fff',
+    gap: ms(12),
     paddingHorizontal: ms(16),
-    paddingVertical: ms(12),
-    paddingTop: Platform.OS === 'android' ? ms(12) : ms(50),
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e5e5',
+    paddingVertical: ms(10),
+    backgroundColor: '#F5F5F5',
   },
-  headerBack: {
-    padding: ms(8),
+  pageBackButton: {
+    padding: ms(6),
   },
-  headerTitle: {
-    fontSize: ms(18),
+  pageTitle: {
+    fontSize: ms(20),
     fontWeight: '700',
-    color: '#1f2937',
+    color: '#111827',
+  },
+  pageSubtitle: {
+    fontSize: ms(13),
+    color: '#6b7280',
+    marginTop: ms(2),
   },
   content: {
     flex: 1,
@@ -288,6 +333,21 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 2,
     elevation: 2,
+  },
+  bottomDescriptionCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: ms(8),
+    backgroundColor: '#f3f4f6',
+    borderRadius: ms(10),
+    padding: ms(12),
+    marginBottom: ms(8),
+  },
+  bottomDescriptionText: {
+    flex: 1,
+    fontSize: ms(12),
+    color: '#6b7280',
+    lineHeight: ms(17),
   },
   sectionTitle: {
     fontSize: ms(15),
@@ -319,6 +379,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: ms(8),
     padding: ms(16),
+    paddingBottom: Platform.OS === 'android' ? ms(70) : ms(16),
     backgroundColor: '#fff',
     borderTopWidth: 1,
     borderTopColor: '#e5e5e5',
@@ -371,6 +432,23 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '700',
     fontSize: ms(14),
+  },
+  forcedSetupBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#eff6ff',
+    borderLeftWidth: 4,
+    borderLeftColor: '#2563eb',
+    paddingHorizontal: ms(16),
+    paddingVertical: ms(12),
+    gap: ms(12),
+  },
+  forcedSetupText: {
+    flex: 1,
+    fontSize: ms(13),
+    fontWeight: '600',
+    color: '#1e40af',
+    marginTop: ms(2),
   },
 });
 

@@ -1,7 +1,7 @@
 import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
-import { authAPI, API_URL } from '../services/api';
+import { authAPI, companyAPI, API_URL } from '../services/api';
 import { initDatabase, resetDatabase, elevatorDB, serviceDB, repairDB } from '../database/db';
 import {
   syncAll,
@@ -19,6 +19,7 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [isOnline, setIsOnline] = useState(false);
   const [serverAwake, setServerAwake] = useState(null); // null = nepoznato, false = spava, true = spreman
+  const [companySetupRequired, setCompanySetupRequired] = useState(false); // Trebam li popuniti podatke firme?
   const serverProbeRef = useRef(null);
   const userRef = useRef(null);
 
@@ -181,6 +182,39 @@ export const AuthProvider = ({ children }) => {
       await SecureStore.setItemAsync('userData', JSON.stringify(korisnik));
 
       setUser(korisnik);
+
+      // Ako je admin, provjeri je li firma "setup"
+      if (korisnik.uloga === 'admin') {
+        try {
+          const setupStatus = await companyAPI.checkSetupStatus();
+          setCompanySetupRequired(!setupStatus.data?.isSetup);
+          console.log('✅ Company setup status:', setupStatus.data?.isSetup);
+        } catch (setupError) {
+          const status = setupError?.response?.status;
+          const is404 = status === 404 || String(setupError?.message || '').includes('404');
+          if (is404) {
+            try {
+              const companyResponse = await companyAPI.getInfo();
+              const companyData = companyResponse.data?.data || companyResponse.data || {};
+              const isSetup = Boolean(
+                companyData?.naziv?.trim() && companyData?.adresa?.trim() && companyData?.email?.trim()
+              );
+              setCompanySetupRequired(!isSetup);
+              console.log('ℹ️ setup-status endpoint ne postoji, fallback na /company:', isSetup);
+            } catch (fallbackError) {
+              console.error('⚠️ Fallback setup provjera nije uspjela:', fallbackError.message);
+              setCompanySetupRequired(true);
+            }
+          } else {
+            console.error('⚠️ Greška pri provjeri setup statusa:', setupError.message);
+            // Ako nema konekcije ili je server problem, ostavi setup required=true
+            setCompanySetupRequired(true);
+          }
+        }
+      } else {
+        setCompanySetupRequired(false);
+      }
+
       setLoading(false);
 
       console.log('Provjera backend statusa nakon logina...');
@@ -207,6 +241,7 @@ export const AuthProvider = ({ children }) => {
       await SecureStore.deleteItemAsync('userData');
       resetDatabase();
       setUser(null);
+      setCompanySetupRequired(false);
       setServerAwake(null);
     } catch (error) {
       console.error('Logout greska:', error);
@@ -221,6 +256,8 @@ export const AuthProvider = ({ children }) => {
     loading,
     isOnline,
     serverAwake,
+    companySetupRequired,
+    setCompanySetupRequired,
     login,
     logout,
   };

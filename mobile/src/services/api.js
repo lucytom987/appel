@@ -176,6 +176,7 @@ export const workOrdersAPI = {
 export const companyAPI = {
   getInfo: () => api.get('/company'),
   update: (data) => api.put('/company', data),
+  checkSetupStatus: () => api.get('/company/setup-status'),
 };
 
 // Users API - Admin Management

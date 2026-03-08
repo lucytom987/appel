@@ -4,6 +4,35 @@ const { authenticate, checkRole } = require('../middleware/auth');
 const { logAction } = require('../services/auditService');
 const Company = require('../models/Company');
 
+// GET /api/company/setup-status - Provjeri je li firma "setup" (obavezna polja)
+router.get('/setup-status', authenticate, async (req, res) => {
+  try {
+    const company = await Company.findById(req.companyId);
+    
+    if (!company) {
+      return res.json({ 
+        isSetup: false, 
+        message: 'Firma nije pronađena' 
+      });
+    }
+
+    // Provjeri obavezna polja: naziv, adresa, email
+    const isSetup = !!(company.naziv?.trim() && company.adresa?.trim() && company.email?.trim());
+
+    return res.json({ 
+      isSetup,
+      missingFields: {
+        naziv: !company.naziv?.trim(),
+        adresa: !company.adresa?.trim(),
+        email: !company.email?.trim(),
+      }
+    });
+  } catch (error) {
+    console.error('❌ Greška pri provjeri setup status:', error);
+    return res.status(500).json({ message: 'Greška poslužitelja' });
+  }
+});
+
 // GET /api/company - Dohvati podatke firme trenutnog usera
 router.get('/', authenticate, async (req, res) => {
   try {

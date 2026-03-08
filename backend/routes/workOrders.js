@@ -16,6 +16,7 @@ const WorkOrderCounter = require('../models/WorkOrderCounter');
 const Repair = require('../models/Repair');
 const Elevator = require('../models/Elevator');
 const Company = require('../models/Company');
+const User = require('../models/User');
 
 const OUTPUT_DIR = path.join(__dirname, '..', 'generated', 'work-orders');
 const TEMPLATE_PATH = path.join(__dirname, '..', 'templates', 'workorder.html');
@@ -87,9 +88,26 @@ const buildWorkOrderTemplateData = async (workOrder, req, token) => {
   const company = await Company.findById(workOrder.companyId).lean();
   const repair = await Repair.findById(workOrder.repairId)
     .populate('serviserID', 'ime prezime email')
-    .populate('dodatniServiseri', 'ime prezime email')
     .lean();
   const elevator = await Elevator.findById(workOrder.elevatorId).lean();
+
+  let normalizedRepair = repair || null;
+  if (repair) {
+    const additionalIds = (Array.isArray(repair.dodatniServiseri) ? repair.dodatniServiseri : [])
+      .map((entry) => (typeof entry === 'object' ? entry?._id || entry?.id : entry))
+      .filter((entry) => typeof entry === 'string' && mongoose.Types.ObjectId.isValid(entry));
+
+    const additionalUsers = additionalIds.length
+      ? await User.find({ _id: { $in: additionalIds }, companyId: workOrder.companyId })
+          .select('ime prezime email')
+          .lean()
+      : [];
+
+    normalizedRepair = {
+      ...repair,
+      dodatniServiseri: additionalUsers,
+    };
+  }
 
   const viewUrl = `${resolveBaseUrl(req)}/api/work-orders/view/${workOrder._id}?token=${encodeURIComponent(token)}`;
   const qrCodeDataUrl = await QRCode.toDataURL(viewUrl, { margin: 1, width: 200 });
@@ -98,7 +116,7 @@ const buildWorkOrderTemplateData = async (workOrder, req, token) => {
     workOrderNumber: workOrder.workOrderNumber,
     workOrder,
     company,
-    repair,
+    repair: normalizedRepair,
     elevator,
     qrCodeDataUrl,
     formatDateHR,

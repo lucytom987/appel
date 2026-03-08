@@ -1,9 +1,39 @@
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
 const Repair = require('../models/Repair');
 const Elevator = require('../models/Elevator');
+const User = require('../models/User');
 const { authenticate, checkRole } = require('../middleware/auth');
 const { logAction } = require('../services/auditService');
+
+const normalizeAdditionalTechnicians = async (value, companyId) => {
+  const raw = Array.isArray(value) ? value : [];
+  const ids = raw
+    .map((entry) => (typeof entry === 'object' ? entry?._id || entry?.id : entry))
+    .filter((entry) => typeof entry === 'string' && mongoose.Types.ObjectId.isValid(entry));
+
+  if (!ids.length) return [];
+
+  const users = await User.find({ _id: { $in: ids }, companyId, aktivan: { $ne: false } })
+    .select('_id')
+    .lean();
+  return users.map((user) => String(user._id));
+};
+
+const normalizeWorkHours = (value) => {
+  const input = value && typeof value === 'object' ? value : {};
+  const parse = (v) => {
+    if (v === null || v === undefined || v === '') return null;
+    const number = Number(v);
+    return Number.isFinite(number) && number >= 0 ? number : null;
+  };
+
+  return {
+    glavni: parse(input.glavni),
+    kolega: parse(input.kolega),
+  };
+};
 
 // GET /api/repairs - popis popravaka (filtri)
 router.get('/', authenticate, async (req, res) => {
@@ -31,7 +61,6 @@ router.get('/', authenticate, async (req, res) => {
     const repairs = await Repair.find(filter)
       .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala')
       .populate('serviserID', 'ime prezime email')
-      .populate('dodatniServiseri', 'ime prezime email')
       .sort({ datumPrijave: -1 })
       .skip(parsedSkip)
       .limit(parsedLimit)
@@ -113,7 +142,6 @@ router.get('/:id', authenticate, async (req, res) => {
     const repair = await Repair.findOne({ _id: req.params.id, companyId: req.companyId, is_deleted: { $ne: true } })
       .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala')
       .populate('serviserID', 'ime prezime email uloga')
-      .populate('dodatniServiseri', 'ime prezime email')
       .lean();
 
     if (!repair) {
@@ -148,11 +176,16 @@ router.post('/', authenticate, async (req, res) => {
     );
 
     const now = new Date();
+    const normalizedAdditionalTechnicians = await normalizeAdditionalTechnicians(req.body.dodatniServiseri, req.companyId);
+    const normalizedWorkHours = normalizeWorkHours(req.body.radniSati);
     const repair = new Repair({
       ...req.body,
       companyId: req.companyId,
       elevatorId: req.body.elevatorId || req.body.elevator,
       serviserID: req.user._id,
+      dodatniServiseri: normalizedAdditionalTechnicians,
+      radniSati: normalizedWorkHours,
+      utroseniMaterijal: typeof req.body.utroseniMaterijal === 'string' ? req.body.utroseniMaterijal.trim() : '',
       status: req.body.status || 'pending',
       trebaloBi: trebFlag,
       datumPrijave: req.body.datumPrijave || now,
@@ -176,7 +209,6 @@ router.post('/', authenticate, async (req, res) => {
 
     await repair.populate('elevatorId', 'nazivStranke ulica mjesto brojDizala');
     await repair.populate('serviserID', 'ime prezime email');
-    await repair.populate('dodatniServiseri', 'ime prezime email');
 
     res.status(201).json({ success: true, message: 'Popravak kreiran', data: repair });
   } catch (error) {
@@ -215,11 +247,16 @@ router.put('/:id', authenticate, async (req, res) => {
     }
 
     const now = new Date();
+    const normalizedAdditionalTechnicians = await normalizeAdditionalTechnicians(req.body.dodatniServiseri, req.companyId);
+    const normalizedWorkHours = normalizeWorkHours(req.body.radniSati);
 
     const updatePayload = {
       ...req.body,
       elevatorId: req.body.elevatorId || req.body.elevator || existing.elevatorId,
       serviserID: req.body.serviserID || existing.serviserID,
+      dodatniServiseri: normalizedAdditionalTechnicians,
+      radniSati: normalizedWorkHours,
+      utroseniMaterijal: typeof req.body.utroseniMaterijal === 'string' ? req.body.utroseniMaterijal.trim() : '',
       trebaloBi: trebFlag,
       azuriranDatum: now,
       updated_at: now,
@@ -228,8 +265,7 @@ router.put('/:id', authenticate, async (req, res) => {
 
     const repair = await Repair.findByIdAndUpdate(req.params.id, updatePayload, { new: true, runValidators: true })
       .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala')
-      .populate('serviserID', 'ime prezime email')
-      .populate('dodatniServiseri', 'ime prezime email');
+      .populate('serviserID', 'ime prezime email');
 
     await logAction({
       korisnikId: req.user._id,

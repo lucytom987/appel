@@ -2,6 +2,8 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
+const ejs = require('ejs');
+const QRCode = require('qrcode');
 
 const router = express.Router();
 const { authenticate } = require('../middleware/auth');
@@ -15,6 +17,7 @@ const Elevator = require('../models/Elevator');
 const Company = require('../models/Company');
 
 const OUTPUT_DIR = path.join(__dirname, '..', 'generated', 'work-orders');
+const TEMPLATE_PATH = path.join(__dirname, '..', 'templates', 'workorder.html');
 
 const ensureDir = () => {
   if (!fs.existsSync(OUTPUT_DIR)) {
@@ -70,6 +73,30 @@ const isTokenValid = (workOrder, token) => {
   if (workOrder.viewToken !== token) return false;
   const expires = new Date(workOrder.tokenExpiresAt);
   return expires.getTime() > Date.now();
+};
+
+const buildWorkOrderTemplateData = async (workOrder, req, token) => {
+  const company = await Company.findById(workOrder.companyId).lean();
+  const repair = await Repair.findById(workOrder.repairId).lean();
+  const elevator = await Elevator.findById(workOrder.elevatorId).lean();
+
+  const viewUrl = `${resolveBaseUrl(req)}/api/work-orders/view/${workOrder._id}?token=${encodeURIComponent(token)}`;
+  const qrCodeDataUrl = await QRCode.toDataURL(viewUrl, { margin: 1, width: 200 });
+
+  return {
+    workOrderNumber: workOrder.workOrderNumber,
+    workOrder,
+    company,
+    repair,
+    elevator,
+    qrCodeDataUrl,
+    formatDateHR,
+  };
+};
+
+const renderWorkOrderHtml = async (workOrder, req, token) => {
+  const templateData = await buildWorkOrderTemplateData(workOrder, req, token);
+  return ejs.renderFile(TEMPLATE_PATH, templateData);
 };
 
 const mapWorkOrderResponse = (workOrder, req) => {
@@ -270,38 +297,9 @@ router.get('/view/:id', async (req, res) => {
       return res.status(403).send('Nevažeći ili istekli link.');
     }
 
-    const expiresText = formatDateHR(workOrder.tokenExpiresAt);
-    const downloadUrl = `/api/work-orders/download/${workOrder._id}?token=${encodeURIComponent(token)}`;
-
-    return res.send(`<!doctype html>
-<html lang="hr">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>${workOrder.workOrderNumber}</title>
-  <style>
-    body { font-family: Arial, sans-serif; background: #f3f4f6; margin: 0; padding: 24px; }
-    .card { max-width: 620px; margin: 0 auto; background: #fff; border-radius: 12px; padding: 20px; box-shadow: 0 2px 12px rgba(0,0,0,.08); }
-    h1 { margin-top: 0; color: #111827; }
-    .meta { color: #374151; line-height: 1.6; margin-bottom: 16px; }
-    .status { display: inline-block; padding: 6px 10px; border-radius: 999px; background: #e0e7ff; color: #3730a3; font-weight: 700; }
-    .btn { display: inline-block; margin-top: 12px; background: #2563eb; color: #fff; padding: 12px 14px; border-radius: 8px; text-decoration: none; font-weight: 700; }
-    .small { color: #6b7280; font-size: 12px; margin-top: 12px; }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <h1>Radni nalog ${workOrder.workOrderNumber}</h1>
-    <div class="meta">
-      <div>Status: <span class="status">${workOrder.status.toUpperCase()}</span></div>
-      <div>Kreiran: ${formatDateHR(workOrder.created_at)}</div>
-      <div>Token vrijedi do: ${expiresText}</div>
-    </div>
-    <a class="btn" href="${downloadUrl}">Preuzmi PDF</a>
-    <div class="small">Ako je link istekao, zatražite novi link od servisera ili firme.</div>
-  </div>
-</body>
-</html>`);
+    const html = await renderWorkOrderHtml(workOrder, req, token);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.send(html);
   } catch (error) {
     console.error('Greška pri prikazu radnog naloga:', error);
     return res.status(500).send('Greška pri prikazu dokumenta.');
@@ -318,7 +316,11 @@ router.get('/download/:id', async (req, res) => {
     }
 
     if (!workOrder.pdfPath || !fs.existsSync(workOrder.pdfPath)) {
-      return res.status(404).send('PDF nije pronađen.');
+      const html = await renderWorkOrderHtml(workOrder, req, token);
+      const safeFileName = `${workOrder.workOrderNumber || 'radni-nalog'}.html`;
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${safeFileName}"`);
+      return res.send(html);
     }
 
     res.setHeader('Content-Type', 'application/pdf');

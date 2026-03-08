@@ -390,10 +390,11 @@ export default function RepairDetailsScreen({ route, navigation }) {
     try {
       const onlineNow = online;
       let savedSuccessfully = false;
+      const shouldCreateOnServer = onlineNow && (isLocalId || !existsInDB);
       
       // Provjeri postoji li već u lokalnoj bazi
       
-      if (!existsInDB) {
+      if (!existsInDB && !shouldCreateOnServer) {
         // NOVA popravka - spremi localno prvo
         repairDB.insert({ ...repairData, ...payload, synced: 0, sync_status: 'dirty' });
         setRepairData((prev) => ({ ...prev, ...payload, synced: 0, sync_status: 'dirty' }));
@@ -405,7 +406,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
           setRepairData((prev) => ({ ...prev, ...payload, synced: 0, sync_status: 'dirty' }));
           savedSuccessfully = true;
         } else {
-          if (isLocalId) {
+          if (shouldCreateOnServer) {
             const createPayload = {
               ...payload,
               elevatorId,

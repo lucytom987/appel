@@ -76,7 +76,8 @@
     .brand-top {
       display: flex;
       gap: 12px;
-      align-items: flex-start;
+      align-items: center;
+      justify-content: center;
       padding: 12px 14px;
       border-bottom: 1px solid var(--line);
       background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
@@ -111,12 +112,21 @@
       line-height: 1.1;
       font-weight: 800;
       letter-spacing: 0.5px;
+      text-align: center;
     }
 
     .brand-copy .subtitle {
       margin-top: 4px;
       color: var(--muted);
       font-size: 11px;
+    }
+
+    .brand-copy {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 70px;
+      text-align: center;
     }
 
     .company-info {
@@ -432,7 +442,6 @@
           </div>
           <div class="brand-copy">
             <h1><%= company && company.naziv || 'SERVISNA FIRMA' %></h1>
-            <div class="subtitle">Profesionalni radni nalog / servisni dokument</div>
           </div>
         </div>
         <div class="company-info">

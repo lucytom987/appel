@@ -774,6 +774,12 @@ export const repairDB = {
       serviserID = serviserID._id || serviserID.id || '';
     }
 
+    console.log('💾 repairDB.insert - raw fields:', {
+      dodatniServiseri: repair.dodatniServiseri,
+      radniSati: repair.radniSati,
+      utroseniMaterijal: repair.utroseniMaterijal
+    });
+
     return db.runSync(
       `INSERT INTO repairs (id, elevatorId, serviserID, datumPrijave, datumPopravka, 
        opisKvara, opisPopravka, trebaloBi, status, radniNalogPotpisan, popravkaUPotpunosti, 
@@ -828,6 +834,12 @@ export const repairDB = {
     if (elevatorId && typeof elevatorId === 'object') {
       elevatorId = elevatorId._id || elevatorId.id || '';
     }
+
+    console.log('🔄 repairDB.update - raw fields:', {
+      dodatniServiseri: repair.dodatniServiseri,
+      radniSati: repair.radniSati,
+      utroseniMaterijal: repair.utroseniMaterijal
+    });
 
     return db.runSync(
       `UPDATE repairs SET elevatorId=?, serviserID=?, datumPrijave=?, datumPopravka=?, opisKvara=?, 

@@ -386,6 +386,16 @@ export default function RepairDetailsScreen({ route, navigation }) {
       updated_at: Date.now(),
     };
 
+    console.log('📝 handleSave payload:', { 
+      radniSatiGlavni, 
+      radniSatiKolega, 
+      kolegaId,
+      glavniSati, 
+      kolegaSati,
+      radniSati: payload.radniSati,
+      dodatniServiseri: payload.dodatniServiseri
+    });
+
     setSaving(true);
     try {
       const onlineNow = online;

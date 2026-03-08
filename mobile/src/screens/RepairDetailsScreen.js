@@ -356,6 +356,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
     const id = repairData._id || repairData.id;
     const wasCompleted = repairData.status === 'completed';
     const existsInDB = repairDB.getById(id);
+    const isLocalId = String(id || '').startsWith('local_');
 
     const parseHours = (value) => {
       const normalized = String(value || '').replace(',', '.').trim();
@@ -404,11 +405,31 @@ export default function RepairDetailsScreen({ route, navigation }) {
           setRepairData((prev) => ({ ...prev, ...payload, synced: 0, sync_status: 'dirty' }));
           savedSuccessfully = true;
         } else {
-          const response = await repairsAPI.update(id, payload);
-          const updated = response.data?.data || response.data;
-          repairDB.update(id, { ...repairData, ...updated, synced: 1, sync_status: 'synced' });
-          setRepairData((prev) => ({ ...prev, ...updated, synced: 1, sync_status: 'synced' }));
-          savedSuccessfully = true;
+          if (isLocalId) {
+            const createPayload = {
+              ...payload,
+              elevatorId,
+              id: undefined,
+            };
+            const response = await repairsAPI.create(createPayload);
+            const created = response.data?.data || response.data;
+            const serverId = created?._id || created?.id;
+
+            if (serverId) {
+              repairDB.markSynced(id, serverId);
+              repairDB.update(serverId, { ...repairData, ...created, synced: 1, sync_status: 'synced' });
+              setRepairData((prev) => ({ ...prev, ...created, id: serverId, _id: serverId, synced: 1, sync_status: 'synced' }));
+              savedSuccessfully = true;
+            } else {
+              throw new Error('Server nije vratio ID za spremljeni popravak');
+            }
+          } else {
+            const response = await repairsAPI.update(id, payload);
+            const updated = response.data?.data || response.data;
+            repairDB.update(id, { ...repairData, ...updated, synced: 1, sync_status: 'synced' });
+            setRepairData((prev) => ({ ...prev, ...updated, synced: 1, sync_status: 'synced' }));
+            savedSuccessfully = true;
+          }
         }
       }
       

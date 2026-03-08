@@ -25,11 +25,11 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // MongoDB Connection
 mongoose.connect(process.env.MONGODB_URI)
-  .then(async () => {
+  .then(() => {
     console.log('✅ MongoDB povezan');
-    // Seed default korisnici
+    // Seed default korisnici u pozadini (ne blokiraj server startup)
     const seedDefaultUsers = require('./utils/seedUsers');
-    await seedDefaultUsers();
+    seedDefaultUsers().catch(err => console.error('❌ Seed greška:', err));
   })
   .catch((err) => console.error('❌ MongoDB greška:', err));
 

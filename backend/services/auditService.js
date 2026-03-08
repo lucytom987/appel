@@ -1,4 +1,5 @@
 const AuditLog = require('../models/AuditLog');
+const User = require('../models/User');
 
 // Logiranje akcija (podržava object ili positional potpis)
 const logAction = async (...args) => {
@@ -13,6 +14,7 @@ const logAction = async (...args) => {
     }
 
     const {
+      companyId,
       korisnikId,
       akcija,
       entitet,
@@ -24,7 +26,18 @@ const logAction = async (...args) => {
       opis,
     } = payload;
 
+    let resolvedCompanyId = companyId;
+    if (!resolvedCompanyId && korisnikId) {
+      const user = await User.findById(korisnikId).select('companyId').lean();
+      resolvedCompanyId = user?.companyId;
+    }
+
+    if (!resolvedCompanyId) {
+      throw new Error('companyId je obavezan za audit log');
+    }
+
     const auditLog = new AuditLog({
+      companyId: resolvedCompanyId,
       korisnikId,
       akcija,
       entitet,

@@ -48,10 +48,10 @@ const resolveBaseUrl = (req) => {
   return `${req.protocol}://${req.get('host')}`;
 };
 
-const nextWorkOrderNumber = async (date = new Date()) => {
+const nextWorkOrderNumber = async (companyId, date = new Date()) => {
   const dayKey = formatDayKey(date);
   const counter = await WorkOrderCounter.findOneAndUpdate(
-    { dayKey },
+    { companyId, dayKey },
     { $inc: { sequence: 1 }, $set: { updated_at: new Date() } },
     { new: true, upsert: true, setDefaultsOnInsert: true }
   );
@@ -112,7 +112,7 @@ router.post('/from-repair/:repairId', authenticate, async (req, res) => {
 
     let workOrder = await WorkOrder.findOne({ repairId: repair._id, companyId: req.companyId });
     if (!workOrder) {
-      const numbering = await nextWorkOrderNumber(new Date());
+      const numbering = await nextWorkOrderNumber(req.companyId, new Date());
       const token = crypto.randomBytes(24).toString('hex');
       const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 

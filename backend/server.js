@@ -6,6 +6,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
 const User = require('./models/User');
+const ChatRoom = require('./models/ChatRoom');
 
 dotenv.config();
 
@@ -70,6 +71,7 @@ io.on('connection', async (socket) => {
     }
 
     socket.userId = String(user._id);
+    socket.companyId = String(user.companyId);
     activeUsers.set(socket.userId, socket.id);
     console.log(`✅ Auth socket: ${user.email} (${socket.userId})`);
   } catch (err) {
@@ -79,16 +81,36 @@ io.on('connection', async (socket) => {
   }
 
   // Join chat room
-  socket.on('join-room', (roomId) => {
-    if (!socket.userId) return;
-    socket.join(`room-${roomId}`);
-    console.log(`📍 Korisnik ${socket.userId} pridružen room-${roomId}`);
+  socket.on('join-room', async (roomId) => {
+    if (!socket.userId || !socket.companyId) return;
+    try {
+      const room = await ChatRoom.findOne({ _id: roomId, companyId: socket.companyId }).select('_id');
+      if (!room) {
+        socket.emit('chat-error', 'Chat soba nije pronađena u vašoj firmi');
+        return;
+      }
+      socket.join(`room-${roomId}`);
+      console.log(`📍 Korisnik ${socket.userId} pridružen room-${roomId}`);
+    } catch (error) {
+      socket.emit('chat-error', 'Greška pri ulasku u chat sobu');
+    }
   });
 
   // Send message
-  socket.on('send-message', (data) => {
-    if (!socket.userId) return;
+  socket.on('send-message', async (data) => {
+    if (!socket.userId || !socket.companyId) return;
     const { roomId, message } = data;
+    try {
+      const room = await ChatRoom.findOne({ _id: roomId, companyId: socket.companyId }).select('_id');
+      if (!room) {
+        socket.emit('chat-error', 'Chat soba nije pronađena u vašoj firmi');
+        return;
+      }
+    } catch (error) {
+      socket.emit('chat-error', 'Greška pri slanju poruke');
+      return;
+    }
+
     io.to(`room-${roomId}`).emit('new-message', {
       senderId: socket.userId,
       message,

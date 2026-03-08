@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 
 const eventSchema = new mongoose.Schema({
+  companyId: { type: mongoose.Schema.Types.ObjectId, ref: 'Company', required: true },
   elevatorId: { type: mongoose.Schema.Types.ObjectId, ref: 'Elevator', required: true },
   
   // Tip događaja
@@ -71,10 +72,11 @@ eventSchema.pre('save', function (next) {
   next();
 });
 
-eventSchema.index({ elevatorId: 1, datum: -1 });
-eventSchema.index({ elevatorId: 1, eventType: 1 });
+eventSchema.index({ companyId: 1, elevatorId: 1, datum: -1 });
+eventSchema.index({ companyId: 1, elevatorId: 1, eventType: 1 });
+eventSchema.index({ companyId: 1, eventType: 1, datum: -1 });
 eventSchema.index({ 'repair.status': 1 });
-eventSchema.index({ azuriranDatum: -1 });
-eventSchema.index({ updated_at: -1 });
+eventSchema.index({ companyId: 1, azuriranDatum: -1 });
+eventSchema.index({ companyId: 1, updated_at: -1 });
 
 module.exports = mongoose.model('Event', eventSchema);

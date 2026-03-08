@@ -26,13 +26,26 @@ const generateTokens = (userId) => {
 // POST /api/auth/login - Prijava korisnika
 router.post('/login', async (req, res) => {
   try {
-    const { email, lozinka } = req.body;
+    const { email, lozinka, companyId, firmaId } = req.body;
+    const loginCompanyId = companyId || firmaId;
 
     if (!email || !lozinka) {
       return res.status(400).json({ message: 'Email i lozinka su obavezni' });
     }
 
-    const user = await User.findOne({ email });
+    let user;
+    if (loginCompanyId) {
+      user = await User.findOne({ email, companyId: loginCompanyId });
+    } else {
+      const matches = await User.find({ email, aktivan: true }).limit(2);
+      if (matches.length > 1) {
+        return res.status(409).json({
+          message: 'Pronađeno je više korisnika s istim emailom. Pošaljite i companyId pri prijavi.',
+        });
+      }
+      user = matches[0];
+    }
+
     if (!user || !user.aktivan) {
       return res.status(401).json({ message: 'Nevaljani email ili lozinka' });
     }
@@ -96,12 +109,13 @@ router.post('/register', authenticate, async (req, res) => {
       return res.status(403).json({ message: 'Samo admin može registrirati nove korisnike' });
     }
 
-    const postojeciKorisnik = await User.findOne({ email });
+    const postojeciKorisnik = await User.findOne({ email, companyId: req.companyId });
     if (postojeciKorisnik) {
-      return res.status(400).json({ message: 'Korisnik s tim emailom već postoji' });
+      return res.status(400).json({ message: 'Korisnik s tim emailom već postoji u vašoj firmi' });
     }
 
     const noviKorisnik = new User({
+      companyId: req.companyId,
       ime,
       prezime,
       email,

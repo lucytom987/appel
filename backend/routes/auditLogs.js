@@ -8,7 +8,7 @@ router.get('/', authenticate, async (req, res) => {
   try {
     const { userId, action, entityType, startDate, endDate, limit = 100, skip = 0 } = req.query;
 
-    const filter = {};
+    const filter = { companyId: req.companyId };
     if (userId) filter.korisnikId = userId;
     if (action) filter.akcija = action;
     if (entityType) filter.entitet = entityType;
@@ -38,7 +38,7 @@ router.get('/', authenticate, async (req, res) => {
 router.get('/user/:userId', authenticate, async (req, res) => {
   try {
     const { limit = 50, skip = 0 } = req.query;
-    const filter = { korisnikId: req.params.userId };
+    const filter = { companyId: req.companyId, korisnikId: req.params.userId };
 
     const logs = await AuditLog.find(filter)
       .populate('korisnikId', 'ime prezime email uloga')
@@ -60,6 +60,7 @@ router.get('/user/:userId', authenticate, async (req, res) => {
 router.get('/entity/:entityType/:entityId', authenticate, async (req, res) => {
   try {
     const logs = await AuditLog.find({
+      companyId: req.companyId,
       entitet: req.params.entityType,
       entitetId: req.params.entityId
     })
@@ -81,7 +82,7 @@ router.delete('/cleanup', authenticate, checkRole(['admin', 'menadzer']), async 
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - daysToKeep);
 
-    const result = await AuditLog.deleteMany({ kreiranDatum: { $lt: cutoffDate } });
+    const result = await AuditLog.deleteMany({ companyId: req.companyId, kreiranDatum: { $lt: cutoffDate } });
 
     res.json({
       success: true,
@@ -98,6 +99,7 @@ router.delete('/cleanup', authenticate, checkRole(['admin', 'menadzer']), async 
 router.get('/stats/activity', authenticate, checkRole(['admin', 'menadzer']), async (req, res) => {
   try {
     const stats = await AuditLog.aggregate([
+      { $match: { companyId: req.companyId } },
       { $group: { _id: '$akcija', count: { $sum: 1 } } },
       { $sort: { count: -1 } }
     ]);
@@ -112,7 +114,7 @@ router.get('/stats/activity', authenticate, checkRole(['admin', 'menadzer']), as
 // GET /api/audit-logs/:id - jedan log
 router.get('/:id', authenticate, checkRole(['admin', 'menadzer']), async (req, res) => {
   try {
-    const log = await AuditLog.findById(req.params.id)
+    const log = await AuditLog.findOne({ _id: req.params.id, companyId: req.companyId })
       .populate('korisnikId', 'ime prezime email uloga')
       .lean();
 

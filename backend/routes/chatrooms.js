@@ -13,9 +13,9 @@ router.get('/', authenticate, async (req, res) => {
     const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 0, 1), 200);
     const parsedSkip = Math.max(parseInt(skip, 10) || 0, 0);
 
-    const chatrooms = await ChatRoom.find()
+    const chatrooms = await ChatRoom.find({ companyId: req.companyId })
       .populate('kreiraoId', 'ime prezime email uloga')
-      .populate('clanovi', 'ime prezime email uloga')
+      .populate({ path: 'clanovi', select: 'ime prezime email uloga', match: { companyId: req.companyId } })
       // Sortiraj po zadnjem ažuriranju radi relevantnosti liste
       .sort({ azuriranDatum: -1, kreiranDatum: -1 })
       .skip(parsedSkip)
@@ -25,7 +25,7 @@ router.get('/', authenticate, async (req, res) => {
     // Izvuci zadnju poruku za svaku sobu (jednostavan upit po sobi radi točnosti)
     const latestList = await Promise.all(
       chatrooms.map((room) =>
-        Message.findOne({ chatRoomId: room._id })
+        Message.findOne({ chatRoomId: room._id, companyId: req.companyId })
           .sort({ kreiranDatum: -1, createdAt: -1, azuriranDatum: -1, _id: -1 })
           .select('kreiranDatum createdAt azuriranDatum tekst senderId')
           .lean()
@@ -35,10 +35,11 @@ router.get('/', authenticate, async (req, res) => {
       chatrooms.map((room, idx) => [String(room._id), latestList[idx] || null])
     );
 
-    const totalUsers = await User.countDocuments();
+    const totalUsers = await User.countDocuments({ companyId: req.companyId });
     const unreadCounts = await Promise.all(
       chatrooms.map((room) =>
         Message.countDocuments({
+          companyId: req.companyId,
           chatRoomId: room._id,
           senderId: { $ne: req.user._id },
           isRead: { $ne: req.user._id },
@@ -59,7 +60,7 @@ router.get('/', authenticate, async (req, res) => {
       };
     });
 
-    const total = await ChatRoom.countDocuments();
+    const total = await ChatRoom.countDocuments({ companyId: req.companyId });
 
     res.json({ success: true, count: chatrooms.length, total, data: chatroomsWithCount });
   } catch (error) {
@@ -71,22 +72,23 @@ router.get('/', authenticate, async (req, res) => {
 // GET /api/chatrooms/:id - jedna soba
 router.get('/:id', authenticate, async (req, res) => {
   try {
-    const chatroom = await ChatRoom.findById(req.params.id)
+    const chatroom = await ChatRoom.findOne({ _id: req.params.id, companyId: req.companyId })
       .populate('kreiraoId', 'ime prezime email uloga')
-      .populate('clanovi', 'ime prezime email uloga')
+      .populate({ path: 'clanovi', select: 'ime prezime email uloga', match: { companyId: req.companyId } })
       .lean();
 
     if (!chatroom) {
       return res.status(404).json({ success: false, message: 'Chat soba nije pronađena' });
     }
 
-    const totalUsers = await User.countDocuments();
-    const latestMessage = await Message.findOne({ chatRoomId: chatroom._id })
+    const totalUsers = await User.countDocuments({ companyId: req.companyId });
+    const latestMessage = await Message.findOne({ chatRoomId: chatroom._id, companyId: req.companyId })
       .sort({ kreiranDatum: -1, createdAt: -1, azuriranDatum: -1, _id: -1 })
       .select('kreiranDatum createdAt azuriranDatum tekst senderId')
       .lean();
 
     const unreadCount = await Message.countDocuments({
+      companyId: req.companyId,
       chatRoomId: chatroom._id,
       senderId: { $ne: req.user._id },
       isRead: { $ne: req.user._id },
@@ -117,15 +119,23 @@ router.post('/', authenticate, async (req, res) => {
     const clanovi = req.body.clanovi || req.body.members || [];
 
     // Dodaj kreatora ako nije već u listi
-    const memberIds = [...clanovi.map(String)];
+    const memberIds = [...new Set(clanovi.map(String))];
     if (!memberIds.includes(String(req.user._id))) {
       memberIds.push(String(req.user._id));
     }
 
+    const validMembers = await User.find({
+      _id: { $in: memberIds },
+      companyId: req.companyId,
+      aktivan: true,
+    }).select('_id');
+    const validMemberIds = validMembers.map((member) => member._id);
+
     const chatroom = new ChatRoom({
+      companyId: req.companyId,
       naziv,
       opis,
-      clanovi: memberIds,
+      clanovi: validMemberIds,
       kreiraoId: req.user._id
     });
 
@@ -154,14 +164,25 @@ router.post('/', authenticate, async (req, res) => {
 // PUT /api/chatrooms/:id - ažuriranje (dostupno svim prijavljenim korisnicima)
 router.put('/:id', authenticate, async (req, res) => {
   try {
-    const chatroom = await ChatRoom.findById(req.params.id);
+    const chatroom = await ChatRoom.findOne({ _id: req.params.id, companyId: req.companyId });
     if (!chatroom) {
       return res.status(404).json({ success: false, message: 'Chat soba nije pronađena' });
     }
 
     if (req.body.naziv || req.body.name) chatroom.naziv = req.body.naziv || req.body.name;
     if (req.body.opis || req.body.description) chatroom.opis = req.body.opis || req.body.description;
-    if (req.body.clanovi || req.body.members) chatroom.clanovi = req.body.clanovi || req.body.members;
+    if (req.body.clanovi || req.body.members) {
+      const nextMembers = [...new Set((req.body.clanovi || req.body.members).map(String))];
+      if (!nextMembers.includes(String(req.user._id))) {
+        nextMembers.push(String(req.user._id));
+      }
+      const validMembers = await User.find({
+        _id: { $in: nextMembers },
+        companyId: req.companyId,
+        aktivan: true,
+      }).select('_id');
+      chatroom.clanovi = validMembers.map((member) => member._id);
+    }
     chatroom.azuriranDatum = new Date();
     await chatroom.save();
 
@@ -189,13 +210,13 @@ router.put('/:id', authenticate, async (req, res) => {
 // DELETE /api/chatrooms/:id - brisanje
 router.delete('/:id', authenticate, checkRole(['admin', 'menadzer']), async (req, res) => {
   try {
-    const chatroom = await ChatRoom.findById(req.params.id);
+    const chatroom = await ChatRoom.findOne({ _id: req.params.id, companyId: req.companyId });
     if (!chatroom) {
       return res.status(404).json({ success: false, message: 'Chat soba nije pronađena' });
     }
 
     // Obrisi sve poruke vezane uz ovu sobu
-    await Message.deleteMany({ chatRoomId: chatroom._id });
+    await Message.deleteMany({ chatRoomId: chatroom._id, companyId: req.companyId });
 
     await chatroom.deleteOne();
 
@@ -221,16 +242,21 @@ router.delete('/:id', authenticate, checkRole(['admin', 'menadzer']), async (req
 router.post('/:id/members', authenticate, async (req, res) => {
   try {
     const { userId } = req.body;
-    const chatroom = await ChatRoom.findById(req.params.id);
+    const chatroom = await ChatRoom.findOne({ _id: req.params.id, companyId: req.companyId });
     if (!chatroom) {
       return res.status(404).json({ success: false, message: 'Chat soba nije pronađena' });
     }
 
-    if (chatroom.clanovi.map(String).includes(String(userId))) {
+    const targetUser = await User.findOne({ _id: userId, companyId: req.companyId, aktivan: true }).select('_id');
+    if (!targetUser) {
+      return res.status(404).json({ success: false, message: 'Korisnik nije pronađen u vašoj firmi' });
+    }
+
+    if (chatroom.clanovi.map(String).includes(String(targetUser._id))) {
       return res.status(400).json({ success: false, message: 'Korisnik je već član ove sobe' });
     }
 
-    chatroom.clanovi.push(userId);
+    chatroom.clanovi.push(targetUser._id);
     await chatroom.save();
     await chatroom.populate('clanovi', 'ime prezime email uloga');
 
@@ -244,7 +270,7 @@ router.post('/:id/members', authenticate, async (req, res) => {
 // DELETE /api/chatrooms/:id/members/:userId - ukloni člana
 router.delete('/:id/members/:userId', authenticate, async (req, res) => {
   try {
-    const chatroom = await ChatRoom.findById(req.params.id);
+    const chatroom = await ChatRoom.findOne({ _id: req.params.id, companyId: req.companyId });
     if (!chatroom) {
       return res.status(404).json({ success: false, message: 'Chat soba nije pronađena' });
     }

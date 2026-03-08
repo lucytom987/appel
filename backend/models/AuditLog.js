@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 
 const auditLogSchema = new mongoose.Schema({
+  companyId: { type: mongoose.Schema.Types.ObjectId, ref: 'Company', required: true },
   korisnikId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   akcija: {
     type: String,
@@ -9,7 +10,7 @@ const auditLogSchema = new mongoose.Schema({
   },
   entitet: {
     type: String,
-    enum: ['Service', 'Repair', 'ChatRoom', 'Message', 'SimCard', 'Elevator', 'User'],
+    enum: ['Service', 'Repair', 'ChatRoom', 'Message', 'SimCard', 'Elevator', 'User', 'WorkOrder', 'Event', 'Company'],
     required: true
   },
   entitetId: mongoose.Schema.Types.ObjectId,
@@ -24,8 +25,8 @@ const auditLogSchema = new mongoose.Schema({
   kreiranDatum: { type: Date, default: Date.now }
 });
 
-auditLogSchema.index({ korisnikId: 1, kreiranDatum: -1 });
-auditLogSchema.index({ entitet: 1, akcija: 1 });
-auditLogSchema.index({ kreiranDatum: -1 });
+auditLogSchema.index({ companyId: 1, korisnikId: 1, kreiranDatum: -1 });
+auditLogSchema.index({ companyId: 1, entitet: 1, akcija: 1 });
+auditLogSchema.index({ companyId: 1, kreiranDatum: -1 });
 
 module.exports = mongoose.model('AuditLog', auditLogSchema);

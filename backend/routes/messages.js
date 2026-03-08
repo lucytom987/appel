@@ -8,7 +8,7 @@ const { authenticate } = require('../middleware/auth');
 router.get('/unread/count', authenticate, async (req, res) => {
   try {
     // Svi vide sve sobe, ali brojimo samo poruke iz postojećih soba
-    const rooms = await ChatRoom.find({}, { _id: 1 }).lean();
+    const rooms = await ChatRoom.find({ companyId: req.companyId }, { _id: 1 }).lean();
     if (!rooms.length) {
       return res.json({ success: true, count: 0, data: 0 });
     }
@@ -17,6 +17,7 @@ router.get('/unread/count', authenticate, async (req, res) => {
 
     // Broji tuđe poruke koje korisnik nije označio kao pročitane
     const unreadCount = await Message.countDocuments({
+      companyId: req.companyId,
       chatRoomId: { $in: roomIds },
       senderId: { $ne: req.user._id },
       isRead: { $ne: req.user._id },
@@ -36,19 +37,19 @@ router.get('/room/:roomId', authenticate, async (req, res) => {
     const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 0, 1), 200);
     const parsedSkip = Math.max(parseInt(skip, 10) || 0, 0);
 
-    const room = await ChatRoom.findById(req.params.roomId);
+    const room = await ChatRoom.findOne({ _id: req.params.roomId, companyId: req.companyId });
     if (!room) {
       return res.status(404).json({ success: false, message: 'Chat soba nije pronadena' });
     }
 
-    const messages = await Message.find({ chatRoomId: room._id })
+    const messages = await Message.find({ chatRoomId: room._id, companyId: req.companyId })
       .populate('senderId', 'ime prezime email uloga')
       .sort({ kreiranDatum: -1 })
       .limit(parsedLimit)
       .skip(parsedSkip)
       .lean();
 
-    const total = await Message.countDocuments({ chatRoomId: room._id });
+    const total = await Message.countDocuments({ chatRoomId: room._id, companyId: req.companyId });
 
     res.json({
       success: true,
@@ -70,12 +71,18 @@ router.post('/', authenticate, async (req, res) => {
     const slika = req.body.slika || req.body.imageUrl;
     const accentKey = req.body.accentKey || req.body.colorKey;
 
-    const room = await ChatRoom.findById(chatRoomId);
+    const room = await ChatRoom.findOne({ _id: chatRoomId, companyId: req.companyId });
     if (!room) {
       return res.status(404).json({ success: false, message: 'Chat soba nije pronadena' });
     }
 
+    const isMember = room.clanovi?.map(String).includes(String(req.user._id));
+    if (!isMember) {
+      return res.status(403).json({ success: false, message: 'Niste član ove chat sobe' });
+    }
+
     const message = new Message({
+      companyId: req.companyId,
       chatRoomId: room._id,
       senderId: req.user._id,
       tekst,
@@ -100,7 +107,7 @@ router.post('/', authenticate, async (req, res) => {
 // PUT /api/messages/:id/read - oznaci procitano
 router.put('/:id/read', authenticate, async (req, res) => {
   try {
-    const message = await Message.findById(req.params.id);
+    const message = await Message.findOne({ _id: req.params.id, companyId: req.companyId });
     if (!message) {
       return res.status(404).json({ success: false, message: 'Poruka nije pronadena' });
     }
@@ -120,7 +127,7 @@ router.put('/:id/read', authenticate, async (req, res) => {
 // DELETE /api/messages/:id - brisi poruku (posaljatelj ili admin)
 router.delete('/:id', authenticate, async (req, res) => {
   try {
-    const message = await Message.findById(req.params.id);
+    const message = await Message.findOne({ _id: req.params.id, companyId: req.companyId });
     if (!message) {
       return res.status(404).json({ success: false, message: 'Poruka nije pronadena' });
     }

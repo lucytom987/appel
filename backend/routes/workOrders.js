@@ -2,13 +2,12 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
-const PDFDocument = require('pdfkit');
-const QRCode = require('qrcode');
 
 const router = express.Router();
 const { authenticate } = require('../middleware/auth');
 const { logAction } = require('../services/auditService');
 const { sendWorkOrderEmail } = require('../services/emailService');
+const { generatePdfFromHtml, generateQRCode } = require('../services/workOrderPdfService');
 const WorkOrder = require('../models/WorkOrder');
 const WorkOrderCounter = require('../models/WorkOrderCounter');
 const Repair = require('../models/Repair');
@@ -29,13 +28,6 @@ const formatDayKey = (date = new Date()) => {
   const month = pad2(date.getMonth() + 1);
   const year = String(date.getFullYear()).slice(-2);
   return `${day}${month}${year}`;
-};
-
-const formatDateHR = (value) => {
-  if (!value) return '-';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return '-';
-  return d.toLocaleString('hr-HR');
 };
 
 const resolveBaseUrl = (req) => {
@@ -66,167 +58,6 @@ const isTokenValid = (workOrder, token) => {
   if (workOrder.viewToken !== token) return false;
   const expires = new Date(workOrder.tokenExpiresAt);
   return expires.getTime() > Date.now();
-};
-
-const generatePdfForWorkOrder = async ({ workOrder, repair, elevator, company, baseUrl }) => {
-  ensureDir();
-
-  const fileName = `${workOrder.workOrderNumber}.pdf`;
-  const filePath = path.join(OUTPUT_DIR, fileName);
-  const qrUrl = `${baseUrl}/api/work-orders/view/${workOrder._id}?token=${encodeURIComponent(workOrder.viewToken)}`;
-  const qrDataUrl = await QRCode.toDataURL(qrUrl, { margin: 1, width: 200 });
-  const qrImageBuffer = Buffer.from(qrDataUrl.split(',')[1], 'base64');
-
-  // A4 portrait, margine 18-22mm (sa pretvorbom: 1 inch = 72 points, 1 inch = 25.4mm)
-  // 20mm = approximately 56 points
-  const marginMm = 20;
-  const pageWidth = 595; // A4 width in points
-  const pageHeight = 842; // A4 height in points
-  const margin = 56; // 20mm u points
-
-  const doc = new PDFDocument({ size: 'A4', margins: { top: margin, bottom: margin, left: margin, right: margin } });
-  const stream = fs.createWriteStream(filePath);
-  doc.pipe(stream);
-
-  // ============ HEADER - Tamno plava ============
-  doc.fillColor('#1e3a8a');
-  doc.rect(margin - 20, margin - 60, pageWidth - 2 * (margin - 20), 100).fill();
-
-  // Naziv firme
-  doc.fillColor('#ffffff')
-    .fontSize(20)
-    .font('Courier-Bold')
-    .text(company?.naziv || 'SERVISNA FIRMA', margin, margin - 45);
-
-  // Kontakt firme
-  doc.fontSize(9)
-    .font('Courier')
-    .text(company?.adresa || '', margin, margin - 10)
-    .text(`OIB: ${company?.oib || '-'} | Email: ${company?.email || '-'}`, margin);
-
-  // ============ METADATA O RADNOM NALOGU ============
-  doc.moveDown(1.5);
-  doc.fillColor('#111827').fontSize(16).font('Courier-Bold').text('RADNI NALOG');
-  doc.fontSize(10).font('Courier');
-
-  doc.fillColor('#374151')
-    .text(`Broj: ${workOrder.workOrderNumber}`)
-    .text(`Kreiran: ${formatDateHR(workOrder.created_at)}`)
-    .text(`Status: ${workOrder.status === 'sent' ? 'POSLAN' : workOrder.status === 'signed' ? 'POTPISAN' : 'NACRT'}`);
-
-  if (workOrder.status === 'draft') {
-    doc.fillColor('#dc2626').fontSize(9).font('Courier-Bold').text('PREDPREGLED - NIJE POSLAN');
-    doc.fillColor('#111827');
-  }
-
-  // ============ SEPARATOR LINIJA ============
-  doc.moveTo(margin, doc.y + 8)
-    .lineTo(pageWidth - margin, doc.y + 8)
-    .strokeColor('#d1d5db')
-    .stroke();
-
-  // ============ SEKCIJA: PODACI O STRANCI I DIZALU ============
-  doc.moveDown(0.8);
-  doc.fillColor('#1e40af').fontSize(12).font('Courier-Bold').text('Podaci o stranci i dizalu');
-  doc.fontSize(10).font('Courier').fillColor('#374151');
-
-  doc.text(`Stranka: ${elevator?.nazivStranke || '-'}`, { width: 500 });
-  doc.text(`Adresa: ${elevator?.ulica || '-'}, ${elevator?.mjesto || '-'}`);
-  doc.text(`Broj dizala: ${elevator?.brojDizala || '-'}`);
-  doc.text(`Broj ugovora: ${elevator?.brojUgovora || '-'}`);
-
-  // ============ SEPARATOR LINIJA ============
-  doc.moveTo(margin, doc.y + 8)
-    .lineTo(pageWidth - margin, doc.y + 8)
-    .strokeColor('#d1d5db')
-    .stroke();
-
-  // ============ SEKCIJA: PODACI O POPRAVKU ============
-  doc.moveDown(0.8);
-  doc.fillColor('#1e40af').fontSize(12).font('Courier-Bold').text('Podaci o popravku');
-  doc.fontSize(10).font('Courier').fillColor('#374151');
-
-  doc.text(`Datum prijave: ${formatDateHR(repair?.datumPrijave)}`);
-  doc.text(`Datum popravke: ${formatDateHR(repair?.datumPopravka)}`);
-  doc.text(`Status: ${repair?.status === 'completed' ? 'ZAVRSENO' : repair?.status === 'in_progress' ? 'U TIJEKU' : 'PRIJAVLJEN'}`);
-  
-  if (repair?.opisKvara) {
-    doc.moveDown(0.3);
-    doc.text('Opis kvara:');
-    doc.fontSize(9).text(repair.opisKvara, { width: 450, align: 'left' });
-    doc.fontSize(10);
-  }
-  
-  if (repair?.opisPopravka) {
-    doc.moveDown(0.3);
-    doc.text('Opis popravke:');
-    doc.fontSize(9).text(repair.opisPopravka, { width: 450, align: 'left' });
-    doc.fontSize(10);
-  }
-
-  // ============ SEPARATOR LINIJA ============
-  doc.moveTo(margin, doc.y + 8)
-    .lineTo(pageWidth - margin, doc.y + 8)
-    .strokeColor('#d1d5db')
-    .stroke();
-
-  // ============ SEKCIJA: POTPIS ============
-  if (workOrder.signedByName || workOrder.signedAt) {
-    doc.moveDown(0.8);
-    doc.fillColor('#1e40af').fontSize(12).font('Courier-Bold').text('Potpis');
-    doc.fontSize(10).font('Courier').fillColor('#374151');
-
-    doc.text(`Potpisao: ${workOrder.signedByName || '-'}`);
-    if (workOrder.signedAt) {
-      doc.text(`Vrijeme: ${formatDateHR(workOrder.signedAt)}`);
-    }
-
-    // Digitalni potpis ako postoji
-    if (workOrder.signatureImage) {
-      try {
-        const signatureData = workOrder.signatureImage.includes(',')
-          ? workOrder.signatureImage.split(',')[1]
-          : workOrder.signatureImage;
-        const signatureBuffer = Buffer.from(signatureData, 'base64');
-        doc.moveDown(0.5);
-        doc.text('Digitalni potpis:', { underline: false });
-        doc.image(signatureBuffer, margin, doc.y + 5, { fit: [150, 60] });
-      } catch (err) {
-        doc.text('Digitalni potpis: [greska pri ucitavanju]');
-      }
-    }
-
-    // ============ SEPARATOR LINIJA ============
-    doc.moveTo(margin, doc.y + 8)
-      .lineTo(pageWidth - margin, doc.y + 8)
-      .strokeColor('#d1d5db')
-      .stroke();
-  }
-
-  // ============ QR KOD I FOOTER ============
-  doc.moveDown(0.8);
-  doc.fontSize(8).fillColor('#6b7280').font('Courier').text('Skeniraj QR kod za online pregled i preuzimanje dokumenta.');
-  doc.moveDown(0.3);
-  
-  // Postavi QR kod u donji desni kut
-  const qrSize = 100;
-  doc.image(qrImageBuffer, pageWidth - margin - qrSize - 10, doc.page.height - margin - qrSize - 10, { width: qrSize, height: qrSize });
-
-  // Footer s kompanijom
-  doc.moveDown(1);
-  doc.fontSize(8).fillColor('#9ca3af').font('Courier');
-  doc.text(`${company?.naziv || 'Servisna firma'} | ${company?.telefon || company?.mobitel || 'Kontakt'}`);
-  doc.text(`${company?.email || ''}`);
-  doc.text(`Generirano: ${new Date().toLocaleString('hr-HR')}`, { align: 'right' });
-
-  doc.end();
-
-  await new Promise((resolve, reject) => {
-    stream.on('finish', resolve);
-    stream.on('error', reject);
-  });
-
-  return { fileName, filePath, qrUrl };
 };
 
 const mapWorkOrderResponse = (workOrder, req) => {
@@ -292,12 +123,16 @@ router.post('/from-repair/:repairId', authenticate, async (req, res) => {
       workOrder.updated_at = new Date();
     }
 
-    const generated = await generatePdfForWorkOrder({
+    // Generiraj QR kod i PDF sa novim servisom
+    const qrUrl = `${baseUrl}/api/work-orders/view/${workOrder._id}?token=${encodeURIComponent(workOrder.viewToken)}`;
+    const qrCodeDataUrl = await generateQRCode(qrUrl);
+
+    const generated = await generatePdfFromHtml({
       workOrder,
       repair,
       elevator: repair.elevatorId,
       company,
-      baseUrl,
+      qrCodeDataUrl,
     });
 
     workOrder.pdfFileName = generated.fileName;
@@ -373,12 +208,17 @@ router.post('/:id/sign', authenticate, async (req, res) => {
 
     const baseUrl = resolveBaseUrl(req);
     const company = await Company.findById(req.companyId);
-    const generated = await generatePdfForWorkOrder({
+    
+    // Generiraj QR kod i PDF sa novim servisom
+    const qrUrl = `${baseUrl}/api/work-orders/view/${workOrder._id}?token=${encodeURIComponent(workOrder.viewToken)}`;
+    const qrCodeDataUrl = await generateQRCode(qrUrl);
+
+    const generated = await generatePdfFromHtml({
       workOrder,
       repair,
       elevator: repair.elevatorId,
       company,
-      baseUrl,
+      qrCodeDataUrl,
     });
 
     workOrder.pdfFileName = generated.fileName;

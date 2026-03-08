@@ -18,3 +18,23 @@ services:
         generateValue: true
       - key: CORS_ORIGIN
         value: "*"
+
+  - type: web
+    name: appel-backend-staging
+    env: node
+    region: frankfurt
+    plan: free
+    branch: develop
+    buildCommand: cd backend && npm install
+    startCommand: cd backend && npm start
+    envVars:
+      - key: NODE_ENV
+        value: staging
+      - key: PORT
+        value: 10000
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CORS_ORIGIN
+        value: "*"

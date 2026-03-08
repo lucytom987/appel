@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="hr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Radni Nalog - <%= workOrderNumber %></title>
+  <style>
+    :root {
+      --navy: #0f2747;
+      --blue: #1e4f91;
+      --blue-soft: #eef4fb;
+      --line: #d9e2ee;
+      --line-soft: #e7edf6;
+      --text: #182230;
+      --muted: #667085;
+      --paper: #ffffff;
+      --bg: #f9fafb;
+      --ok-bg: #ecfdf3;
+      --ok-text: #027a48;
+      --draft-bg: #fef3c7;
+      --draft-text: #92400e;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      line-height: 1.6;
+    }
+
+    body {
+      padding: 20px;
+    }
+
+    .page {
+      width: 210mm;
+      min-height: 297mm;
+      margin: 0 auto 30px auto;
+      background: var(--paper);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .top-band {
+      height: 8mm;
+      background: linear-gradient(90deg, var(--navy) 0%, var(--blue) 70%, #3b82f6 100%);
+    }
+
+    .page-inner {
+      padding: 10mm 12mm;
+    }
+
+    .header {
+      display: grid;
+      grid-template-columns: 1.3fr 0.9fr;
+      gap: 16px;
+      margin-bottom: 14px;
+    }
+
+    .brand-panel,
+    .doc-panel,
+    .section {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      overflow: hidden;
+      background: white;
+    }
+
+    .brand-top {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+    }
+
+    .logo-shell {
+      width: 70px;
+      height: 70px;
+      flex: 0 0 auto;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      background: linear-gradient(135deg, var(--navy), var(--blue));
+      color: white;
+      font-weight: 800;
+      font-size: 24px;
+    }
+
+    .logo-shell img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+    }
+
+    .brand-copy h1 {
+      margin: 0;
+      color: var(--navy);
+      font-size: 22px;
+      line-height: 1.1;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+    }
+
+    .brand-copy .subtitle {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .company-info {
+      padding: 10px 12px;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .company-row {
+      display: flex;
+      gap: 8px;
+      padding: 3px 0;
+    }
+
+    .company-row + .company-row {
+      border-top: 1px dashed #edf1f7;
+      padding-top: 3px;
+    }
+
+    .company-label {
+      width: 70px;
+      color: var(--muted);
+      font-weight: 700;
+      flex: 0 0 auto;
+    }
+
+    .company-value {
+      flex: 1;
+      min-width: 0;
+      word-break: break-word;
+    }
+
+    .doc-panel-head {
+      padding: 12px 14px;
+      background: var(--blue-soft);
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .doc-title {
+      color: var(--navy);
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: 1px;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      white-space: nowrap;
+      border: 1px solid;
+    }
+
+    .status-pill.draft {
+      background: var(--draft-bg);
+      color: var(--draft-text);
+      border-color: #fcd34d;
+    }
+
+    .status-pill.sent {
+      background: var(--ok-bg);
+      color: var(--ok-text);
+      border-color: #b7ebcd;
+    }
+
+    .doc-meta {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    .doc-meta td {
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+
+    .doc-meta tr:last-child td {
+      border-bottom: none;
+    }
+
+    .doc-meta td:first-child {
+      width: 40%;
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .section {
+      margin-bottom: 12px;
+    }
+
+    .section-head {
+      padding: 8px 12px;
+      background: var(--blue-soft);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .section-title {
+      margin: 0;
+      color: var(--navy);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      font-weight: 800;
+    }
+
+    .section-body {
+      padding: 12px;
+    }
+
+    .info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .info-card {
+      border: 1px solid var(--line-soft);
+      border-radius: 10px;
+      padding: 10px;
+      background: #fbfcfe;
+    }
+
+    .info-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    .info-table td {
+      padding: 6px 0;
+      border-bottom: 1px dashed #e5eaf2;
+      vertical-align: top;
+    }
+
+    .info-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .info-table td:first-child {
+      width: 35%;
+      color: var(--muted);
+      font-weight: 700;
+      padding-right: 8px;
+    }
+
+    .desc-box {
+      min-height: 80px;
+      border: 1px solid var(--line-soft);
+      border-radius: 10px;
+      background: #fbfcfe;
+      padding: 10px;
+      font-size: 12px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+    }
+
+    .split {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    table.tbl {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+    }
+
+    .tbl th {
+      padding: 8px;
+      text-align: left;
+      background: #f8fbff;
+      border-bottom: 1px solid var(--line);
+      color: var(--navy);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+
+    .tbl td {
+      padding: 7px 8px;
+      border-bottom: 1px solid #e8edf5;
+      vertical-align: top;
+    }
+
+    .tbl tr:last-child td {
+      border-bottom: none;
+    }
+
+    .total-row td {
+      background: #fcfdff;
+      color: var(--navy);
+      font-weight: 800;
+      border-top: 2px solid var(--line);
+    }
+
+    .num {
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .sign-grid {
+      display: grid;
+      grid-template-columns: 0.7fr 1fr 1fr;
+      gap: 12px;
+    }
+
+    .sign-card {
+      border: 1px solid var(--line-soft);
+      border-radius: 10px;
+      padding: 10px;
+      background: white;
+      min-height: 100px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .sign-title {
+      color: var(--navy);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      font-weight: 800;
+      margin-bottom: 35px;
+      flex: 0 0 auto;
+    }
+
+    .sign-line {
+      border-top: 1px solid #98a2b3;
+      padding-top: 6px;
+      font-size: 11px;
+      color: var(--muted);
+      min-height: 18px;
+      flex: 1;
+      display: flex;
+      align-items: flex-end;
+    }
+
+    .signature-image {
+      max-width: 100%;
+      max-height: 50px;
+      margin-top: 6px;
+    }
+
+    .footer {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 10px;
+      color: var(--muted);
+    }
+
+    .qr-container {
+      position: absolute;
+      bottom: 12mm;
+      right: 12mm;
+      width: 80px;
+      height: 80px;
+      border: 1px solid var(--line-soft);
+      border-radius: 8px;
+      padding: 5px;
+      background: white;
+    }
+
+    .qr-container img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    @media print {
+      body {
+        background: white;
+        padding: 0;
+      }
+      .page {
+        margin: 0;
+        box-shadow: none;
+        page-break-after: always;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<div class="page">
+  <div class="top-band"></div>
+
+  <div class="page-inner">
+    <header class="header">
+      <section class="brand-panel">
+        <div class="brand-top">
+          <div class="logo-shell">
+            <% if (company && company.logoUrl) { %>
+              <img src="<%= company.logoUrl %>" alt="<%= company.naziv %>">
+            <% } else { %>
+              <%= (company && company.naziv || 'A').charAt(0).toUpperCase() %>
+            <% } %>
+          </div>
+          <div class="brand-copy">
+            <h1><%= company && company.naziv || 'SERVISNA FIRMA' %></h1>
+            <div class="subtitle">Profesionalni radni nalog / servisni dokument</div>
+          </div>
+        </div>
+        <div class="company-info">
+          <div class="company-row">
+            <div class="company-label">Adresa</div>
+            <div class="company-value"><%= company && company.adresa || '-' %></div>
+          </div>
+          <div class="company-row">
+            <div class="company-label">OIB</div>
+            <div class="company-value"><%= company && company.oib || '-' %></div>
+          </div>
+          <div class="company-row">
+            <div class="company-label">Telefon</div>
+            <div class="company-value"><%= company && company.telefon || company && company.mobitel || '-' %></div>
+          </div>
+          <div class="company-row">
+            <div class="company-label">Email</div>
+            <div class="company-value"><%= company && company.email || '-' %></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="doc-panel">
+        <div class="doc-panel-head">
+          <div class="doc-title">RADNI NALOG</div>
+          <div class="status-pill <%= workOrder.status === 'draft' ? 'draft' : 'sent' %>">
+            <%= workOrder.status === 'draft' ? 'NACRT' : workOrder.status === 'signed' ? 'POTPISAN' : 'POSLAN' %>
+          </div>
+        </div>
+        <table class="doc-meta">
+          <tr>
+            <td>Broj naloga</td>
+            <td><%= workOrder.workOrderNumber %></td>
+          </tr>
+          <tr>
+            <td>Broj ugovora</td>
+            <td><%= elevator && elevator.brojUgovora || '-' %></td>
+          </tr>
+          <tr>
+            <td>Datum</td>
+            <td><%= formatDateHR(workOrder.created_at) %></td>
+          </tr>
+          <tr>
+            <td>Serviser</td>
+            <td><%= workOrder.signedByName || 'Nije potpisano' %></td>
+          </tr>
+        </table>
+      </section>
+    </header>
+
+    <!-- SEKCIJA: PODACI O STRANCI -->
+    <section class="section">
+      <div class="section-head">
+        <h2 class="section-title">Podaci o stranci</h2>
+      </div>
+      <div class="section-body">
+        <div class="info-grid">
+          <div class="info-card">
+            <h3 style="margin: 0 0 8px 0; font-size: 11px; color: var(--navy); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 800;">Osnovni podaci</h3>
+            <table class="info-table">
+              <tr>
+                <td>Naziv</td>
+                <td><%= elevator && elevator.nazivStranke || '-' %></td>
+              </tr>
+              <tr>
+                <td>Adresa</td>
+                <td><%= elevator && (elevator.ulica || '') %><% if (elevator && elevator.mjesto) { %>, <%= elevator.mjesto %><% } %></td>
+              </tr>
+            </table>
+          </div>
+          <div class="info-card">
+            <h3 style="margin: 0 0 8px 0; font-size: 11px; color: var(--navy); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 800;">Dizalo</h3>
+            <table class="info-table">
+              <tr>
+                <td>Broj dizala</td>
+                <td><%= elevator && elevator.brojDizala || '-' %></td>
+              </tr>
+              <tr>
+                <td>Model</td>
+                <td><%= elevator && elevator.model || '-' %></td>
+              </tr>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SEKCIJA: OPIS IZVRŠENIH RADOVA -->
+    <section class="section">
+      <div class="section-head">
+        <h2 class="section-title">Opis izvršenih radova</h2>
+      </div>
+      <div class="section-body">
+        <% if (repair && repair.opisPopravka) { %>
+          <div class="desc-box"><%= repair.opisPopravka %></div>
+        <% } else { %>
+          <div class="desc-box" style="color: var(--muted);">Nema zapisanog opisa izvršenih radova.</div>
+        <% } %>
+      </div>
+    </section>
+
+    <!-- SEKCIJA: POTVRDA IZVRŠENJA -->
+    <section class="section">
+      <div class="section-head">
+        <h2 class="section-title">Potvrda izvršenja</h2>
+      </div>
+      <div class="section-body">
+        <div class="sign-grid">
+          <div class="sign-card">
+            <div class="sign-title">Datum</div>
+            <div class="sign-line"><%= formatDateHR(workOrder.signedAt || workOrder.created_at) %></div>
+          </div>
+          <div class="sign-card">
+            <div class="sign-title">Potpis servisera</div>
+            <div class="sign-line">
+              <% if (workOrder.signatureImage) { %>
+                <img class="signature-image" src="<%= workOrder.signatureImage %>" alt="Potpis servisera">
+              <% } else { %>
+                <%= workOrder.signedByName || 'Nije potpisano' %>
+              <% } %>
+            </div>
+          </div>
+          <div class="sign-card">
+            <div class="sign-title">Potpis stranke</div>
+            <div class="sign-line">_______________________</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="footer">
+      <div><%= company && company.naziv || 'Servisna firma' %></div>
+      <div>Generirano: <%= new Date().toLocaleString('hr-HR') %></div>
+    </div>
+
+    <div class="qr-container">
+      <img src="<%= qrCodeDataUrl %>" alt="QR kod">
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

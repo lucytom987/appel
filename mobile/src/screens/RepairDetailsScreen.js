@@ -21,6 +21,16 @@ const statusColor = (repair) => {
   return '#ef4444';
 };
 
+const workOrderStatusLabel = (status) => {
+  const normalizedStatus = String(status || '').toLowerCase();
+
+  if (normalizedStatus === 'draft') return 'NACRT';
+  if (normalizedStatus === 'signed') return 'POTPISAN';
+  if (normalizedStatus === 'sent') return 'POSLAN';
+
+  return String(status || '').toUpperCase();
+};
+
 export default function RepairDetailsScreen({ route, navigation }) {
   const { repair, returnTo = 'repairs', filter } = route.params || {};
   const [repairData, setRepairData] = useState(repair);
@@ -137,7 +147,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
     if (workOrder) {
       Alert.alert(
         'Radni nalog već postoji',
-        `Broj: ${workOrder.workOrderNumber}\nStatus: ${workOrder.status}\n\nŽeliš li otvoriti pregled?`,
+        `Broj: ${workOrder.workOrderNumber}\nStatus: ${workOrderStatusLabel(workOrder.status)}\n\nŽeliš li otvoriti pregled?`,
         [
           { text: 'Odustani', style: 'cancel' },
           {
@@ -172,7 +182,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
 
               Alert.alert(
                 'Radni nalog kreiran',
-                `Broj: ${newWorkOrder?.workOrderNumber || ''}\nStatus: Draft\n\nLink za pregled:\n${newWorkOrder?.viewUrl || '-'}\n\nŽeliš li odmah potpisati i označiti kao poslano?`,
+                `Broj: ${newWorkOrder?.workOrderNumber || ''}\nStatus: ${workOrderStatusLabel(newWorkOrder?.status || 'draft')}\n\nLink za pregled:\n${newWorkOrder?.viewUrl || '-'}\n\nŽeliš li odmah potpisati i označiti kao poslano?`,
                 [
                   {
                     text: 'Otvori pregled',
@@ -199,7 +209,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
                         setWorkOrder(signed);
                         Alert.alert(
                           'Radni nalog potpisan i poslan',
-                          `Broj: ${signed?.workOrderNumber || ''}\nStatus: ${signed?.status || 'sent'}\n\nLink za pregled:\n${signed?.viewUrl || '-'}`
+                          `Broj: ${signed?.workOrderNumber || ''}\nStatus: ${workOrderStatusLabel(signed?.status || 'sent')}\n\nLink za pregled:\n${signed?.viewUrl || '-'}`
                         );
                       } catch (err) {
                         Alert.alert('Greška', err?.response?.data?.message || err?.message || 'Potpis nije uspio');
@@ -232,7 +242,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
               setWorkOrder(newWorkOrder); // Spremi u state
 
               Alert.alert(
-                'Draft kreiran',
+                'Nacrt kreiran',
                 `Radni nalog ${newWorkOrder?.workOrderNumber || ''} je kreiran.\n\nLink za pregled:\n${newWorkOrder?.viewUrl || '-'}\n\nŽeliš li odmah potpisati i označiti kao poslano?`,
                 [
                   {
@@ -260,7 +270,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
                         setWorkOrder(signed); // Ažuriraj state s potpisanom verzijom
                         Alert.alert(
                           'Radni nalog potpisan',
-                          `Status: ${signed?.status || 'signed'}\nBroj: ${signed?.workOrderNumber || ''}\n\nLink za pregled:\n${signed?.viewUrl || '-'}`
+                          `Status: ${workOrderStatusLabel(signed?.status || 'signed')}\nBroj: ${signed?.workOrderNumber || ''}\n\nLink za pregled:\n${signed?.viewUrl || '-'}`
                         );
                       } catch (err) {
                         Alert.alert('Greška', err?.response?.data?.message || err?.message || 'Potpis nije uspio');
@@ -571,7 +581,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
                   fontWeight: '700',
                   color: workOrder.status === 'draft' ? '#92400e' : workOrder.status === 'signed' ? '#065f46' : '#3730a3'
                 }}>
-                  {workOrder.status === 'draft' ? 'NACRT' : workOrder.status === 'signed' ? 'POTPISAN' : workOrder.status.toUpperCase()}
+                  {workOrderStatusLabel(workOrder.status)}
                 </Text>
               </View>
             </View>
@@ -582,20 +592,6 @@ export default function RepairDetailsScreen({ route, navigation }) {
             <Text style={{ fontSize: ms(13), color: '#374151', marginBottom: ms(12) }}>
               <Text style={{ fontWeight: '700' }}>Kreiran:</Text> {new Date(workOrder.created_at).toLocaleString('hr-HR')}
             </Text>
-
-            <TouchableOpacity
-              style={[styles.secondaryButton, { marginTop: 0, backgroundColor: '#2563eb', borderColor: '#2563eb' }]}
-              onPress={async () => {
-                try {
-                  await Linking.openURL(workOrder.viewUrl);
-                } catch (err) {
-                  Alert.alert('Greška', 'Ne mogu otvoriti pregled dokumenta.');
-                }
-              }}
-            >
-              <Ionicons name="eye-outline" size={18} color="#fff" />
-              <Text style={[styles.secondaryText, { color: '#fff', fontWeight: '700' }]}>Pregledaj PDF</Text>
-            </TouchableOpacity>
 
             {workOrder.status === 'draft' && (
               <TouchableOpacity

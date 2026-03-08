@@ -3,20 +3,41 @@
     "version": ">= 3.0.0"
   },
   "build": {
+    "staging": {
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "APP_VARIANT": "staging",
+        "EXPO_PUBLIC_API_URL": "https://appel-backend-staging.onrender.com/api"
+      }
+    },
     "preview": {
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "APP_VARIANT": "staging",
+        "EXPO_PUBLIC_API_URL": "https://appel-backend-staging.onrender.com/api"
       }
     },
     "production": {
       "android": {
         "gradleCommand": ":app:bundleRelease"
+      },
+      "env": {
+        "APP_VARIANT": "production",
+        "EXPO_PUBLIC_API_URL": "https://appel-q97a.onrender.com/api"
       }
     },
     "development": {
       "developmentClient": true,
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "APP_VARIANT": "staging",
+        "EXPO_PUBLIC_API_URL": "https://appel-backend-staging.onrender.com/api"
       }
     }
   },

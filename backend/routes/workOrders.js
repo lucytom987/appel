@@ -46,6 +46,16 @@ const formatHoursHR = (value) => {
   return `${String(numeric).replace('.', ',')} h`;
 };
 
+const normalizeMaterialUnit = (value) => {
+  const raw = String(value || '').trim().toLowerCase();
+  if (!raw) return '';
+
+  if (['kom', 'komad', 'komada', 'komadi', 'pcs', 'piece', 'pieces'].includes(raw)) return 'kom';
+  if (['m', 'metar', 'metra', 'metri', 'meter', 'meters'].includes(raw)) return 'm';
+
+  return raw;
+};
+
 const parseMaterialItems = (value) => {
   const raw = String(value || '').trim();
   if (!raw) return [];
@@ -71,7 +81,7 @@ const parseMaterialItems = (value) => {
       return {
         naziv,
         kolicina: match[1] || '',
-        jedinica: (match[2] || '').trim(),
+        jedinica: normalizeMaterialUnit(match[2]),
         structured: true,
       };
     });

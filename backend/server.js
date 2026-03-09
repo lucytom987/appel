@@ -7,6 +7,7 @@ const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
 const User = require('./models/User');
 const ChatRoom = require('./models/ChatRoom');
+const { setupSoftDeleteRetentionJob } = require('./services/retentionService');
 
 dotenv.config();
 
@@ -31,6 +32,7 @@ mongoose.connect(process.env.MONGODB_URI)
     // Seed default korisnici u pozadini (ne blokiraj server startup)
     const seedDefaultUsers = require('./utils/seedUsers');
     seedDefaultUsers().catch(err => console.error('❌ Seed greška:', err));
+    setupSoftDeleteRetentionJob();
   })
   .catch((err) => console.error('❌ MongoDB greška:', err));
 

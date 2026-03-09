@@ -774,12 +774,6 @@ export const repairDB = {
       serviserID = serviserID._id || serviserID.id || '';
     }
 
-    console.log('💾 repairDB.insert - raw fields:', {
-      dodatniServiseri: repair.dodatniServiseri,
-      radniSati: repair.radniSati,
-      utroseniMaterijal: repair.utroseniMaterijal
-    });
-
     return db.runSync(
       `INSERT INTO repairs (id, elevatorId, serviserID, datumPrijave, datumPopravka, 
        opisKvara, opisPopravka, trebaloBi, status, radniNalogPotpisan, popravkaUPotpunosti, 
@@ -834,12 +828,6 @@ export const repairDB = {
     if (elevatorId && typeof elevatorId === 'object') {
       elevatorId = elevatorId._id || elevatorId.id || '';
     }
-
-    console.log('🔄 repairDB.update - raw fields:', {
-      dodatniServiseri: repair.dodatniServiseri,
-      radniSati: repair.radniSati,
-      utroseniMaterijal: repair.utroseniMaterijal
-    });
 
     return db.runSync(
       `UPDATE repairs SET elevatorId=?, serviserID=?, datumPrijave=?, datumPopravka=?, opisKvara=?, 
@@ -914,7 +902,6 @@ export const repairDB = {
   markSynced: (id, serverId) => {
     try {
       const result = db.runSync('UPDATE repairs SET synced = 1, sync_status = "synced", id = ?, updated_at = ? WHERE id = ?', [serverId, Date.now(), id]);
-      console.log(`✅ markSynced: ${id} → ${serverId}`);
       return result;
     } catch (e) {
       console.error(`❌ markSynced failed: ${id} → ${serverId}:`, e?.message);

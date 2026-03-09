@@ -158,11 +158,6 @@ router.get('/:id', authenticate, async (req, res) => {
 // POST /api/repairs - kreiraj popravak
 router.post('/', authenticate, async (req, res) => {
   try {
-    console.log('📥 POST /repairs payload:', {
-      dodatniServiseri: req.body.dodatniServiseri,
-      radniSati: req.body.radniSati,
-      utroseniMaterijal: req.body.utroseniMaterijal
-    });
     const elevator = await Elevator.findOne({ _id: req.body.elevatorId || req.body.elevator, companyId: req.companyId });
     if (!elevator) {
       return res.status(404).json({ success: false, message: 'Dizalo nije pronađeno ili ne pripada vašoj firmi' });
@@ -193,12 +188,6 @@ router.post('/', authenticate, async (req, res) => {
 
     if (existingRepair) {
       console.log(`⚠️ Duplikat popravka pronađen, vraćam postojeću: ${existingRepair._id}`);
-      console.log('📭 Existing repair fields:', {
-        _id: existingRepair._id,
-        dodatniServiseri: existingRepair.dodatniServiseri,
-        radniSati: existingRepair.radniSati,
-        utroseniMaterijal: existingRepair.utroseniMaterijal
-      });
       const populated = await Repair.findById(existingRepair._id)
         .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala')
         .populate('serviserID', 'ime prezime email');
@@ -224,13 +213,6 @@ router.post('/', authenticate, async (req, res) => {
     });
 
     await repair.save();
-
-    console.log('✅ POST /repairs saved:', {
-      _id: repair._id,
-      dodatniServiseri: repair.dodatniServiseri,
-      radniSati: repair.radniSati,
-      utroseniMaterijal: repair.utroseniMaterijal
-    });
 
     await logAction({
       korisnikId: req.user._id,
@@ -302,13 +284,6 @@ router.put('/:id', authenticate, async (req, res) => {
     const repair = await Repair.findByIdAndUpdate(req.params.id, updatePayload, { new: true, runValidators: true })
       .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala')
       .populate('serviserID', 'ime prezime email');
-
-    console.log('🔄 PUT /repairs/:id updated:', {
-      _id: repair._id,
-      dodatniServiseri: repair.dodatniServiseri,
-      radniSati: repair.radniSati,
-      utroseniMaterijal: repair.utroseniMaterijal
-    });
 
     await logAction({
       korisnikId: req.user._id,

@@ -217,6 +217,10 @@ export const repairsAPI = {
         ? data.popravkaUPotpunosti
         : (typeof data.repairCompleted === 'boolean' ? data.repairCompleted : false),
       napomene: data.napomene || data.notes,
+      dodatniServiseri: data.dodatniServiseri || [],
+      radniSati: data.radniSati || {},
+      utroseniMaterijal: data.utroseniMaterijal || '',
+      photos: data.photos || [],
       prijavio: data.prijavio || data.reportedBy,
       kontaktTelefon: data.kontaktTelefon || data.contactPhone,
       primioPoziv: data.primioPoziv || data.callReceivedBy,
@@ -235,6 +239,10 @@ export const repairsAPI = {
         ? data.popravkaUPotpunosti
         : (typeof data.repairCompleted === 'boolean' ? data.repairCompleted : undefined),
       napomene: data.napomene || data.notes,
+      dodatniServiseri: data.dodatniServiseri || [],
+      radniSati: data.radniSati || {},
+      utroseniMaterijal: data.utroseniMaterijal || '',
+      photos: data.photos || [],
       prijavio: data.prijavio || data.reportedBy,
       kontaktTelefon: data.kontaktTelefon || data.contactPhone,
       primioPoziv: data.primioPoziv || data.callReceivedBy,

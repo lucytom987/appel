@@ -46,6 +46,37 @@ const formatHoursHR = (value) => {
   return `${String(numeric).replace('.', ',')} h`;
 };
 
+const parseMaterialItems = (value) => {
+  const raw = String(value || '').trim();
+  if (!raw) return [];
+
+  return raw
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const parts = line.split(' - ');
+      const naziv = String(parts[0] || '').trim();
+      const qtyUnit = String(parts[1] || '').trim();
+
+      if (!qtyUnit) {
+        return { naziv, kolicina: '', jedinica: '', structured: false };
+      }
+
+      const match = qtyUnit.match(/^([0-9]+(?:[.,][0-9]+)?)\s*(.*)$/);
+      if (!match) {
+        return { naziv, kolicina: qtyUnit, jedinica: '', structured: true };
+      }
+
+      return {
+        naziv,
+        kolicina: match[1] || '',
+        jedinica: (match[2] || '').trim(),
+        structured: true,
+      };
+    });
+};
+
 const pad2 = (value) => String(value).padStart(2, '0');
 const formatDayKey = (date = new Date()) => {
   const day = pad2(date.getDate());
@@ -109,6 +140,9 @@ const buildWorkOrderTemplateData = async (workOrder, req, token) => {
     };
   }
 
+  const materialItems = parseMaterialItems(normalizedRepair?.utroseniMaterijal);
+  const hasStructuredMaterial = materialItems.some((item) => item.structured || item.kolicina || item.jedinica);
+
   const viewUrl = `${resolveBaseUrl(req)}/api/work-orders/view/${workOrder._id}?token=${encodeURIComponent(token)}`;
   const qrCodeDataUrl = await QRCode.toDataURL(viewUrl, { margin: 1, width: 200 });
 
@@ -121,6 +155,8 @@ const buildWorkOrderTemplateData = async (workOrder, req, token) => {
     qrCodeDataUrl,
     formatDateHR,
     formatHoursHR,
+    materialItems,
+    hasStructuredMaterial,
   };
 };
 

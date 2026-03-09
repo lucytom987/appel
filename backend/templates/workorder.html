@@ -586,7 +586,28 @@
       </div>
       <div class="section-body">
         <% if (repair && repair.utroseniMaterijal) { %>
-          <div class="desc-box"><%= repair.utroseniMaterijal %></div>
+          <% if (Array.isArray(materialItems) && materialItems.length && hasStructuredMaterial) { %>
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>Materijal</th>
+                  <th style="width: 20%;">Količina</th>
+                  <th style="width: 20%;">Jedinica</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% materialItems.forEach((item) => { %>
+                  <tr>
+                    <td><%= item.naziv || '-' %></td>
+                    <td><%= item.kolicina || '-' %></td>
+                    <td><%= item.jedinica || '-' %></td>
+                  </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          <% } else { %>
+            <div class="desc-box"><%= repair.utroseniMaterijal %></div>
+          <% } %>
         <% } else { %>
           <div class="desc-box" style="color: var(--muted);">Materijal nije upisan.</div>
         <% } %>

@@ -40,28 +40,27 @@
 
     .page {
       width: 210mm;
-      min-height: 297mm;
       margin: 0 auto 30px auto;
       background: var(--paper);
       box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
       position: relative;
-      overflow: hidden;
+      overflow: visible;
     }
 
     .top-band {
-      height: 8mm;
+      height: 5mm;
       background: linear-gradient(90deg, var(--navy) 0%, var(--blue) 70%, #3b82f6 100%);
     }
 
     .page-inner {
-      padding: 10mm 12mm;
+      padding: 7mm 9mm;
     }
 
     .header {
       display: grid;
       grid-template-columns: 1.3fr 0.9fr;
-      gap: 16px;
-      margin-bottom: 14px;
+      gap: 10px;
+      margin-bottom: 10px;
     }
 
     .brand-panel,
@@ -77,18 +76,18 @@
       display: flex;
       gap: 12px;
       align-items: center;
-      justify-content: center;
-      padding: 12px 14px;
+      justify-content: flex-start;
+      padding: 10px 12px;
       border-bottom: 1px solid var(--line);
       background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
     }
 
     .logo-shell {
-      width: 70px;
-      height: 70px;
+      width: 58px;
+      height: 58px;
       flex: 0 0 auto;
       border: 1px solid var(--line);
-      border-radius: 12px;
+      border-radius: 10px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -108,11 +107,11 @@
     .brand-copy h1 {
       margin: 0;
       color: var(--navy);
-      font-size: 22px;
+      font-size: 18px;
       line-height: 1.1;
       font-weight: 800;
-      letter-spacing: 0.5px;
-      text-align: center;
+      letter-spacing: 0.3px;
+      text-align: left;
     }
 
     .brand-copy .subtitle {
@@ -124,15 +123,15 @@
     .brand-copy {
       display: flex;
       align-items: center;
-      justify-content: center;
-      min-height: 70px;
-      text-align: center;
+      justify-content: flex-start;
+      min-height: 58px;
+      text-align: left;
     }
 
     .company-info {
-      padding: 10px 12px;
-      font-size: 12px;
-      line-height: 1.5;
+      padding: 8px 10px;
+      font-size: 11px;
+      line-height: 1.35;
     }
 
     .company-row {
@@ -160,43 +159,16 @@
     }
 
     .doc-panel-head {
-      padding: 12px 14px;
+      padding: 10px 12px;
       background: var(--blue-soft);
-      border-bottom: 1px solid var(--line);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 10px;
+      border-bottom: 0;
     }
 
     .doc-title {
       color: var(--navy);
-      font-size: 20px;
+      font-size: 16px;
       font-weight: 800;
-      letter-spacing: 1px;
-    }
-
-    .status-pill {
-      display: inline-flex;
-      align-items: center;
-      padding: 6px 10px;
-      border-radius: 999px;
-      font-size: 11px;
-      font-weight: 700;
-      white-space: nowrap;
-      border: 1px solid;
-    }
-
-    .status-pill.draft {
-      background: var(--draft-bg);
-      color: var(--draft-text);
-      border-color: #fcd34d;
-    }
-
-    .status-pill.sent {
-      background: var(--ok-bg);
-      color: var(--ok-text);
-      border-color: #b7ebcd;
+      letter-spacing: 0.6px;
     }
 
     .doc-meta {
@@ -222,11 +194,11 @@
     }
 
     .section {
-      margin-bottom: 12px;
+      margin-bottom: 8px;
     }
 
     .section-head {
-      padding: 8px 12px;
+      padding: 6px 10px;
       background: var(--blue-soft);
       border-bottom: 1px solid var(--line);
     }
@@ -241,19 +213,19 @@
     }
 
     .section-body {
-      padding: 12px;
+      padding: 9px;
     }
 
     .info-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 12px;
+      gap: 8px;
     }
 
     .info-card {
       border: 1px solid var(--line-soft);
       border-radius: 10px;
-      padding: 10px;
+      padding: 8px;
       background: #fbfcfe;
     }
 
@@ -264,7 +236,7 @@
     }
 
     .info-table td {
-      padding: 6px 0;
+      padding: 4px 0;
       border-bottom: 1px dashed #e5eaf2;
       vertical-align: top;
     }
@@ -281,13 +253,13 @@
     }
 
     .desc-box {
-      min-height: 80px;
+      min-height: 38px;
       border: 1px solid var(--line-soft);
       border-radius: 10px;
       background: #fbfcfe;
-      padding: 10px;
-      font-size: 12px;
-      line-height: 1.6;
+      padding: 8px;
+      font-size: 11px;
+      line-height: 1.35;
       white-space: pre-wrap;
       word-wrap: break-word;
       overflow-wrap: break-word;
@@ -306,7 +278,7 @@
     }
 
     .tbl th {
-      padding: 8px;
+      padding: 6px;
       text-align: left;
       background: #f8fbff;
       border-bottom: 1px solid var(--line);
@@ -318,7 +290,7 @@
     }
 
     .tbl td {
-      padding: 7px 8px;
+      padding: 5px 6px;
       border-bottom: 1px solid #e8edf5;
       vertical-align: top;
     }
@@ -342,15 +314,15 @@
     .sign-grid {
       display: grid;
       grid-template-columns: 0.7fr 1fr 1fr;
-      gap: 12px;
+      gap: 8px;
     }
 
     .sign-card {
       border: 1px solid var(--line-soft);
       border-radius: 10px;
-      padding: 10px;
+      padding: 8px;
       background: white;
-      min-height: 100px;
+      min-height: 72px;
       display: flex;
       flex-direction: column;
     }
@@ -361,7 +333,7 @@
       text-transform: uppercase;
       letter-spacing: 0.8px;
       font-weight: 800;
-      margin-bottom: 35px;
+      margin-bottom: 16px;
       flex: 0 0 auto;
     }
 
@@ -378,7 +350,7 @@
 
     .signature-image {
       max-width: 100%;
-      max-height: 50px;
+      max-height: 36px;
       margin-top: 6px;
     }
 
@@ -387,16 +359,15 @@
       padding-top: 8px;
       border-top: 1px solid var(--line);
       display: flex;
-      justify-content: space-between;
+      justify-content: flex-end;
       gap: 12px;
       font-size: 10px;
       color: var(--muted);
     }
 
     .qr-container {
-      position: absolute;
-      bottom: 12mm;
-      right: 12mm;
+      margin-top: 8px;
+      margin-left: auto;
       width: 80px;
       height: 80px;
       border: 1px solid var(--line-soft);
@@ -466,29 +437,8 @@
 
       <section class="doc-panel">
         <div class="doc-panel-head">
-          <div class="doc-title">RADNI NALOG</div>
-          <div class="status-pill <%= workOrder.status === 'draft' ? 'draft' : 'sent' %>">
-            <%= workOrder.status === 'draft' ? 'NACRT' : workOrder.status === 'signed' ? 'POTPISAN' : 'POSLAN' %>
-          </div>
+          <div class="doc-title">RADNI NALOG – <%= workOrder.workOrderNumber %></div>
         </div>
-        <table class="doc-meta">
-          <tr>
-            <td>Broj naloga</td>
-            <td><%= workOrder.workOrderNumber %></td>
-          </tr>
-          <tr>
-            <td>Broj ugovora</td>
-            <td><%= elevator && elevator.brojUgovora || '-' %></td>
-          </tr>
-          <tr>
-            <td>Datum</td>
-            <td><%= formatDateHR(workOrder.created_at) %></td>
-          </tr>
-          <tr>
-            <td>Serviser</td>
-            <td><%= workOrder.signedByName || 'Nije potpisano' %></td>
-          </tr>
-        </table>
       </section>
     </header>
 
@@ -510,6 +460,10 @@
                 <td>Adresa</td>
                 <td><%= elevator && (elevator.ulica || '') %><% if (elevator && elevator.mjesto) { %>, <%= elevator.mjesto %><% } %></td>
               </tr>
+              <tr>
+                <td>Broj ugovora</td>
+                <td><%= elevator && elevator.brojUgovora || '-' %></td>
+              </tr>
             </table>
           </div>
           <div class="info-card">
@@ -518,10 +472,6 @@
               <tr>
                 <td>Broj dizala</td>
                 <td><%= elevator && elevator.brojDizala || '-' %></td>
-              </tr>
-              <tr>
-                <td>Model</td>
-                <td><%= elevator && elevator.model || '-' %></td>
               </tr>
             </table>
           </div>
@@ -540,42 +490,6 @@
         <% } else { %>
           <div class="desc-box" style="color: var(--muted);">Nema zapisanog opisa izvršenih radova.</div>
         <% } %>
-      </div>
-    </section>
-
-    <!-- SEKCIJA: SERVISERI I RADNI SATI -->
-    <section class="section">
-      <div class="section-head">
-        <h2 class="section-title">Serviseri i radni sati</h2>
-      </div>
-      <div class="section-body">
-        <table class="info-table">
-          <tr>
-            <td>Glavni serviser</td>
-            <td>
-              <%= repair && repair.serviserID
-                ? `${repair.serviserID.ime || ''} ${repair.serviserID.prezime || ''}`.trim() || repair.serviserID.email || '-'
-                : '-' %>
-              (<%= formatHoursHR(repair && repair.radniSati && repair.radniSati.glavni) %>)
-            </td>
-          </tr>
-          <% if (repair && Array.isArray(repair.dodatniServiseri) && repair.dodatniServiseri.length) { %>
-            <% repair.dodatniServiseri.forEach((k, idx) => { %>
-              <tr>
-                <td><%= `Kolega ${idx + 1}` %></td>
-                <td>
-                  <%= `${k.ime || ''} ${k.prezime || ''}`.trim() || k.email || '-' %>
-                  (<%= formatHoursHR(repair && repair.radniSati && repair.radniSati.kolega) %>)
-                </td>
-              </tr>
-            <% }) %>
-          <% } else { %>
-            <tr>
-              <td>Kolega</td>
-              <td>-</td>
-            </tr>
-          <% } %>
-        </table>
       </div>
     </section>
 
@@ -614,6 +528,54 @@
       </div>
     </section>
 
+    <!-- SEKCIJA: SERVISERI I RADNI SATI -->
+    <section class="section">
+      <div class="section-head">
+        <h2 class="section-title">Serviseri i radni sati</h2>
+      </div>
+      <div class="section-body">
+        <% 
+          const glavniSatiRaw = repair && repair.radniSati && repair.radniSati.glavni;
+          const kolegaSatiRaw = repair && repair.radniSati && repair.radniSati.kolega;
+          const glavniSatiNum = Number(glavniSatiRaw);
+          const kolegaSatiNum = Number(kolegaSatiRaw);
+          const brojKolega = repair && Array.isArray(repair.dodatniServiseri) ? repair.dodatniServiseri.length : 0;
+          const totalSati = (Number.isFinite(glavniSatiNum) ? glavniSatiNum : 0) + ((Number.isFinite(kolegaSatiNum) ? kolegaSatiNum : 0) * brojKolega);
+        %>
+        <table class="info-table">
+          <tr>
+            <td>Glavni serviser</td>
+            <td>
+              <%= repair && repair.serviserID
+                ? `${repair.serviserID.ime || ''} ${repair.serviserID.prezime || ''}`.trim() || repair.serviserID.email || '-'
+                : '-' %>
+              (<%= formatHoursHR(glavniSatiRaw) %>)
+            </td>
+          </tr>
+          <% if (repair && Array.isArray(repair.dodatniServiseri) && repair.dodatniServiseri.length) { %>
+            <% repair.dodatniServiseri.forEach((k, idx) => { %>
+              <tr>
+                <td><%= `Kolega ${idx + 1}` %></td>
+                <td>
+                  <%= `${k.ime || ''} ${k.prezime || ''}`.trim() || k.email || '-' %>
+                  (<%= formatHoursHR(kolegaSatiRaw) %>)
+                </td>
+              </tr>
+            <% }) %>
+          <% } else { %>
+            <tr>
+              <td>Kolega</td>
+              <td>-</td>
+            </tr>
+          <% } %>
+          <tr>
+            <td><strong>Ukupno radnih sati</strong></td>
+            <td><strong><%= formatHoursHR(totalSati) %></strong></td>
+          </tr>
+        </table>
+      </div>
+    </section>
+
     <!-- SEKCIJA: POTVRDA IZVRŠENJA -->
     <section class="section">
       <div class="section-head">
@@ -644,7 +606,6 @@
     </section>
 
     <div class="footer">
-      <div><%= company && company.naziv || 'Servisna firma' %></div>
       <div>Generirano: <%= new Date().toLocaleString('hr-HR') %></div>
     </div>
 

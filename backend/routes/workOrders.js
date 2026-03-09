@@ -39,6 +39,16 @@ const formatDateHR = (value) => {
   });
 };
 
+const formatDateOnlyHR = (value) => {
+  if (!value) return '-';
+  const date = value instanceof Date ? value : new Date(value);
+  return date.toLocaleDateString('hr-HR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
+};
+
 const formatHoursHR = (value) => {
   if (value === null || value === undefined || value === '') return '-';
   const numeric = Number(value);
@@ -164,6 +174,7 @@ const buildWorkOrderTemplateData = async (workOrder, req, token) => {
     elevator,
     qrCodeDataUrl,
     formatDateHR,
+    formatDateOnlyHR,
     formatHoursHR,
     materialItems,
     hasStructuredMaterial,

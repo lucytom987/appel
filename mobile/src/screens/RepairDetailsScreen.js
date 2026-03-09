@@ -1,5 +1,5 @@
 ﻿import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, BackHandler, Image, ActivityIndicator, Modal, Linking } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, BackHandler, Image, ActivityIndicator, Modal, Linking, KeyboardAvoidingView, Platform, LayoutAnimation, UIManager } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { elevatorDB, repairDB, userDB } from '../database/db';
 import { repairsAPI, workOrdersAPI, usersAPI } from '../services/api';
@@ -112,6 +112,13 @@ export default function RepairDetailsScreen({ route, navigation }) {
     repairData.radniSati?.kolega != null ? String(repairData.radniSati.kolega) : ''
   );
   const [utroseniMaterijal, setUtroseniMaterijal] = useState(repairData.utroseniMaterijal || '');
+  const [materijalStavke, setMaterijalStavke] = useState([{ naziv: '', kolicina: '', jedinica: '' }]);
+
+  useEffect(() => {
+    if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+      UIManager.setLayoutAnimationEnabledExperimental(true);
+    }
+  }, []);
 
   // Učitaj postojeći radni nalog (ako postoji)
   useEffect(() => {
@@ -171,6 +178,34 @@ export default function RepairDetailsScreen({ route, navigation }) {
 
     fetchUsers();
   }, [online, user]);
+
+  const toggleKolege = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setShowKolege((prev) => !prev);
+  };
+
+  const selectKolega = (id) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setKolegaId(id);
+    setShowKolege(false);
+  };
+
+  const updateMaterijalStavka = (index, field, value) => {
+    setMaterijalStavke((prev) => prev.map((stavka, idx) => (
+      idx === index ? { ...stavka, [field]: value } : stavka
+    )));
+  };
+
+  const addMaterijalStavka = () => {
+    setMaterijalStavke((prev) => [...prev, { naziv: '', kolicina: '', jedinica: '' }]);
+  };
+
+  const removeMaterijalStavka = (index) => {
+    setMaterijalStavke((prev) => {
+      const next = prev.filter((_, idx) => idx !== index);
+      return next.length ? next : [{ naziv: '', kolicina: '', jedinica: '' }];
+    });
+  };
 
   const handleCreateWorkOrder = async () => {
     const id = repairData._id || repairData.id;
@@ -367,6 +402,18 @@ export default function RepairDetailsScreen({ route, navigation }) {
 
     const glavniSati = parseHours(radniSatiGlavni);
     const kolegaSati = parseHours(radniSatiKolega);
+    const materijalLinije = materijalStavke
+      .map((stavka) => {
+        const naziv = String(stavka.naziv || '').trim();
+        const kolicina = String(stavka.kolicina || '').trim();
+        const jedinica = String(stavka.jedinica || '').trim();
+        if (!naziv) return null;
+        if (!kolicina) return naziv;
+        return `${naziv} - ${kolicina}${jedinica ? ` ${jedinica}` : ''}`;
+      })
+      .filter(Boolean);
+    const dodatnaNapomenaMaterijala = String(utroseniMaterijal || '').trim();
+    const materijalTekst = [...materijalLinije, dodatnaNapomenaMaterijala].filter(Boolean).join('\n');
     
     const payload = {
       id,
@@ -381,7 +428,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
         glavni: glavniSati,
         kolega: kolegaId ? kolegaSati : null,
       },
-      utroseniMaterijal,
+      utroseniMaterijal: materijalTekst,
       photos,
       updated_at: Date.now(),
     };
@@ -390,6 +437,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
     try {
       const onlineNow = online;
       let savedSuccessfully = false;
+      let finalRepairId = id;
       const shouldCreateOnServer = onlineNow && (isLocalId || !existsInDB);
       
       // Provjeri postoji li već u lokalnoj bazi
@@ -417,8 +465,13 @@ export default function RepairDetailsScreen({ route, navigation }) {
             const serverId = created?._id || created?.id;
 
             if (serverId) {
-              repairDB.markSynced(id, serverId);
-              repairDB.update(serverId, { ...repairData, ...created, synced: 1, sync_status: 'synced' });
+              finalRepairId = serverId;
+              if (existsInDB) {
+                repairDB.markSynced(id, serverId);
+                repairDB.update(serverId, { ...repairData, ...created, synced: 1, sync_status: 'synced' });
+              } else {
+                repairDB.insert({ ...repairData, ...created, id: serverId, _id: serverId, synced: 1, sync_status: 'synced' });
+              }
               setRepairData((prev) => ({ ...prev, ...created, id: serverId, _id: serverId, synced: 1, sync_status: 'synced' }));
               savedSuccessfully = true;
             } else {
@@ -429,20 +482,20 @@ export default function RepairDetailsScreen({ route, navigation }) {
             const updated = response.data?.data || response.data;
             repairDB.update(id, { ...repairData, ...updated, synced: 1, sync_status: 'synced' });
             setRepairData((prev) => ({ ...prev, ...updated, synced: 1, sync_status: 'synced' }));
+            finalRepairId = id;
             savedSuccessfully = true;
           }
         }
       }
       
-      Alert.alert('Spremljeno', 'Popravka je spremljena', [
+      Alert.alert('Pohranjeno', 'Popravak je uspješno pohranjen.', [
         { text: 'OK', onPress: () => {
           // Provjeri trebali li pitati o radnom nalogu
           // Samo ako je sinkronizirano s serverom (ne lokalni ID)
-          const isLocalId = String(id).startsWith('local_');
-          const nowSynced = savedSuccessfully && onlineNow && !isLocalId;
+          const nowSynced = savedSuccessfully && onlineNow && !String(finalRepairId || '').startsWith('local_');
           
           if (nowSynced && !wasCompleted && status === 'completed') {
-            promptWorkOrderFlow(id);
+            promptWorkOrderFlow(finalRepairId);
           }
           if (navigation.canGoBack()) {
             navigation.goBack();
@@ -487,7 +540,12 @@ export default function RepairDetailsScreen({ route, navigation }) {
         <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView style={styles.content}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? ms(90) : ms(20)}
+      >
+      <ScrollView style={styles.content} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: ms(100) }}>
         <View style={styles.elevatorHero}>
           <TouchableOpacity
             style={[styles.elevatorBadgeLarge, { borderColor: statusColor({ status, trebaloBi: isTrebaloBi }) }]}
@@ -533,7 +591,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
           />
 
           <Text style={[styles.sectionTitle, { fontSize: ms(15), marginTop: ms(14), marginBottom: ms(8) }]}>Kolega (opcionalno)</Text>
-          <TouchableOpacity style={styles.kolegaToggle} onPress={() => setShowKolege((v) => !v)}>
+          <TouchableOpacity style={styles.kolegaToggle} onPress={toggleKolege}>
             <Ionicons name={showKolege ? 'chevron-up' : 'chevron-down'} size={18} color="#0f172a" />
             <Text style={styles.kolegaToggleText}>
               {kolegaId
@@ -555,7 +613,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
               <View style={styles.kolegeList}>
                 <TouchableOpacity
                   style={[styles.userRow, !kolegaId && styles.userRowSelected]}
-                  onPress={() => setKolegaId(null)}
+                  onPress={() => selectKolega(null)}
                 >
                   <Ionicons name={!kolegaId ? 'radio-button-on' : 'radio-button-off'} size={18} color={!kolegaId ? '#0ea5e9' : '#94a3b8'} />
                   <Text style={styles.userRowText}>Bez kolege</Text>
@@ -567,7 +625,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
                     <TouchableOpacity
                       key={kid}
                       style={[styles.userRow, selected && styles.userRowSelected]}
-                      onPress={() => setKolegaId(kid)}
+                      onPress={() => selectKolega(kid)}
                     >
                       <Ionicons name={selected ? 'radio-button-on' : 'radio-button-off'} size={18} color={selected ? '#0ea5e9' : '#94a3b8'} />
                       <Text style={styles.userRowText}>{`${k.ime || ''} ${k.prezime || ''}`.trim() || k.email}</Text>
@@ -594,11 +652,42 @@ export default function RepairDetailsScreen({ route, navigation }) {
 
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Utrošeni materijal</Text>
+          {materijalStavke.map((stavka, index) => (
+            <View key={`mat-${index}`} style={styles.materijalRow}>
+              <TextInput
+                style={[styles.input, styles.materijalNaziv]}
+                value={stavka.naziv}
+                onChangeText={(text) => updateMaterijalStavka(index, 'naziv', text)}
+                placeholder="Materijal"
+              />
+              <TextInput
+                style={[styles.input, styles.materijalKolicina]}
+                value={stavka.kolicina}
+                onChangeText={(text) => updateMaterijalStavka(index, 'kolicina', text)}
+                placeholder="Količina"
+                keyboardType="decimal-pad"
+              />
+              <TextInput
+                style={[styles.input, styles.materijalJedinica]}
+                value={stavka.jedinica}
+                onChangeText={(text) => updateMaterijalStavka(index, 'jedinica', text)}
+                placeholder="Jedinica"
+              />
+              <TouchableOpacity style={styles.removeMaterijalBtn} onPress={() => removeMaterijalStavka(index)}>
+                <Ionicons name="close-circle" size={22} color="#ef4444" />
+              </TouchableOpacity>
+            </View>
+          ))}
+          <TouchableOpacity style={styles.addMaterijalBtn} onPress={addMaterijalStavka}>
+            <Ionicons name="add-circle-outline" size={18} color="#2563eb" />
+            <Text style={styles.addMaterijalText}>Dodaj stavku materijala</Text>
+          </TouchableOpacity>
+          <Text style={[styles.fieldLabel, { marginTop: ms(10) }]}>Dodatna napomena (opcionalno)</Text>
           <TextInput
             style={[styles.input, styles.textArea]}
             value={utroseniMaterijal}
             onChangeText={setUtroseniMaterijal}
-            placeholder="Upiši utrošeni materijal (npr. osigurač 10A x2, kontaktor, vijci...)"
+            placeholder="Dodatni opis materijala"
             multiline
           />
         </View>
@@ -838,6 +927,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
 
         <View style={{ height: 60 }} />
       </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 }
@@ -1034,6 +1124,36 @@ const styles = StyleSheet.create({
     fontSize: ms(14),
     color: '#0f172a',
     fontWeight: '500',
+  },
+  materijalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: ms(6),
+    marginTop: ms(8),
+  },
+  materijalNaziv: {
+    flex: 1.5,
+  },
+  materijalKolicina: {
+    flex: 1,
+  },
+  materijalJedinica: {
+    flex: 1,
+  },
+  removeMaterijalBtn: {
+    paddingHorizontal: ms(4),
+    paddingVertical: ms(4),
+  },
+  addMaterijalBtn: {
+    marginTop: ms(10),
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: ms(6),
+  },
+  addMaterijalText: {
+    color: '#2563eb',
+    fontWeight: '600',
+    fontSize: ms(14),
   },
   modalActions: {
     flexDirection: 'row',

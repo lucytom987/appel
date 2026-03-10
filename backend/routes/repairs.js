@@ -29,9 +29,16 @@ const normalizeWorkHours = (value) => {
     return Number.isFinite(number) && number >= 0 ? number : null;
   };
 
+  const additionalHours = Array.isArray(input.dodatni)
+    ? input.dodatni.map(parse)
+    : [];
+
+  const legacyColleagueHours = parse(input.kolega);
+
   return {
     glavni: parse(input.glavni),
-    kolega: parse(input.kolega),
+    kolega: legacyColleagueHours ?? additionalHours[0] ?? null,
+    dodatni: additionalHours,
   };
 };
 

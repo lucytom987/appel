@@ -32,6 +32,14 @@ const workOrderStatusLabel = (status) => {
   return String(status || '').toUpperCase();
 };
 
+const MAX_ADDITIONAL_SERVICERS = 2;
+
+const getUserId = (entry) => {
+  if (!entry) return null;
+  if (typeof entry === 'object') return entry._id || entry.id || null;
+  return entry;
+};
+
 export default function RepairDetailsScreen({ route, navigation }) {
   const { repair, returnTo = 'repairs', filter } = route.params || {};
   const [repairData, setRepairData] = useState(repair);
@@ -101,16 +109,25 @@ export default function RepairDetailsScreen({ route, navigation }) {
   const [loadingWorkOrder, setLoadingWorkOrder] = useState(false);
   const [korisnici, setKorisnici] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
-  const [showKolege, setShowKolege] = useState(false);
-  const initialKolegaId = Array.isArray(repairData.dodatniServiseri) && repairData.dodatniServiseri.length
-    ? (repairData.dodatniServiseri[0]?._id || repairData.dodatniServiseri[0]?.id || repairData.dodatniServiseri[0])
-    : null;
-  const [kolegaId, setKolegaId] = useState(initialKolegaId);
+  const [showKolegePickerIndex, setShowKolegePickerIndex] = useState(null);
+  const initialAdditionalServicers = (() => {
+    const ids = Array.isArray(repairData.dodatniServiseri)
+      ? repairData.dodatniServiseri.map(getUserId).filter(Boolean).slice(0, MAX_ADDITIONAL_SERVICERS)
+      : [];
+    const detailedHours = Array.isArray(repairData.radniSati?.dodatni)
+      ? repairData.radniSati.dodatni
+      : [];
+
+    return ids.map((userId, index) => ({
+      userId,
+      hours: detailedHours[index] != null
+        ? String(detailedHours[index])
+        : (index === 0 && repairData.radniSati?.kolega != null ? String(repairData.radniSati.kolega) : ''),
+    }));
+  })();
+  const [additionalServicers, setAdditionalServicers] = useState(initialAdditionalServicers);
   const [radniSatiGlavni, setRadniSatiGlavni] = useState(
     repairData.radniSati?.glavni != null ? String(repairData.radniSati.glavni) : ''
-  );
-  const [radniSatiKolega, setRadniSatiKolega] = useState(
-    repairData.radniSati?.kolega != null ? String(repairData.radniSati.kolega) : ''
   );
   const [utroseniMaterijal, setUtroseniMaterijal] = useState(repairData.utroseniMaterijal || '');
   const [materijalStavke, setMaterijalStavke] = useState([{ naziv: '', kolicina: '', jedinica: '' }]);
@@ -182,15 +199,42 @@ export default function RepairDetailsScreen({ route, navigation }) {
     fetchUsers();
   }, [online, user]);
 
-  const toggleKolege = () => {
+  const toggleKolege = (index) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setShowKolege((prev) => !prev);
+    setShowKolegePickerIndex((prev) => (prev === index ? null : index));
   };
 
-  const selectKolega = (id) => {
+  const selectKolega = (index, id) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setKolegaId(id);
-    setShowKolege(false);
+    setAdditionalServicers((prev) => prev.map((entry, idx) => (
+      idx === index ? { ...entry, userId: id } : entry
+    )));
+    setShowKolegePickerIndex(null);
+  };
+
+  const addAdditionalServicer = () => {
+    if (additionalServicers.length >= MAX_ADDITIONAL_SERVICERS) return;
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setAdditionalServicers((prev) => [...prev, { userId: null, hours: '' }]);
+    setShowKolegePickerIndex(additionalServicers.length);
+  };
+
+  const removeAdditionalServicer = (index) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setAdditionalServicers((prev) => prev.filter((_, idx) => idx !== index));
+    setShowKolegePickerIndex((prev) => (prev === index ? null : prev != null && prev > index ? prev - 1 : prev));
+  };
+
+  const updateAdditionalServicerHours = (index, hours) => {
+    setAdditionalServicers((prev) => prev.map((entry, idx) => (
+      idx === index ? { ...entry, hours } : entry
+    )));
+  };
+
+  const getUserDisplayName = (id) => {
+    if (!id) return '';
+    const found = korisnici.find((k) => (k._id || k.id) === id);
+    return found ? `${found.ime || ''} ${found.prezime || ''}`.trim() || found.email || '' : '';
   };
 
   const updateMaterijalStavka = (index, field, value) => {
@@ -426,7 +470,12 @@ export default function RepairDetailsScreen({ route, navigation }) {
     };
 
     const glavniSati = parseHours(radniSatiGlavni);
-    const kolegaSati = parseHours(radniSatiKolega);
+    const cleanedAdditionalServicers = additionalServicers
+      .map((entry) => ({
+        userId: entry.userId,
+        hours: parseHours(entry.hours),
+      }))
+      .filter((entry) => entry.userId);
     const materijalLinije = materijalStavke
       .map((stavka) => {
         const naziv = String(stavka.naziv || '').trim();
@@ -448,10 +497,11 @@ export default function RepairDetailsScreen({ route, navigation }) {
       status,
       trebaloBi: isTrebaloBi,
       radniNalogPotpisan,
-      dodatniServiseri: kolegaId ? [kolegaId] : [],
+      dodatniServiseri: cleanedAdditionalServicers.map((entry) => entry.userId),
       radniSati: {
         glavni: glavniSati,
-        kolega: kolegaId ? kolegaSati : null,
+        kolega: cleanedAdditionalServicers[0]?.hours ?? null,
+        dodatni: cleanedAdditionalServicers.map((entry) => entry.hours),
       },
       utroseniMaterijal: materijalTekst,
       photos,
@@ -615,64 +665,85 @@ export default function RepairDetailsScreen({ route, navigation }) {
             placeholder="npr. 2.5"
           />
 
-          <Text style={[styles.sectionTitle, { fontSize: ms(15), marginTop: ms(14), marginBottom: ms(8) }]}>Kolega (opcionalno)</Text>
-          <TouchableOpacity style={styles.kolegaToggle} onPress={toggleKolege}>
-            <Ionicons name={showKolege ? 'chevron-up' : 'chevron-down'} size={18} color="#0f172a" />
-            <Text style={styles.kolegaToggleText}>
-              {kolegaId
-                ? (() => {
-                    const found = korisnici.find((k) => (k._id || k.id) === kolegaId);
-                    return found ? `${found.ime || ''} ${found.prezime || ''}`.trim() || 'Kolega odabran' : 'Kolega odabran';
-                  })()
-                : 'Dodaj kolegu'}
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.additionalHeaderRow}>
+            <Text style={[styles.sectionTitle, { fontSize: ms(15), marginTop: ms(14), marginBottom: ms(8), flex: 1 }]}>Dodatni serviseri</Text>
+            {additionalServicers.length < MAX_ADDITIONAL_SERVICERS && (
+              <TouchableOpacity style={styles.addKolegaButton} onPress={addAdditionalServicer}>
+                <Ionicons name="add-circle-outline" size={18} color="#2563eb" />
+                <Text style={styles.addKolegaButtonText}>Dodaj</Text>
+              </TouchableOpacity>
+            )}
+          </View>
 
-          {showKolege && (
-            loadingUsers ? (
-              <View style={styles.userRow}>
-                <ActivityIndicator size="small" color="#0ea5e9" />
-                <Text style={styles.userRowText}>Učitavanje...</Text>
-              </View>
-            ) : (
-              <View style={styles.kolegeList}>
-                <TouchableOpacity
-                  style={[styles.userRow, !kolegaId && styles.userRowSelected]}
-                  onPress={() => selectKolega(null)}
-                >
-                  <Ionicons name={!kolegaId ? 'radio-button-on' : 'radio-button-off'} size={18} color={!kolegaId ? '#0ea5e9' : '#94a3b8'} />
-                  <Text style={styles.userRowText}>Bez kolege</Text>
+          {additionalServicers.length === 0 && (
+            <Text style={styles.emptyAssistantsText}>Ako nema kolege, na radnom nalogu će se prikazati samo glavni serviser.</Text>
+          )}
+
+          {additionalServicers.map((entry, index) => {
+            const label = getUserDisplayName(entry.userId);
+            return (
+              <View key={`additional-servicer-${index}`} style={styles.additionalServicerCard}>
+                <View style={styles.additionalServicerTopRow}>
+                  <Text style={styles.additionalServicerTitle}>{`Serviser ${index + 2}`}</Text>
+                  <TouchableOpacity style={styles.removeKolegaInlineBtn} onPress={() => removeAdditionalServicer(index)}>
+                    <Ionicons name="trash-outline" size={18} color="#ef4444" />
+                  </TouchableOpacity>
+                </View>
+
+                <TouchableOpacity style={styles.kolegaToggle} onPress={() => toggleKolege(index)}>
+                  <Ionicons name={showKolegePickerIndex === index ? 'chevron-up' : 'chevron-down'} size={18} color="#0f172a" />
+                  <Text style={styles.kolegaToggleText}>{label || 'Odaberi servisera'}</Text>
                 </TouchableOpacity>
-                {korisnici.map((k) => {
-                  const kid = k._id || k.id;
-                  const selected = kolegaId === kid;
-                  return (
-                    <TouchableOpacity
-                      key={kid}
-                      style={[styles.userRow, selected && styles.userRowSelected]}
-                      onPress={() => selectKolega(kid)}
-                    >
-                      <Ionicons name={selected ? 'radio-button-on' : 'radio-button-off'} size={18} color={selected ? '#0ea5e9' : '#94a3b8'} />
-                      <Text style={styles.userRowText}>{`${k.ime || ''} ${k.prezime || ''}`.trim() || k.email}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            )
-          )}
 
-          {kolegaId && (
-            <>
-              <Text style={[styles.fieldLabel, { marginTop: ms(12) }]}>Radni sati (kolega)</Text>
-              <TextInput
-                style={styles.input}
-                value={radniSatiKolega}
-                onChangeText={setRadniSatiKolega}
-                keyboardType="decimal-pad"
-                placeholder="npr. 2"
-              />
-            </>
-          )}
+                {showKolegePickerIndex === index && (
+                  loadingUsers ? (
+                    <View style={styles.userRow}>
+                      <ActivityIndicator size="small" color="#0ea5e9" />
+                      <Text style={styles.userRowText}>Učitavanje...</Text>
+                    </View>
+                  ) : (
+                    <View style={styles.kolegeList}>
+                      <TouchableOpacity
+                        style={[styles.userRow, !entry.userId && styles.userRowSelected]}
+                        onPress={() => selectKolega(index, null)}
+                      >
+                        <Ionicons name={!entry.userId ? 'radio-button-on' : 'radio-button-off'} size={18} color={!entry.userId ? '#0ea5e9' : '#94a3b8'} />
+                        <Text style={styles.userRowText}>Bez servisera</Text>
+                      </TouchableOpacity>
+                      {korisnici
+                        .filter((k) => {
+                          const kid = k._id || k.id;
+                          return !additionalServicers.some((item, itemIndex) => itemIndex !== index && item.userId === kid);
+                        })
+                        .map((k) => {
+                          const kid = k._id || k.id;
+                          const selected = entry.userId === kid;
+                          return (
+                            <TouchableOpacity
+                              key={`${index}-${kid}`}
+                              style={[styles.userRow, selected && styles.userRowSelected]}
+                              onPress={() => selectKolega(index, kid)}
+                            >
+                              <Ionicons name={selected ? 'radio-button-on' : 'radio-button-off'} size={18} color={selected ? '#0ea5e9' : '#94a3b8'} />
+                              <Text style={styles.userRowText}>{`${k.ime || ''} ${k.prezime || ''}`.trim() || k.email}</Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                    </View>
+                  )
+                )}
+
+                <Text style={[styles.fieldLabel, { marginTop: ms(12) }]}>{`Radni sati (${label || `serviser ${index + 2}`})`}</Text>
+                <TextInput
+                  style={styles.input}
+                  value={entry.hours}
+                  onChangeText={(text) => updateAdditionalServicerHours(index, text)}
+                  keyboardType="decimal-pad"
+                  placeholder="npr. 1.5"
+                />
+              </View>
+            );
+          })}
         </View>
 
         <View style={styles.card}>
@@ -1125,6 +1196,53 @@ const styles = StyleSheet.create({
     fontSize: ms(14),
     color: '#111827',
     fontWeight: '600',
+  },
+  additionalHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  addKolegaButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: ms(6),
+    paddingHorizontal: ms(10),
+    paddingVertical: ms(8),
+    borderRadius: ms(10),
+    backgroundColor: '#eff6ff',
+  },
+  addKolegaButtonText: {
+    fontSize: ms(13),
+    color: '#2563eb',
+    fontWeight: '700',
+  },
+  emptyAssistantsText: {
+    fontSize: ms(13),
+    color: '#64748b',
+    lineHeight: ms(18),
+    marginBottom: ms(6),
+  },
+  additionalServicerCard: {
+    marginTop: ms(10),
+    padding: ms(10),
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: ms(12),
+    backgroundColor: '#fafcff',
+  },
+  additionalServicerTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: ms(8),
+  },
+  additionalServicerTitle: {
+    fontSize: ms(14),
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  removeKolegaInlineBtn: {
+    padding: ms(4),
   },
   kolegaToggle: {
     flexDirection: 'row',

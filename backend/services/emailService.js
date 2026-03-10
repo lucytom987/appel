@@ -19,6 +19,8 @@ const sendWorkOrderEmail = async (workOrder, company, repair, elevator, download
       return { success: true, mode: 'test' };
     }
 
+    const hasAttachment = Array.isArray(options.attachments) && options.attachments.length > 0;
+
     const fallbackHtmlTemplate = `
       <!DOCTYPE html>
       <html lang="hr" style="font-family: Arial, sans-serif; color: #111827;">
@@ -60,6 +62,13 @@ const sendWorkOrderEmail = async (workOrder, company, repair, elevator, download
           <div>
             <div class="badge">Radni nalog: ${workOrder.workOrderNumber}</div>
 
+            <div class="section-title">📎 Dokument</div>
+            <div class="section-content">
+              ${hasAttachment
+                ? 'U privitku ovog emaila nalazi se službeni PDF radnog naloga.'
+                : 'PDF privitak trenutno nije dostupan. Dokument možete preuzeti putem poveznice ispod.'}
+            </div>
+
             <div class="section-title">📋 Informacije o popravku</div>
             <div class="section-content">
               <strong>Stranka:</strong> ${elevator?.nazivStranke || '-'}<br/>
@@ -81,7 +90,7 @@ const sendWorkOrderEmail = async (workOrder, company, repair, elevator, download
 
             <div class="section-title">📥 Preuzmi dokument</div>
             <div class="section-content">
-              Kliknite na gumb ispod da preuzme PDF dokument:
+              Kliknite na gumb ispod za preuzimanje dokumenta:
               <br/>
               <a class="button" href="${downloadUrl}">Preuzmi PDF radni nalog</a>
             </div>

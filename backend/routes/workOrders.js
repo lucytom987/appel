@@ -379,7 +379,6 @@ router.post('/:id/sign', authenticate, async (req, res) => {
         }
 
         await sendWorkOrderEmail(workOrder, company, repair, repair.elevatorId, downloadUrl, {
-          htmlBody: htmlForEmail,
           subject: `Radni nalog ${workOrder.workOrderNumber}`,
           attachments: pdfBase64
             ? [

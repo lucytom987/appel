@@ -21,6 +21,8 @@
     html, body {
       margin: 0;
       padding: 0;
+      width: 210mm;
+      min-height: 297mm;
       background: #e2e8f0;
       color: var(--ink);
       font-family: Arial, Helvetica, sans-serif;
@@ -30,12 +32,14 @@
 
     .page {
       width: 210mm;
-      min-height: 297mm;
+      height: 297mm;
+      max-height: 297mm;
       margin: 8mm auto;
       background: var(--bg);
       box-shadow: 0 16px 40px rgba(15, 23, 42, 0.12);
       padding: 10mm 10mm 14mm;
       position: relative;
+      overflow: hidden;
     }
 
     .topbar {
@@ -252,7 +256,8 @@
       html, body { background: #fff; }
       .page {
         width: 210mm;
-        min-height: 297mm;
+        height: 297mm;
+        max-height: 297mm;
         margin: 0;
         box-shadow: none;
       }

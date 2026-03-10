@@ -199,6 +199,8 @@ const generatePdfBufferFromHtml = async (html) => {
 
     const pdfBuffer = await page.pdf({
       format: 'A4',
+      preferCSSPageSize: true,
+      scale: 1,
       printBackground: true,
       margin: {
         top: '0mm',

@@ -21,7 +21,6 @@
     html, body {
       margin: 0;
       padding: 0;
-      width: 210mm;
       min-height: 297mm;
       background: #e2e8f0;
       color: var(--ink);
@@ -32,35 +31,33 @@
 
     .page {
       width: 210mm;
-      height: 297mm;
-      max-height: 297mm;
+      min-height: 297mm;
       margin: 8mm auto;
       background: var(--bg);
       box-shadow: 0 16px 40px rgba(15, 23, 42, 0.12);
-      padding: 10mm 10mm 14mm;
+      padding: 7mm 7mm 9mm;
       position: relative;
-      overflow: hidden;
     }
 
     .topbar {
       display: grid;
       grid-template-columns: 1fr;
-      gap: 4mm;
+      gap: 3mm;
       align-items: start;
       border-bottom: 2px solid var(--line);
-      padding-bottom: 4mm;
+      padding-bottom: 3mm;
     }
 
     .brand {
       display: grid;
-      grid-template-columns: 28mm 1fr;
-      gap: 5mm;
+      grid-template-columns: 24mm 1fr;
+      gap: 4mm;
       align-items: start;
     }
 
     .logo-box {
-      width: 28mm;
-      height: 28mm;
+      width: 24mm;
+      height: 24mm;
       border: 1.5px solid var(--line);
       border-radius: 4mm;
       display: flex;
@@ -83,49 +80,49 @@
     }
 
     .company-name {
-      font-size: 18px;
+      font-size: 16px;
       font-weight: 800;
       letter-spacing: 0.35px;
       text-transform: uppercase;
-      margin-bottom: 1.6mm;
+      margin-bottom: 1mm;
       color: var(--line);
     }
 
     .company-info {
-      font-size: 12.5px;
-      line-height: 1.4;
+      font-size: 11px;
+      line-height: 1.25;
       color: var(--muted);
       display: grid;
       grid-template-columns: 1fr 1fr;
-      column-gap: 16mm;
-      row-gap: 0.5mm;
+      column-gap: 10mm;
+      row-gap: 0.25mm;
     }
 
-    .company-info div { margin: 0.5mm 0; }
+    .company-info div { margin: 0.2mm 0; }
 
     .title-wrap {
-      margin: 5mm 0 4mm;
+      margin: 3mm 0 3mm;
       text-align: center;
     }
 
     .title {
-      font-size: 24px;
+      font-size: 20px;
       font-weight: 900;
-      letter-spacing: 0.9px;
+      letter-spacing: 0.6px;
       text-transform: uppercase;
       color: var(--line);
       margin: 0;
     }
 
     .title-rule {
-      width: 70mm;
+      width: 56mm;
       height: 2px;
       background: var(--accent);
-      margin: 2.5mm auto 0;
+      margin: 1.8mm auto 0;
     }
 
     table.form, .items-table {
-      font-size: 12.5px;
+      font-size: 11px;
       width: 100%;
       border-collapse: collapse;
     }
@@ -139,8 +136,8 @@
     .items-table th,
     .items-table td {
       border: 1px solid var(--line);
-      padding: 2.8mm 3mm;
-      font-size: 12.5px;
+      padding: 2mm 2.2mm;
+      font-size: 11px;
       vertical-align: top;
     }
 
@@ -153,7 +150,7 @@
     }
 
     .label-cell {
-      width: 38mm;
+      width: 34mm;
       font-weight: 800;
       background: #eef3f9;
       white-space: nowrap;
@@ -161,25 +158,25 @@
     }
 
     .fill {
-      min-height: 7mm;
+      min-height: 5.5mm;
       white-space: pre-line;
       word-break: break-word;
     }
 
-    .small-fill { min-height: 6mm; }
+    .small-fill { min-height: 5mm; }
 
     .customer-name {
-      font-size: 14px;
+      font-size: 12px;
       font-weight: 800;
       letter-spacing: 0.2px;
       color: var(--line);
     }
 
     .description-box {
-      min-height: 42mm;
+      min-height: 30mm;
       white-space: pre-line;
-      line-height: 1.65;
-      font-size: 12.5px;
+      line-height: 1.4;
+      font-size: 11px;
       word-break: break-word;
     }
 
@@ -195,14 +192,14 @@
       border-left: 1.5px solid var(--line);
       border-right: 1.5px solid var(--line);
       border-bottom: 1.5px solid var(--line);
-      margin-top: 4mm;
+      margin-top: 3mm;
     }
 
     .items-table tbody tr:nth-child(even) {
       background: #f8fbff;
     }
 
-    .rowline { height: 10mm; }
+    .rowline { height: 7mm; }
     .num { text-align: center; white-space: nowrap; }
 
     .hours-summary {
@@ -211,19 +208,19 @@
     }
 
     .signatures {
-      margin-top: 8mm;
+      margin-top: 5mm;
       display: grid;
       grid-template-columns: 1fr 1fr 1fr;
-      gap: 10mm;
+      gap: 6mm;
       align-items: end;
     }
 
-    .sig { font-size: 11.5px; }
+    .sig { font-size: 10.5px; }
 
     .sig-label {
       font-weight: 800;
-      margin-bottom: 3mm;
-      font-size: 12px;
+      margin-bottom: 2mm;
+      font-size: 11px;
       text-transform: uppercase;
       letter-spacing: 0.45px;
       color: var(--line);
@@ -231,9 +228,9 @@
 
     .sig-line {
       border-bottom: 2px solid var(--line);
-      padding-top: 3mm;
-      min-height: 10mm;
-      font-size: 16px;
+      padding-top: 2mm;
+      min-height: 8mm;
+      font-size: 13px;
       font-weight: 700;
       letter-spacing: 0.5px;
       display: flex;
@@ -256,8 +253,7 @@
       html, body { background: #fff; }
       .page {
         width: 210mm;
-        height: 297mm;
-        max-height: 297mm;
+        min-height: 297mm;
         margin: 0;
         box-shadow: none;
       }

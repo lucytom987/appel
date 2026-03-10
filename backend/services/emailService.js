@@ -47,6 +47,10 @@ const sendWorkOrderEmail = async (workOrder, company, repair, elevator, download
           .box { margin: 18px 0; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; }
           .button { display: inline-block; margin-top: 8px; background: #0f4c81; color: #ffffff !important; text-decoration: none; padding: 12px 16px; border-radius: 8px; font-size: 14px; font-weight: 700; }
           .small { font-size: 12px; color: #64748b; line-height: 1.6; margin-top: 14px; }
+          .firm-box { margin-top: 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 14px; }
+          .firm-title { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: #0f4c81; font-weight: 700; }
+          .firm-row { margin: 0 0 6px; font-size: 13px; color: #334155; line-height: 1.5; }
+          .firm-row:last-child { margin-bottom: 0; }
         </style>
       </head>
       <body>
@@ -66,7 +70,18 @@ const sendWorkOrderEmail = async (workOrder, company, repair, elevator, download
 
           <p class="text" style="margin-top: 22px;">S poštovanjem,<br/><strong>${company?.naziv || 'Servisna firma'}</strong></p>
 
-          <p class="small">Kontakt: ${company.email || '-'}${company.telefon || company.mobitel ? ` · ${company.telefon || company.mobitel}` : ''}${company.web ? ` · ${company.web}` : ''}</p>
+          <div class="firm-box">
+            <p class="firm-title">Podaci o pošiljatelju</p>
+            <p class="firm-row">🏢 <strong>Naziv:</strong> ${company?.naziv || '-'}</p>
+            <p class="firm-row">📍 <strong>Adresa:</strong> ${company?.adresa || '-'}</p>
+            <p class="firm-row">🧾 <strong>OIB:</strong> ${company?.oib || '-'}</p>
+            <p class="firm-row">✉️ <strong>Email:</strong> ${company?.email || '-'}</p>
+            <p class="firm-row">☎️ <strong>Telefon:</strong> ${company?.telefon || '-'}</p>
+            <p class="firm-row">📱 <strong>Mobitel:</strong> ${company?.mobitel || '-'}</p>
+            <p class="firm-row">🌐 <strong>Web:</strong> ${company?.web || '-'}</p>
+          </div>
+
+          <p class="small">Ovaj email je automatski generiran.</p>
         </div>
       </body>
       </html>

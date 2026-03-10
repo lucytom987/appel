@@ -20,6 +20,16 @@ const sendWorkOrderEmail = async (workOrder, company, repair, elevator, download
     }
 
     const hasAttachment = Array.isArray(options.attachments) && options.attachments.length > 0;
+    const formatDate = (value, withTime = false) => {
+      if (!value) return '-';
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return '-';
+      return withTime
+        ? date.toLocaleString('hr-HR')
+        : date.toLocaleDateString('hr-HR');
+    };
+    const customerAddress = [elevator?.ulica, elevator?.mjesto].filter(Boolean).join(', ') || '-';
+    const companyLogo = company?.logoUrl || company?.logo || '';
 
     const fallbackHtmlTemplate = `
       <!DOCTYPE html>
@@ -29,87 +39,105 @@ const sendWorkOrderEmail = async (workOrder, company, repair, elevator, download
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>Radni nalog ${workOrder.workOrderNumber}</title>
         <style>
-          body { margin: 0; padding: 20px; background: #f5f5f5; }
-          .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 8px; padding: 30px; }
-          .header { border-bottom: 3px solid #1e3a8a; padding-bottom: 20px; margin-bottom: 20px; }
-          .company-name { font-size: 24px; font-weight: bold; color: #1e3a8a; margin: 0; }
-          .company-info { font-size: 12px; color: #6b7280; margin-top: 8px; }
-          .section-title { font-size: 14px; font-weight: 700; color: #1e40af; margin-top: 20px; margin-bottom: 10px; border-bottom: 1px solid #e5e7eb; padding-bottom: 8px; }
-          .section-content { font-size: 13px; line-height: 1.6; color: #374151; }
-          .section-content strong { color: #111827; }
-          .badge { display: inline-block; background: #dbeafe; color: #1e40af; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600; margin-bottom: 16px; }
-          .button { display: inline-block; margin-top: 20px; background: #2563eb; color: white; padding: 12px 20px; text-decoration: none; border-radius: 6px; font-weight: bold; }
-          .button:hover { background: #1d4ed8; }
-          .footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #6b7280; }
+          body { margin: 0; padding: 24px 12px; background: #eef2f7; }
+          .shell { max-width: 680px; margin: 0 auto; }
+          .card { background: #ffffff; border-radius: 18px; overflow: hidden; box-shadow: 0 18px 50px rgba(15, 23, 42, 0.08); }
+          .hero { background: linear-gradient(135deg, #0f4c81 0%, #163a5f 100%); color: #ffffff; padding: 28px 28px 24px; }
+          .hero-top { display: flex; align-items: center; gap: 14px; }
+          .logo-wrap { width: 56px; height: 56px; border-radius: 14px; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.18); display: flex; align-items: center; justify-content: center; overflow: hidden; flex: 0 0 auto; }
+          .logo-wrap img { width: 100%; height: 100%; object-fit: contain; background: #ffffff; }
+          .logo-fallback { font-size: 22px; font-weight: 800; color: #ffffff; }
+          .company-name { font-size: 22px; font-weight: 800; margin: 0; }
+          .hero-subtitle { margin: 6px 0 0; font-size: 13px; line-height: 1.5; color: rgba(255,255,255,0.88); }
+          .hero-badge { display: inline-block; margin-top: 18px; padding: 8px 12px; border-radius: 999px; background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.18); font-size: 12px; font-weight: 700; letter-spacing: 0.2px; }
+          .content { padding: 24px 28px 28px; }
+          .lead { font-size: 14px; line-height: 1.7; color: #334155; margin: 0 0 18px; }
+          .notice { background: #f8fafc; border: 1px solid #dbe6f0; border-radius: 14px; padding: 14px 16px; margin-bottom: 20px; font-size: 13px; line-height: 1.6; color: #334155; }
+          .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+          .info-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 14px; padding: 14px 16px; }
+          .info-title { margin: 0 0 10px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.7px; color: #0f4c81; font-weight: 800; }
+          .info-row { margin: 0 0 8px; font-size: 13px; line-height: 1.6; color: #334155; }
+          .info-row:last-child { margin-bottom: 0; }
+          .info-row strong { color: #0f172a; }
+          .button-wrap { margin: 22px 0 18px; }
+          .button { display: inline-block; background: #0f4c81; color: #ffffff !important; text-decoration: none; padding: 13px 18px; border-radius: 12px; font-size: 14px; font-weight: 700; }
+          .subtle { font-size: 12px; line-height: 1.6; color: #64748b; margin: 0; }
+          .footer { margin-top: 22px; padding-top: 18px; border-top: 1px solid #e5e7eb; font-size: 12px; line-height: 1.7; color: #64748b; }
+          @media only screen and (max-width: 640px) {
+            .grid { grid-template-columns: 1fr; }
+            .hero, .content { padding-left: 18px; padding-right: 18px; }
+          }
         </style>
       </head>
       <body>
-        <div class="container">
-          <div class="header">
-            <p class="company-name">${company.naziv || 'Servisna firma'}</p>
-            <div class="company-info">
-              <p style="margin: 4px 0;">
-                ${company.adresa ? company.adresa + ' | ' : ''}
-                ${company.web ? '<a href="' + company.web + '" style="color: #2563eb;">' + company.web + '</a>' : ''}
+        <div class="shell">
+          <div class="card">
+            <div class="hero">
+              <div class="hero-top">
+                <div class="logo-wrap">
+                  ${companyLogo
+                    ? `<img src="${companyLogo}" alt="${company?.naziv || 'Logo'}" />`
+                    : `<div class="logo-fallback">${String(company?.naziv || 'A').charAt(0).toUpperCase()}</div>`}
+                </div>
+                <div>
+                  <p class="company-name">${company.naziv || 'Servisna firma'}</p>
+                  <p class="hero-subtitle">Radni nalog je uspješno kreiran i poslan. Službeni dokument nalazi se ${hasAttachment ? 'u PDF privitku ovog emaila' : 'na poveznici ispod'}.</p>
+                </div>
+              </div>
+              <div class="hero-badge">Radni nalog ${workOrder.workOrderNumber}</div>
+            </div>
+
+            <div class="content">
+              <p class="lead">
+                Poštovani, u nastavku su osnovne informacije o izvršenom radu. Za službenu verziju dokumenta koristite PDF privitak ili preuzimanje putem gumba ispod.
               </p>
-              <p style="margin: 4px 0;">
-                ${company.email ? '<a href="mailto:' + company.email + '" style="color: #2563eb;">' + company.email + '</a>' : ''}
-                ${company.mobitel ? ' | ' + company.mobitel : ''}
+
+              <div class="notice">
+                <strong>Dokument:</strong>
+                ${hasAttachment
+                  ? ' PDF radnog naloga priložen je uz ovaj email.'
+                  : ' PDF privitak trenutno nije dostupan, ali dokument možete preuzeti putem poveznice ispod.'}
+              </div>
+
+              <div class="grid">
+                <div class="info-card">
+                  <p class="info-title">Podaci o nalogu</p>
+                  <p class="info-row"><strong>Broj naloga:</strong> ${workOrder.workOrderNumber || '-'}</p>
+                  <p class="info-row"><strong>Stranka:</strong> ${elevator?.nazivStranke || '-'}</p>
+                  <p class="info-row"><strong>Adresa:</strong> ${customerAddress}</p>
+                  <p class="info-row"><strong>Broj dizala:</strong> ${elevator?.brojDizala || '-'}</p>
+                  <p class="info-row"><strong>Broj ugovora:</strong> ${elevator?.brojUgovora || '-'}</p>
+                </div>
+
+                <div class="info-card">
+                  <p class="info-title">Status i potpis</p>
+                  <p class="info-row"><strong>Datum prijave:</strong> ${formatDate(repair?.datumPrijave)}</p>
+                  <p class="info-row"><strong>Datum popravka:</strong> ${formatDate(repair?.datumPopravka)}</p>
+                  <p class="info-row"><strong>Potpisao:</strong> ${workOrder.signedByName || '-'}</p>
+                  <p class="info-row"><strong>Vrijeme potpisa:</strong> ${formatDate(workOrder.signedAt, true)}</p>
+                </div>
+              </div>
+
+              <div class="info-card" style="margin-bottom: 20px;">
+                <p class="info-title">Sažetak radova</p>
+                <p class="info-row"><strong>Opis kvara:</strong> ${repair?.opisKvara || '-'}</p>
+                <p class="info-row"><strong>Opis popravka:</strong> ${repair?.opisPopravka || '-'}</p>
+              </div>
+
+              <div class="button-wrap">
+                <a class="button" href="${downloadUrl}">Preuzmi radni nalog</a>
+              </div>
+
+              <p class="subtle">
+                Kontakt: ${company.email || '-'}${company.telefon || company.mobitel ? ` · ${company.telefon || company.mobitel}` : ''}${company.web ? ` · ${company.web}` : ''}
               </p>
+
+              <div class="footer">
+                Ovaj email je automatski generiran. Ako trebate dodatne informacije, obratite se pošiljatelju ili kontaktima gore.
+              </div>
             </div>
           </div>
-
-          <div>
-            <div class="badge">Radni nalog: ${workOrder.workOrderNumber}</div>
-
-            <div class="section-title">📎 Dokument</div>
-            <div class="section-content">
-              ${hasAttachment
-                ? 'U privitku ovog emaila nalazi se službeni PDF radnog naloga.'
-                : 'PDF privitak trenutno nije dostupan. Dokument možete preuzeti putem poveznice ispod.'}
-            </div>
-
-            <div class="section-title">📋 Informacije o popravku</div>
-            <div class="section-content">
-              <strong>Stranka:</strong> ${elevator?.nazivStranke || '-'}<br/>
-              <strong>Adresa:</strong> ${elevator?.ulica || '-'}, ${elevator?.mjesto || '-'}<br/>
-              <strong>Broj dizala:</strong> ${elevator?.brojDizala || '-'}<br/>
-              <strong>Broj ugovora:</strong> ${elevator?.brojUgovora || '-'}<br/>
-              <br/>
-              <strong>Datum prijave:</strong> ${new Date(repair?.datumPrijave).toLocaleDateString('hr-HR')}<br/>
-              <strong>Datum popravka:</strong> ${new Date(repair?.datumPopravka).toLocaleDateString('hr-HR')}<br/>
-              <strong>Opis kvara:</strong> ${repair?.opisKvara || '-'}<br/>
-              <strong>Opis popravka:</strong> ${repair?.opisPopravka || '-'}<br/>
-            </div>
-
-            <div class="section-title">✅ Potpisano od strane</div>
-            <div class="section-content">
-              <strong>${workOrder.signedByName || '-'}</strong><br/>
-              Vrijeme: ${new Date(workOrder.signedAt).toLocaleString('hr-HR')}
-            </div>
-
-            <div class="section-title">📥 Preuzmi dokument</div>
-            <div class="section-content">
-              Kliknite na gumb ispod za preuzimanje dokumenta:
-              <br/>
-              <a class="button" href="${downloadUrl}">Preuzmi PDF radni nalog</a>
-            </div>
-
-            <div class="section-title">📞 Kontaktirajte nas</div>
-            <div class="section-content">
-              Ako imate pitanja ili potrebni su dodatni detalji, slobodno nas kontaktirajte:
-              <br/>
-              Telefon: ${company.telefon || company.mobitel || '-'}<br/>
-              Email: ${company.email || '-'}<br/>
-              Web: ${company.web ? '<a href="' + company.web + '" style="color: #2563eb;">' + company.web + '</a>' : '-'}
-            </div>
-          </div>
-
-          <div class="footer">
-            <p style="margin: 0;">
-              Ovaj email je automatski generiran. Molimo ne odgovarajte direktno na ovaj email.
-            </p>
-          </div>
+        </div>
         </div>
       </body>
       </html>

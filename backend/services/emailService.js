@@ -4,7 +4,7 @@ const { Resend } = require('resend');
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 // Slanje emaila nakon potpisivanja radnog naloga
-const sendWorkOrderEmail = async (workOrder, company, repair, elevator, downloadUrl) => {
+const sendWorkOrderEmail = async (workOrder, company, repair, elevator, downloadUrl, options = {}) => {
   try {
     console.log('📧 Email servis - početak slanja');
     console.log('   API Key postoji:', !!process.env.RESEND_API_KEY);
@@ -17,8 +17,7 @@ const sendWorkOrderEmail = async (workOrder, company, repair, elevator, download
       return { success: true, mode: 'test' };
     }
 
-    // HTML template za email
-    const htmlTemplate = `
+    const fallbackHtmlTemplate = `
       <!DOCTYPE html>
       <html lang="hr" style="font-family: Arial, sans-serif; color: #111827;">
       <head>
@@ -105,13 +104,15 @@ const sendWorkOrderEmail = async (workOrder, company, repair, elevator, download
       </html>
     `;
 
+    const htmlTemplate = options.htmlBody || fallbackHtmlTemplate;
+
     console.log('📧 Slanje emaila preko Resend...');
     // Slanje emaila preko Resend
     const response = await resend.emails.send({
       from: 'noreply@radni-nalog.uk',
       to: company.email,
       replyTo: company.email,  // Odgovori idu na company email
-      subject: `Radni nalog ${workOrder.workOrderNumber} - Potpisan`,
+      subject: options.subject || `Radni nalog ${workOrder.workOrderNumber} - Potpisan`,
       html: htmlTemplate,
     });
 

@@ -340,7 +340,11 @@ router.post('/:id/sign', authenticate, async (req, res) => {
     if (sendNow && company?.email) {
       try {
         const downloadUrl = `${baseUrl}/api/work-orders/download/${workOrder._id}?token=${encodeURIComponent(workOrder.viewToken)}`;
-        await sendWorkOrderEmail(workOrder, company, repair, repair.elevatorId, downloadUrl);
+        const htmlForEmail = await renderWorkOrderHtml(workOrder.toObject(), req, workOrder.viewToken);
+        await sendWorkOrderEmail(workOrder, company, repair, repair.elevatorId, downloadUrl, {
+          htmlBody: htmlForEmail,
+          subject: `Radni nalog ${workOrder.workOrderNumber}`,
+        });
       } catch (emailError) {
         console.error('Greška pri slanju emaila:', emailError);
         // Nastavi dalje jer je radni nalog već spremljen

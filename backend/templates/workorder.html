@@ -439,45 +439,29 @@
         <div class="doc-panel-head">
           <div class="doc-title">RADNI NALOG – <%= workOrder.workOrderNumber %></div>
         </div>
+        <div class="section-body">
+          <h3 style="margin: 0 0 6px 0; font-size: 11px; color: var(--navy); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 800;">Podaci o stranci</h3>
+          <table class="info-table">
+            <tr>
+              <td>Broj ugovora</td>
+              <td><%= elevator && elevator.brojUgovora || '-' %></td>
+            </tr>
+            <tr>
+              <td>Naziv</td>
+              <td><%= elevator && elevator.nazivStranke || '-' %></td>
+            </tr>
+            <tr>
+              <td>Adresa</td>
+              <td><%= elevator && (elevator.ulica || '') %><% if (elevator && elevator.mjesto) { %>, <%= elevator.mjesto %><% } %></td>
+            </tr>
+            <tr>
+              <td>Broj dizala</td>
+              <td><%= elevator && elevator.brojDizala || '-' %></td>
+            </tr>
+          </table>
+        </div>
       </section>
     </header>
-
-    <!-- SEKCIJA: PODACI O STRANCI -->
-    <section class="section">
-      <div class="section-head">
-        <h2 class="section-title">Podaci o stranci</h2>
-      </div>
-      <div class="section-body">
-        <div class="info-grid">
-          <div class="info-card">
-            <h3 style="margin: 0 0 8px 0; font-size: 11px; color: var(--navy); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 800;">Osnovni podaci</h3>
-            <table class="info-table">
-              <tr>
-                <td>Naziv</td>
-                <td><%= elevator && elevator.nazivStranke || '-' %></td>
-              </tr>
-              <tr>
-                <td>Adresa</td>
-                <td><%= elevator && (elevator.ulica || '') %><% if (elevator && elevator.mjesto) { %>, <%= elevator.mjesto %><% } %></td>
-              </tr>
-              <tr>
-                <td>Broj ugovora</td>
-                <td><%= elevator && elevator.brojUgovora || '-' %></td>
-              </tr>
-            </table>
-          </div>
-          <div class="info-card">
-            <h3 style="margin: 0 0 8px 0; font-size: 11px; color: var(--navy); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 800;">Dizalo</h3>
-            <table class="info-table">
-              <tr>
-                <td>Broj dizala</td>
-                <td><%= elevator && elevator.brojDizala || '-' %></td>
-              </tr>
-            </table>
-          </div>
-        </div>
-      </div>
-    </section>
 
     <!-- SEKCIJA: OPIS IZVRŠENIH RADOVA -->
     <section class="section">
@@ -493,45 +477,10 @@
       </div>
     </section>
 
-    <!-- SEKCIJA: UTROŠENI MATERIJAL -->
+    <!-- SEKCIJA: UTROŠENI SATI I MATERIJAL -->
     <section class="section">
       <div class="section-head">
-        <h2 class="section-title">Utrošeni materijal</h2>
-      </div>
-      <div class="section-body">
-        <% if (repair && repair.utroseniMaterijal) { %>
-          <% if (Array.isArray(materialItems) && materialItems.length && hasStructuredMaterial) { %>
-            <table class="tbl">
-              <thead>
-                <tr>
-                  <th>Materijal</th>
-                  <th style="width: 20%;">Količina</th>
-                  <th style="width: 20%;">Jedinica</th>
-                </tr>
-              </thead>
-              <tbody>
-                <% materialItems.forEach((item) => { %>
-                  <tr>
-                    <td><%= item.naziv || '-' %></td>
-                    <td><%= item.kolicina || '-' %></td>
-                    <td><%= item.jedinica || '-' %></td>
-                  </tr>
-                <% }) %>
-              </tbody>
-            </table>
-          <% } else { %>
-            <div class="desc-box"><%= repair.utroseniMaterijal %></div>
-          <% } %>
-        <% } else { %>
-          <div class="desc-box" style="color: var(--muted);">Materijal nije upisan.</div>
-        <% } %>
-      </div>
-    </section>
-
-    <!-- SEKCIJA: SERVISERI I RADNI SATI -->
-    <section class="section">
-      <div class="section-head">
-        <h2 class="section-title">Serviseri i radni sati</h2>
+        <h2 class="section-title">Utrošeni sati i materijal</h2>
       </div>
       <div class="section-body">
         <% 
@@ -542,37 +491,72 @@
           const brojKolega = repair && Array.isArray(repair.dodatniServiseri) ? repair.dodatniServiseri.length : 0;
           const totalSati = (Number.isFinite(glavniSatiNum) ? glavniSatiNum : 0) + ((Number.isFinite(kolegaSatiNum) ? kolegaSatiNum : 0) * brojKolega);
         %>
-        <table class="info-table">
-          <tr>
-            <td>Glavni serviser</td>
-            <td>
-              <%= repair && repair.serviserID
-                ? `${repair.serviserID.ime || ''} ${repair.serviserID.prezime || ''}`.trim() || repair.serviserID.email || '-'
-                : '-' %>
-              (<%= formatHoursHR(glavniSatiRaw) %>)
-            </td>
-          </tr>
-          <% if (repair && Array.isArray(repair.dodatniServiseri) && repair.dodatniServiseri.length) { %>
-            <% repair.dodatniServiseri.forEach((k, idx) => { %>
+        <div class="split">
+          <div class="info-card">
+            <h3 style="margin: 0 0 8px 0; font-size: 11px; color: var(--navy); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 800;">Materijal</h3>
+            <% if (repair && repair.utroseniMaterijal) { %>
+              <% if (Array.isArray(materialItems) && materialItems.length && hasStructuredMaterial) { %>
+                <table class="tbl">
+                  <thead>
+                    <tr>
+                      <th>Materijal</th>
+                      <th style="width: 20%;">Količina</th>
+                      <th style="width: 20%;">Jedinica</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <% materialItems.forEach((item) => { %>
+                      <tr>
+                        <td><%= item.naziv || '-' %></td>
+                        <td><%= item.kolicina || '-' %></td>
+                        <td><%= item.jedinica || '-' %></td>
+                      </tr>
+                    <% }) %>
+                  </tbody>
+                </table>
+              <% } else { %>
+                <div class="desc-box"><%= repair.utroseniMaterijal %></div>
+              <% } %>
+            <% } else { %>
+              <div class="desc-box" style="color: var(--muted);">Materijal nije upisan.</div>
+            <% } %>
+          </div>
+
+          <div class="info-card">
+            <h3 style="margin: 0 0 8px 0; font-size: 11px; color: var(--navy); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 800;">Serviseri i sati</h3>
+            <table class="info-table">
               <tr>
-                <td><%= `Kolega ${idx + 1}` %></td>
+                <td>Glavni serviser</td>
                 <td>
-                  <%= `${k.ime || ''} ${k.prezime || ''}`.trim() || k.email || '-' %>
-                  (<%= formatHoursHR(kolegaSatiRaw) %>)
+                  <%= repair && repair.serviserID
+                    ? `${repair.serviserID.ime || ''} ${repair.serviserID.prezime || ''}`.trim() || repair.serviserID.email || '-'
+                    : '-' %>
+                  (<%= formatHoursHR(glavniSatiRaw) %>)
                 </td>
               </tr>
-            <% }) %>
-          <% } else { %>
-            <tr>
-              <td>Kolega</td>
-              <td>-</td>
-            </tr>
-          <% } %>
-          <tr>
-            <td><strong>Ukupno radnih sati</strong></td>
-            <td><strong><%= formatHoursHR(totalSati) %></strong></td>
-          </tr>
-        </table>
+              <% if (repair && Array.isArray(repair.dodatniServiseri) && repair.dodatniServiseri.length) { %>
+                <% repair.dodatniServiseri.forEach((k, idx) => { %>
+                  <tr>
+                    <td><%= `Kolega ${idx + 1}` %></td>
+                    <td>
+                      <%= `${k.ime || ''} ${k.prezime || ''}`.trim() || k.email || '-' %>
+                      (<%= formatHoursHR(kolegaSatiRaw) %>)
+                    </td>
+                  </tr>
+                <% }) %>
+              <% } else { %>
+                <tr>
+                  <td>Kolega</td>
+                  <td>-</td>
+                </tr>
+              <% } %>
+              <tr>
+                <td><strong>Ukupno radnih sati</strong></td>
+                <td><strong><%= formatHoursHR(totalSati) %></strong></td>
+              </tr>
+            </table>
+          </div>
+        </div>
       </div>
     </section>
 

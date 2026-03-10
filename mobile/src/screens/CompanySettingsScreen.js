@@ -10,10 +10,13 @@ import {
   TextInput,
   StatusBar,
   Platform,
+  Image,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { companyAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { usePhotoUpload } from '../hooks/usePhotoUpload';
 import ms from '../utils/scale';
 
 const CompanySettingsScreen = ({ navigation }) => {
@@ -24,6 +27,7 @@ const CompanySettingsScreen = ({ navigation }) => {
   const [saving, setSaving] = useState(false);
   const [company, setCompany] = useState(null);
   const [editValues, setEditValues] = useState({});
+  const { pickAndUploadPhoto, uploading: uploadingLogo, error: logoUploadError, clearError: clearLogoError } = usePhotoUpload();
 
   useEffect(() => {
     if (online) {
@@ -47,6 +51,7 @@ const CompanySettingsScreen = ({ navigation }) => {
         mobitel: companyData.mobitel || '',
         telefon: companyData.telefon || '',
         web: companyData.web || '',
+        logo: companyData.logo || companyData.logoUrl || '',
       });
     } catch (error) {
       console.error('❌ Greška pri dohvaćanju podataka firme:', error);
@@ -91,6 +96,24 @@ const CompanySettingsScreen = ({ navigation }) => {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleUploadLogo = async () => {
+    clearLogoError();
+    const result = await pickAndUploadPhoto();
+    if (!result?.url) return;
+
+    setEditValues((prev) => ({
+      ...prev,
+      logo: result.url,
+    }));
+  };
+
+  const handleRemoveLogo = () => {
+    setEditValues((prev) => ({
+      ...prev,
+      logo: '',
+    }));
   };
 
   // Provjera permisija
@@ -167,10 +190,64 @@ const CompanySettingsScreen = ({ navigation }) => {
         </View>
       )}
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <KeyboardAvoidingView
+        style={styles.keyboardWrap}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? ms(92) : ms(20)}
+      >
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
         {/* Osnovni podaci */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Osnovni podaci</Text>
+
+          <Text style={styles.label}>Logo firme</Text>
+          {!!editValues.logo && (
+            <View style={styles.logoPreviewWrap}>
+              <Image source={{ uri: editValues.logo }} style={styles.logoPreview} resizeMode="contain" />
+            </View>
+          )}
+
+          {logoUploadError ? (
+            <View style={styles.logoErrorRow}>
+              <Ionicons name="alert-circle-outline" size={16} color="#dc2626" />
+              <Text style={styles.logoErrorText}>{logoUploadError}</Text>
+            </View>
+          ) : null}
+
+          <View style={styles.logoActions}>
+            <TouchableOpacity
+              style={[styles.logoButton, uploadingLogo && styles.buttonDisabled]}
+              onPress={handleUploadLogo}
+              disabled={saving || uploadingLogo}
+            >
+              {uploadingLogo ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Ionicons name="image-outline" size={16} color="#fff" />
+              )}
+              <Text style={styles.logoButtonText}>{uploadingLogo ? 'Upload...' : 'Dodaj / promijeni logo'}</Text>
+            </TouchableOpacity>
+
+            {!!editValues.logo && (
+              <TouchableOpacity
+                style={styles.removeLogoButton}
+                onPress={handleRemoveLogo}
+                disabled={saving || uploadingLogo}
+              >
+                <Ionicons name="trash-outline" size={16} color="#dc2626" />
+                <Text style={styles.removeLogoText}>Ukloni logo</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          <Text style={styles.logoHintText}>
+            JPG/PNG/WebP, max 2MB. Preporuka: 800x800 px.
+          </Text>
 
           <Text style={styles.label}>Naziv firme * (obavezno)</Text>
           <TextInput
@@ -279,6 +356,7 @@ const CompanySettingsScreen = ({ navigation }) => {
           </TouchableOpacity>
         )}
       </View>
+      </KeyboardAvoidingView>
     </View>
   );
 };
@@ -319,9 +397,15 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     marginTop: ms(2),
   },
+  keyboardWrap: {
+    flex: 1,
+  },
   content: {
     flex: 1,
     padding: ms(16),
+  },
+  contentContainer: {
+    paddingBottom: ms(24),
   },
   section: {
     backgroundColor: '#fff',
@@ -354,6 +438,75 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#111827',
     marginBottom: ms(12),
+  },
+  logoPreviewWrap: {
+    width: '100%',
+    height: ms(120),
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: ms(10),
+    backgroundColor: '#f8fafc',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: ms(8),
+    overflow: 'hidden',
+  },
+  logoPreview: {
+    width: '100%',
+    height: '100%',
+  },
+  logoActions: {
+    flexDirection: 'row',
+    gap: ms(8),
+    alignItems: 'center',
+    marginBottom: ms(4),
+  },
+  logoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: ms(6),
+    backgroundColor: '#0f4c81',
+    borderRadius: ms(8),
+    paddingVertical: ms(10),
+    paddingHorizontal: ms(12),
+  },
+  logoButtonText: {
+    color: '#fff',
+    fontSize: ms(13),
+    fontWeight: '700',
+  },
+  removeLogoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: ms(6),
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    backgroundColor: '#fef2f2',
+    borderRadius: ms(8),
+    paddingVertical: ms(10),
+    paddingHorizontal: ms(12),
+  },
+  removeLogoText: {
+    color: '#dc2626',
+    fontSize: ms(13),
+    fontWeight: '700',
+  },
+  logoErrorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: ms(6),
+    marginBottom: ms(8),
+  },
+  logoErrorText: {
+    flex: 1,
+    color: '#dc2626',
+    fontSize: ms(12),
+  },
+  logoHintText: {
+    fontSize: ms(12),
+    color: '#64748b',
+    lineHeight: ms(17),
+    marginBottom: ms(8),
   },
   label: {
     fontSize: ms(13),

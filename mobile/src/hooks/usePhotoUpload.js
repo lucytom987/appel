@@ -119,10 +119,10 @@ export const usePhotoUpload = () => {
     }
 
     const asset = result.assets[0];
-    const maxSizeBytes = 50 * 1024 * 1024; // 50MB max
+    const maxSizeBytes = 2 * 1024 * 1024; // 2MB max
 
     if (asset.fileSize && asset.fileSize > maxSizeBytes) {
-      setError('Slika je prevelika (max 50MB)');
+      setError('Slika je prevelika (max 2MB)');
       return false;
     }
 

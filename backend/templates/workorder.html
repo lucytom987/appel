@@ -295,8 +295,8 @@
     <div class="topbar">
       <div class="brand">
         <div class="logo-box">
-          <% if (company && company.logoUrl) { %>
-            <img src="<%= company.logoUrl %>" alt="<%= company.naziv || 'Logo' %>">
+          <% if (company && (company.logoUrl || company.logo)) { %>
+            <img src="<%= company.logoUrl || company.logo %>" alt="<%= company.naziv || 'Logo' %>">
           <% } else { %>
             <div class="logo-fallback"><%= (company && company.naziv || 'A').charAt(0).toUpperCase() %></div>
           <% } %>

@@ -115,7 +115,8 @@ export default function RepairDetailsScreen({ route, navigation }) {
   const [materijalStavke, setMaterijalStavke] = useState([{ naziv: '', kolicina: '', jedinica: '' }]);
 
   useEffect(() => {
-    if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+    const isNewArchitecture = Boolean(global?.nativeFabricUIManager);
+    if (Platform.OS === 'android' && !isNewArchitecture && UIManager.setLayoutAnimationEnabledExperimental) {
       UIManager.setLayoutAnimationEnabledExperimental(true);
     }
   }, []);
@@ -136,7 +137,8 @@ export default function RepairDetailsScreen({ route, navigation }) {
         setWorkOrder(res?.data?.data || null);
       } catch (err) {
         // 404 je OK - znači nema radnog naloga
-        if (err?.response?.status !== 404) {
+        const status = err?.status || err?.response?.status;
+        if (status !== 404) {
           console.log('Greška pri dohvaćanju radnog naloga:', err?.message);
         }
       } finally {

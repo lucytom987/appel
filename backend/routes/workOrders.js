@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const ejs = require('ejs');
 const QRCode = require('qrcode');
 const mongoose = require('mongoose');
+const puppeteer = require('puppeteer');
 
 const router = express.Router();
 const { authenticate } = require('../middleware/auth');
@@ -186,6 +187,33 @@ const renderWorkOrderHtml = async (workOrder, req, token) => {
   return ejs.renderFile(TEMPLATE_PATH, templateData);
 };
 
+const generatePdfBufferFromHtml = async (html) => {
+  const browser = await puppeteer.launch({
+    headless: 'new',
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+  });
+
+  try {
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: 'networkidle0' });
+
+    const pdfBuffer = await page.pdf({
+      format: 'A4',
+      printBackground: true,
+      margin: {
+        top: '0mm',
+        right: '0mm',
+        bottom: '0mm',
+        left: '0mm',
+      },
+    });
+
+    return Buffer.isBuffer(pdfBuffer) ? pdfBuffer : Buffer.from(pdfBuffer);
+  } finally {
+    await browser.close();
+  }
+};
+
 const mapWorkOrderResponse = (workOrder, req) => {
   const baseUrl = resolveBaseUrl(req);
   const viewUrl = `${baseUrl}/api/work-orders/view/${workOrder._id}?token=${encodeURIComponent(workOrder.viewToken)}`;
@@ -341,9 +369,28 @@ router.post('/:id/sign', authenticate, async (req, res) => {
       try {
         const downloadUrl = `${baseUrl}/api/work-orders/download/${workOrder._id}?token=${encodeURIComponent(workOrder.viewToken)}`;
         const htmlForEmail = await renderWorkOrderHtml(workOrder.toObject(), req, workOrder.viewToken);
+        let pdfBase64 = null;
+
+        try {
+          const pdfBuffer = await generatePdfBufferFromHtml(htmlForEmail);
+          pdfBase64 = pdfBuffer.toString('base64');
+        } catch (pdfError) {
+          console.error('Greška pri generiranju PDF-a za email prilog:', pdfError);
+        }
+
         await sendWorkOrderEmail(workOrder, company, repair, repair.elevatorId, downloadUrl, {
           htmlBody: htmlForEmail,
           subject: `Radni nalog ${workOrder.workOrderNumber}`,
+          attachments: pdfBase64
+            ? [
+                {
+                  filename: `${workOrder.workOrderNumber || 'radni-nalog'}.pdf`,
+                  content: pdfBase64,
+                  type: 'application/pdf',
+                  disposition: 'attachment',
+                },
+              ]
+            : [],
         });
       } catch (emailError) {
         console.error('Greška pri slanju emaila:', emailError);
@@ -406,17 +453,21 @@ router.get('/download/:id', async (req, res) => {
       return res.status(403).send('Nevažeći ili istekli link.');
     }
 
-    if (!workOrder.pdfPath || !fs.existsSync(workOrder.pdfPath)) {
-      const html = await renderWorkOrderHtml(workOrder, req, token);
+    const html = await renderWorkOrderHtml(workOrder, req, token);
+
+    try {
+      const pdfBuffer = await generatePdfBufferFromHtml(html);
+      const safePdfName = `${workOrder.workOrderNumber || 'radni-nalog'}.pdf`;
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${safePdfName}"`);
+      return res.send(pdfBuffer);
+    } catch (pdfError) {
+      console.error('Greška pri generiranju PDF-a za download, vraćam HTML fallback:', pdfError);
       const safeFileName = `${workOrder.workOrderNumber || 'radni-nalog'}.html`;
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.setHeader('Content-Disposition', `attachment; filename="${safeFileName}"`);
       return res.send(html);
     }
-
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${workOrder.pdfFileName || 'radni-nalog.pdf'}"`);
-    return fs.createReadStream(workOrder.pdfPath).pipe(res);
   } catch (error) {
     console.error('Greška pri downloadu radnog naloga:', error);
     return res.status(500).send('Greška pri preuzimanju dokumenta.');

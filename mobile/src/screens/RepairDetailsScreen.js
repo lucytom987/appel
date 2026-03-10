@@ -1,6 +1,7 @@
 ﻿import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, BackHandler, Image, ActivityIndicator, Modal, Linking, KeyboardAvoidingView, Platform, LayoutAnimation, UIManager } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as WebBrowser from 'expo-web-browser';
 import { elevatorDB, repairDB, userDB } from '../database/db';
 import { repairsAPI, workOrdersAPI, usersAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -209,6 +210,40 @@ export default function RepairDetailsScreen({ route, navigation }) {
     });
   };
 
+  const openWorkOrderPreview = async (url) => {
+    if (!url) return;
+
+    try {
+      await WebBrowser.openBrowserAsync(url, {
+        showTitle: true,
+        enableBarCollapsing: true,
+      });
+    } catch (browserErr) {
+      try {
+        await Linking.openURL(url);
+      } catch (openErr) {
+        Alert.alert('Greška', 'Ne mogu otvoriti pregled dokumenta.');
+      }
+    }
+  };
+
+  const openWorkOrderDownload = async (url) => {
+    if (!url) return;
+
+    try {
+      await WebBrowser.openBrowserAsync(url, {
+        showTitle: true,
+        enableBarCollapsing: true,
+      });
+    } catch (browserErr) {
+      try {
+        await Linking.openURL(url);
+      } catch (openErr) {
+        Alert.alert('Greška', 'Ne mogu otvoriti preuzimanje PDF dokumenta.');
+      }
+    }
+  };
+
   const handleCreateWorkOrder = async () => {
     const id = repairData._id || repairData.id;
     
@@ -241,11 +276,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
             text: 'Otvori pregled',
             onPress: async () => {
               if (!workOrder?.viewUrl) return;
-              try {
-                await Linking.openURL(workOrder.viewUrl);
-              } catch (openErr) {
-                Alert.alert('Greška', 'Ne mogu otvoriti pregled dokumenta.');
-              }
+              await openWorkOrderPreview(workOrder.viewUrl);
             }
           }
         ]
@@ -275,11 +306,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
                     text: 'Otvori pregled',
                     onPress: async () => {
                       if (!newWorkOrder?.viewUrl) return;
-                      try {
-                        await Linking.openURL(newWorkOrder.viewUrl);
-                      } catch (openErr) {
-                        Alert.alert('Greška', 'Ne mogu otvoriti pregled dokumenta.');
-                      }
+                      await openWorkOrderPreview(newWorkOrder.viewUrl);
                     }
                   },
                   { text: 'Kasnije', style: 'cancel' },
@@ -336,11 +363,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
                     text: 'Otvori pregled',
                     onPress: async () => {
                       if (!newWorkOrder?.viewUrl) return;
-                      try {
-                        await Linking.openURL(newWorkOrder.viewUrl);
-                      } catch (openErr) {
-                        Alert.alert('Greška', 'Ne mogu otvoriti pregled dokumenta.');
-                      }
+                      await openWorkOrderPreview(newWorkOrder.viewUrl);
                     }
                   },
                   { text: 'Samo pregled', style: 'cancel' },
@@ -854,6 +877,24 @@ export default function RepairDetailsScreen({ route, navigation }) {
             <Text style={{ fontSize: ms(13), color: '#374151', marginBottom: ms(12) }}>
               <Text style={{ fontWeight: '700' }}>Kreiran:</Text> {new Date(workOrder.created_at).toLocaleString('hr-HR')}
             </Text>
+
+            <View style={{ flexDirection: 'row', gap: ms(8) }}>
+              <TouchableOpacity
+                style={[styles.secondaryButton, { flex: 1, marginTop: 0 }]}
+                onPress={() => openWorkOrderPreview(workOrder.viewUrl)}
+              >
+                <Ionicons name="eye-outline" size={18} color="#2563eb" />
+                <Text style={styles.secondaryText}>Pregled</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.secondaryButton, { flex: 1, marginTop: 0 }]}
+                onPress={() => openWorkOrderDownload(workOrder.downloadUrl)}
+              >
+                <Ionicons name="download-outline" size={18} color="#2563eb" />
+                <Text style={styles.secondaryText}>Preuzmi PDF</Text>
+              </TouchableOpacity>
+            </View>
 
             {workOrder.status === 'draft' && (
               <TouchableOpacity

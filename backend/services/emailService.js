@@ -1,7 +1,9 @@
 const { Resend } = require('resend');
 
-// Kreiraj Resend instance
-const resend = new Resend(process.env.RESEND_API_KEY);
+const getResendClient = () => {
+  if (!process.env.RESEND_API_KEY) return null;
+  return new Resend(process.env.RESEND_API_KEY);
+};
 
 // Slanje emaila nakon potpisivanja radnog naloga
 const sendWorkOrderEmail = async (workOrder, company, repair, elevator, downloadUrl, options = {}) => {
@@ -106,6 +108,12 @@ const sendWorkOrderEmail = async (workOrder, company, repair, elevator, download
 
     const htmlTemplate = options.htmlBody || fallbackHtmlTemplate;
 
+    const resend = getResendClient();
+    if (!resend) {
+      console.log('📧 [TEST MODE] Resend client nije inicijaliziran (nema API ključa).');
+      return { success: true, mode: 'test' };
+    }
+
     console.log('📧 Slanje emaila preko Resend...');
     // Slanje emaila preko Resend
     const response = await resend.emails.send({
@@ -114,6 +122,7 @@ const sendWorkOrderEmail = async (workOrder, company, repair, elevator, download
       replyTo: company.email,  // Odgovori idu na company email
       subject: options.subject || `Radni nalog ${workOrder.workOrderNumber} - Potpisan`,
       html: htmlTemplate,
+      attachments: Array.isArray(options.attachments) ? options.attachments : undefined,
     });
 
     console.log('📧 Resend response:', JSON.stringify(response));

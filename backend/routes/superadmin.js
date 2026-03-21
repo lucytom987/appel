@@ -8,9 +8,14 @@ const Repair = require('../models/Repair');
 
 const router = express.Router();
 
-// Middleware: provjeri koji je korisnik superAdmin
+// Hardkodirani super admin emailovi - isti kao u auth.js
+const SUPER_ADMIN_EMAILS = (process.env.SUPER_ADMIN_EMAILS || 'vidacek.tomek@gmail.com,vidacek@appel.com')
+  .split(',')
+  .map(e => e.trim().toLowerCase());
+
+// Middleware: provjeri je li korisnik super admin po emailu
 const requireSuperAdmin = async (req, res, next) => {
-  if (!req.user.superAdmin) {
+  if (!req.user.email || !SUPER_ADMIN_EMAILS.includes(req.user.email.toLowerCase())) {
     return res.status(403).json({ message: 'Pristup dozvoljen samo super administratoru' });
   }
   next();

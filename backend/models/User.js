@@ -15,7 +15,6 @@ const userSchema = new mongoose.Schema({
   },
   telefon: String,
   aktivan: { type: Boolean, default: true },
-  superAdmin: { type: Boolean, default: false },
   kreiranDatum: { type: Date, default: Date.now },
   azuriranDatum: { type: Date, default: Date.now }
 });

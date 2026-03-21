@@ -7,6 +7,12 @@ const { logAction } = require('../services/auditService');
 
 const router = express.Router();
 
+// Hardkodirani super admin - SAMO ovi emailovi imaju pristup
+const SUPER_ADMIN_EMAILS = (process.env.SUPER_ADMIN_EMAILS || 'vidacek.tomek@gmail.com,vidacek@appel.com')
+  .split(',')
+  .map(e => e.trim().toLowerCase());
+const isSuperAdmin = (email) => email && SUPER_ADMIN_EMAILS.includes(email.toLowerCase());
+
 // Helper za generiranje access/refresh tokena
 const generateTokens = (userId) => {
   const accessToken = jwt.sign(
@@ -58,10 +64,13 @@ router.post('/login', async (req, res) => {
 
     const { accessToken, refreshToken } = generateTokens(user._id);
 
+    const korisnikData = user.toJSON();
+    korisnikData.superAdmin = isSuperAdmin(user.email);
+
     res.json({
       token: accessToken,
       refreshToken,
-      korisnik: user.toJSON(),
+      korisnik: korisnikData,
     });
   } catch (error) {
     console.error('Login greška:', error);
@@ -213,7 +222,12 @@ router.post('/public-register', async (req, res) => {
 
 // GET /api/auth/me - Trenutni korisnik
 router.get('/me', authenticate, (req, res) => {
-  res.json(req.user.toJSON());
+  const data = req.user.toJSON();
+  data.superAdmin = isSuperAdmin(req.user.email);
+  res.json(data);
 });
+
+// Export isSuperAdmin za korištenje u drugim rutama
+router.isSuperAdmin = isSuperAdmin;
 
 module.exports = router;

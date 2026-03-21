@@ -29,9 +29,6 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => {
     console.log('✅ MongoDB povezan');
-    // Seed default korisnici u pozadini (ne blokiraj server startup)
-    const seedDefaultUsers = require('./utils/seedUsers');
-    seedDefaultUsers().catch(err => console.error('❌ Seed greška:', err));
     setupSoftDeleteRetentionJob();
   })
   .catch((err) => console.error('❌ MongoDB greška:', err));

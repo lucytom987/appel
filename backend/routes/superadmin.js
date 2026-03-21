@@ -200,4 +200,28 @@ router.get('/users/:id', async (req, res) => {
   }
 });
 
+// PUT /api/superadmin/users/:id/reset-password - Promijeni lozinku korisnika
+router.put('/users/:id/reset-password', async (req, res) => {
+  try {
+    const { novaLozinka } = req.body;
+    if (!novaLozinka || novaLozinka.length < 6) {
+      return res.status(400).json({ message: 'Lozinka mora imati najmanje 6 znakova' });
+    }
+
+    const user = await User.findById(req.params.id);
+    if (!user) {
+      return res.status(404).json({ message: 'Korisnik nije pronađen' });
+    }
+
+    user.lozinka = novaLozinka;
+    user.privremenaLozinka = true;
+    await user.save();
+
+    res.json({ success: true, message: `Lozinka za ${user.ime} ${user.prezime} je promijenjena` });
+  } catch (error) {
+    console.error('SuperAdmin reset password error:', error);
+    res.status(500).json({ message: 'Greška pri promjeni lozinke' });
+  }
+});
+
 module.exports = router;

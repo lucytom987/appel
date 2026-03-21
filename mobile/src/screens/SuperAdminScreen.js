@@ -8,6 +8,7 @@ import {
   RefreshControl,
   Alert,
   ActivityIndicator,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,6 +26,8 @@ export default function SuperAdminScreen({ navigation }) {
   const [companyDetail, setCompanyDetail] = useState(null);
   const [expandedUserId, setExpandedUserId] = useState(null);
   const [userDetail, setUserDetail] = useState(null);
+  const [passwordUserId, setPasswordUserId] = useState(null);
+  const [newPassword, setNewPassword] = useState('');
 
   const loadData = async () => {
     try {
@@ -386,6 +389,58 @@ export default function SuperAdminScreen({ navigation }) {
                         Popravci firme: {userDetail.stats?.repairCount || 0}
                       </Text>
                     </View>
+
+                    <View style={styles.detailSection}>
+                      <Text style={styles.detailTitle}>Promjena lozinke</Text>
+                      {passwordUserId === u._id ? (
+                        <View>
+                          <TextInput
+                            style={styles.passwordInput}
+                            placeholder="Nova lozinka (min. 6 znakova)"
+                            value={newPassword}
+                            onChangeText={setNewPassword}
+                            secureTextEntry
+                            autoCapitalize="none"
+                          />
+                          <View style={styles.passwordActions}>
+                            <TouchableOpacity
+                              style={styles.passwordSaveBtn}
+                              onPress={async () => {
+                                if (newPassword.length < 6) {
+                                  Alert.alert('Greška', 'Lozinka mora imati najmanje 6 znakova');
+                                  return;
+                                }
+                                try {
+                                  const res = await superadminAPI.resetPassword(u._id, newPassword);
+                                  Alert.alert('Uspjeh', res.data.message);
+                                  setPasswordUserId(null);
+                                  setNewPassword('');
+                                } catch (err) {
+                                  Alert.alert('Greška', err.response?.data?.message || 'Greška pri promjeni lozinke');
+                                }
+                              }}
+                            >
+                              <Ionicons name="checkmark" size={18} color="#fff" />
+                              <Text style={styles.passwordSaveBtnText}>Spremi</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={styles.passwordCancelBtn}
+                              onPress={() => { setPasswordUserId(null); setNewPassword(''); }}
+                            >
+                              <Text style={styles.passwordCancelBtnText}>Odustani</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      ) : (
+                        <TouchableOpacity
+                          style={styles.changePasswordBtn}
+                          onPress={() => { setPasswordUserId(u._id); setNewPassword(''); }}
+                        >
+                          <Ionicons name="key" size={18} color="#7c3aed" />
+                          <Text style={styles.changePasswordBtnText}>Promijeni lozinku</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
                   </View>
                 )}
               </View>
@@ -613,6 +668,62 @@ const styles = StyleSheet.create({
   inactiveBadgeText: {
     fontSize: 11,
     color: '#ef4444',
+    fontWeight: '600',
+  },
+  passwordInput: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    marginBottom: 10,
+  },
+  passwordActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  passwordSaveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#7c3aed',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+  },
+  passwordSaveBtnText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  passwordCancelBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+  },
+  passwordCancelBtnText: {
+    color: '#6b7280',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  changePasswordBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#f3e8ff',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  changePasswordBtnText: {
+    color: '#7c3aed',
+    fontSize: 14,
+    fontWeight: '600',
     fontWeight: '600',
   },
 });

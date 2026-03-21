@@ -228,6 +228,7 @@ export const superadminAPI = {
   deleteCompany: (id) => api.delete(`/superadmin/companies/${id}`),
   getUsers: () => api.get('/superadmin/users'),
   getUser: (id) => api.get(`/superadmin/users/${id}`),
+  resetPassword: (id, novaLozinka) => api.put(`/superadmin/users/${id}/reset-password`, { novaLozinka }),
 };
 
 // Repairs API

@@ -5,6 +5,8 @@ const dotenv = require('dotenv');
 const http = require('http');
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const User = require('./models/User');
 const ChatRoom = require('./models/ChatRoom');
 const { setupSoftDeleteRetentionJob } = require('./services/retentionService');
@@ -20,10 +22,34 @@ const io = new Server(server, {
   }
 });
 
-// Middleware
+// Security middleware
+app.use(helmet());
+
+// Rate limiting - opća zaštita
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minuta
+  max: 300, // max 300 zahtjeva po IP u 15 min
+  message: { message: 'Previše zahtjeva, pokušajte ponovo za 15 minuta' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api/', generalLimiter);
+
+// Strogi rate limit za login/register (zaštita od brute force)
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minuta
+  max: 15, // max 15 pokušaja prijave u 15 min
+  message: { message: 'Previše pokušaja prijave, pokušajte ponovo za 15 minuta' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/public-register', authLimiter);
+
+// CORS & body parsing
 app.use(cors());
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // MongoDB Connection
 mongoose.connect(process.env.MONGODB_URI)

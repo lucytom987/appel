@@ -42,8 +42,8 @@ router.get('/:id', authenticate, async (req, res) => {
   }
 });
 
-// POST /api/users - Kreiraj novog korisnika
-router.post('/', authenticate, async (req, res) => {
+// POST /api/users - Kreiraj novog korisnika (samo admin/menadzer)
+router.post('/', authenticate, checkRole(['admin', 'menadzer']), async (req, res) => {
   try {
     const { ime, prezime, email, lozinka, uloga, telefon } = req.body;
 
@@ -94,8 +94,8 @@ router.post('/', authenticate, async (req, res) => {
   }
 });
 
-// PUT /api/users/:id - Uredi korisnika
-router.put('/:id', authenticate, async (req, res) => {
+// PUT /api/users/:id - Uredi korisnika (samo admin/menadzer)
+router.put('/:id', authenticate, checkRole(['admin', 'menadzer']), async (req, res) => {
   try {
     const { ime, prezime, lozinka, uloga, telefon, aktivan } = req.body;
     const user = await User.findOne({ _id: req.params.id, companyId: req.companyId });
@@ -114,7 +114,8 @@ router.put('/:id', authenticate, async (req, res) => {
     if (ime) user.ime = ime;
     if (prezime) user.prezime = prezime;
     if (lozinka) user.lozinka = lozinka;
-    if (uloga && ['serviser', 'menadzer', 'admin', 'technician', 'manager'].includes(uloga)) user.uloga = uloga;
+    // Samo admin može mijenjati uloge
+    if (uloga && req.user.uloga === 'admin' && ['serviser', 'menadzer', 'admin'].includes(uloga)) user.uloga = uloga;
     if (telefon) user.telefon = telefon;
     if (typeof aktivan === 'boolean') user.aktivan = aktivan;
 
@@ -188,34 +189,10 @@ router.delete('/:id', authenticate, checkRole(['menadzer', 'admin']), async (req
   }
 });
 
-// GET /api/users/:id/password - Prikazi lozinku (logirano)
-router.get('/:id/password', authenticate, async (req, res) => {
-  try {
-    const user = await User.findOne({ _id: req.params.id, companyId: req.companyId });
-    if (!user) {
-      return res.status(404).json({ message: 'Korisnik nije pronadjen ili ne pripada vašoj firmi' });
-    }
+// GET /api/users/:id/password - UKLONJEN (sigurnosni rizik - lozinke se ne smiju izlagati)
 
-    await logAction({
-      korisnikId: req.user._id,
-      akcija: 'VIEW',
-      entitet: 'User',
-      entitetId: user._id,
-      entitetNaziv: `${user.ime} ${user.prezime}`,
-      stareVrijednosti: user.toJSON(),
-      ipAdresa: req.ip,
-      opis: `Prikazana lozinka za korisnika ${user.email}`
-    });
-
-    res.json({ lozinka: user.lozinka, email: user.email });
-  } catch (error) {
-    console.error('Greska pri dohvaćanju lozinke:', error);
-    res.status(500).json({ message: 'Greska pri dohvaćanju lozinke' });
-  }
-});
-
-// PUT /api/users/:id/reset-password - Resetiraj lozinku
-router.put('/:id/reset-password', authenticate, async (req, res) => {
+// PUT /api/users/:id/reset-password - Resetiraj lozinku (samo admin)
+router.put('/:id/reset-password', authenticate, checkRole(['admin']), async (req, res) => {
   try {
     const user = await User.findOne({ _id: req.params.id, companyId: req.companyId });
     if (!user) {

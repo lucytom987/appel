@@ -78,7 +78,7 @@ router.get('/entity/:entityType/:entityId', authenticate, async (req, res) => {
 // DELETE /api/audit-logs/cleanup - briše stare logove (default 90 dana)
 router.delete('/cleanup', authenticate, checkRole(['admin', 'menadzer']), async (req, res) => {
   try {
-    const daysToKeep = parseInt(req.query.days, 10) || 90;
+    const daysToKeep = Math.max(parseInt(req.query.days, 10) || 90, 30); // minimum 30 dana
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - daysToKeep);
 

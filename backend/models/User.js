@@ -39,7 +39,7 @@ userSchema.methods.provjeriLozinku = async function (unesenaLozinka) {
 userSchema.methods.toJSON = function () {
   const obj = this.toObject();
   delete obj.lozinka; // Nikad ne vraćaj hashiranu lozinku
-  // privtemenaLozinka SE vraća jer je za prikaz admin-u samo jednom
+  delete obj.privremenaLozinka; // Ne izlaži privremene lozinke
   return obj;
 };
 

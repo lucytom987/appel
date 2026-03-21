@@ -37,9 +37,9 @@ app.use('/api/', generalLimiter);
 
 // Strogi rate limit za login/register (zaštita od brute force)
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minuta
-  max: 15, // max 15 pokušaja prijave u 15 min
-  message: { message: 'Previše pokušaja prijave, pokušajte ponovo za 15 minuta' },
+  windowMs: 60 * 60 * 1000, // 1 sat
+  max: 5, // max 5 pokušaja u 1 sat
+  message: { message: 'Previše pokušaja prijave, pokušajte ponovo za 1 sat' },
   standardHeaders: true,
   legacyHeaders: false,
 });

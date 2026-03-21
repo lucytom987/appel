@@ -22,6 +22,9 @@ const io = new Server(server, {
   }
 });
 
+// CORS mora biti PRIJE rate limitera da 429 odgovor ima CORS headere
+app.use(cors());
+
 // Security middleware
 app.use(helmet());
 
@@ -46,8 +49,6 @@ const authLimiter = rateLimit({
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/public-register', authLimiter);
 
-// CORS & body parsing
-app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 

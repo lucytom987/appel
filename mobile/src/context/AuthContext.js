@@ -158,6 +158,11 @@ export const AuthProvider = ({ children }) => {
         response = await authAPI.login(email, lozinka);
       } catch (err) {
         const status = err.response?.status;
+        // 429 = rate limit - prikaži poruku s backend-a
+        if (status === 429) {
+          setLoading(false);
+          return { success: false, message: err.response?.data?.message || 'Previše pokušaja prijave. Pokušajte ponovo za 1 sat.' };
+        }
         const networkProblem = !err.response || status === 502 || status === 503;
         if (networkProblem) {
           const stillOnline = await checkOnlineStatus().catch(() => false);

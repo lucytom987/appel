@@ -15,21 +15,27 @@ import { useFocusEffect } from '@react-navigation/native';
 import { superadminAPI } from '../services/api';
 
 export default function SuperAdminScreen({ navigation }) {
+  const [activeTab, setActiveTab] = useState('firme');
   const [stats, setStats] = useState(null);
   const [companies, setCompanies] = useState([]);
+  const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
   const [companyDetail, setCompanyDetail] = useState(null);
+  const [expandedUserId, setExpandedUserId] = useState(null);
+  const [userDetail, setUserDetail] = useState(null);
 
   const loadData = async () => {
     try {
-      const [statsRes, companiesRes] = await Promise.all([
+      const [statsRes, companiesRes, usersRes] = await Promise.all([
         superadminAPI.getStats(),
         superadminAPI.getCompanies(),
+        superadminAPI.getUsers(),
       ]);
       setStats(statsRes.data?.data || null);
       setCompanies(companiesRes.data?.data || []);
+      setUsers(usersRes.data?.data || []);
     } catch (err) {
       Alert.alert('Greška', err.message || 'Nije moguće dohvatiti podatke');
     } finally {
@@ -65,6 +71,21 @@ export default function SuperAdminScreen({ navigation }) {
     }
   };
 
+  const toggleUserExpand = async (userId) => {
+    if (expandedUserId === userId) {
+      setExpandedUserId(null);
+      setUserDetail(null);
+      return;
+    }
+    setExpandedUserId(userId);
+    try {
+      const res = await superadminAPI.getUser(userId);
+      setUserDetail(res.data?.data || null);
+    } catch (err) {
+      Alert.alert('Greška', 'Nije moguće dohvatiti detalje korisnika');
+    }
+  };
+
   const handleDeleteCompany = (company) => {
     Alert.alert(
       'Obriši firmu',
@@ -90,6 +111,22 @@ export default function SuperAdminScreen({ navigation }) {
     );
   };
 
+  const getRoleColor = (uloga) => {
+    switch (uloga) {
+      case 'admin': return '#7c3aed';
+      case 'menadzer': return '#2563eb';
+      default: return '#16a34a';
+    }
+  };
+
+  const getRoleBg = (uloga) => {
+    switch (uloga) {
+      case 'admin': return '#f3e8ff';
+      case 'menadzer': return '#eff6ff';
+      default: return '#f0fdf4';
+    }
+  };
+
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -110,6 +147,28 @@ export default function SuperAdminScreen({ navigation }) {
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Super Admin</Text>
         <Ionicons name="shield-checkmark" size={24} color="#fff" />
+      </View>
+
+      {/* Tabs */}
+      <View style={styles.tabBar}>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'firme' && styles.tabActive]}
+          onPress={() => setActiveTab('firme')}
+        >
+          <Ionicons name="business" size={18} color={activeTab === 'firme' ? '#7c3aed' : '#666'} />
+          <Text style={[styles.tabText, activeTab === 'firme' && styles.tabTextActive]}>
+            Firme ({companies.length})
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'korisnici' && styles.tabActive]}
+          onPress={() => setActiveTab('korisnici')}
+        >
+          <Ionicons name="people" size={18} color={activeTab === 'korisnici' ? '#7c3aed' : '#666'} />
+          <Text style={[styles.tabText, activeTab === 'korisnici' && styles.tabTextActive]}>
+            Korisnici ({users.length})
+          </Text>
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -145,105 +204,198 @@ export default function SuperAdminScreen({ navigation }) {
           </View>
         )}
 
-        {/* Lista firmi */}
-        <View style={styles.companiesSection}>
-          <Text style={styles.sectionTitle}>
-            Registrirane firme ({companies.length})
-          </Text>
+        {/* TAB: Firme */}
+        {activeTab === 'firme' && (
+          <View style={styles.companiesSection}>
+            <Text style={styles.sectionTitle}>
+              Registrirane firme ({companies.length})
+            </Text>
 
-          {companies.map((company) => (
-            <View key={company._id} style={styles.companyCard}>
-              <TouchableOpacity
-                style={styles.companyHeader}
-                onPress={() => toggleExpand(company._id)}
-              >
-                <View style={styles.companyInfo}>
-                  <Text style={styles.companyName}>{company.naziv || 'Bez naziva'}</Text>
-                  <Text style={styles.companyMeta}>
-                    {company.admin ? `${company.admin.ime} ${company.admin.prezime}` : 'Nema admina'}
-                    {' • '}{company.userCount} korisnika • {company.elevatorCount} dizala
-                  </Text>
-                  <Text style={styles.companyDate}>
-                    Registrirano: {new Date(company.created_at).toLocaleDateString('hr-HR')}
-                  </Text>
-                </View>
-                <Ionicons
-                  name={expandedId === company._id ? 'chevron-up' : 'chevron-down'}
-                  size={22}
-                  color="#666"
-                />
-              </TouchableOpacity>
-
-              {expandedId === company._id && companyDetail && (
-                <View style={styles.companyDetail}>
-                  {/* Podaci firme */}
-                  <View style={styles.detailSection}>
-                    <Text style={styles.detailTitle}>Podaci firme</Text>
-                    {companyDetail.adresa && (
-                      <Text style={styles.detailText}>Adresa: {companyDetail.adresa}</Text>
-                    )}
-                    {companyDetail.oib && (
-                      <Text style={styles.detailText}>OIB: {companyDetail.oib}</Text>
-                    )}
-                    {companyDetail.email && (
-                      <Text style={styles.detailText}>Email: {companyDetail.email}</Text>
-                    )}
-                    {companyDetail.mobitel && (
-                      <Text style={styles.detailText}>Mobitel: {companyDetail.mobitel}</Text>
-                    )}
-                  </View>
-
-                  {/* Statistike */}
-                  <View style={styles.detailSection}>
-                    <Text style={styles.detailTitle}>Statistike</Text>
-                    <Text style={styles.detailText}>
-                      Dizala: {companyDetail.stats?.elevatorCount || 0}
+            {companies.map((company) => (
+              <View key={company._id} style={styles.companyCard}>
+                <TouchableOpacity
+                  style={styles.companyHeader}
+                  onPress={() => toggleExpand(company._id)}
+                >
+                  <View style={styles.companyInfo}>
+                    <Text style={styles.companyName}>{company.naziv || 'Bez naziva'}</Text>
+                    <Text style={styles.companyMeta}>
+                      {company.admin ? `${company.admin.ime} ${company.admin.prezime}` : 'Nema admina'}
+                      {' • '}{company.userCount} korisnika • {company.elevatorCount} dizala
                     </Text>
-                    <Text style={styles.detailText}>
-                      Servisi: {companyDetail.stats?.serviceCount || 0}
-                    </Text>
-                    <Text style={styles.detailText}>
-                      Popravci: {companyDetail.stats?.repairCount || 0}
+                    <Text style={styles.companyDate}>
+                      Registrirano: {new Date(company.created_at).toLocaleDateString('hr-HR')}
                     </Text>
                   </View>
+                  <Ionicons
+                    name={expandedId === company._id ? 'chevron-up' : 'chevron-down'}
+                    size={22}
+                    color="#666"
+                  />
+                </TouchableOpacity>
 
-                  {/* Korisnici */}
-                  <View style={styles.detailSection}>
-                    <Text style={styles.detailTitle}>
-                      Korisnici ({companyDetail.users?.length || 0})
-                    </Text>
-                    {(companyDetail.users || []).map((u) => (
-                      <View key={u._id} style={styles.userRow}>
-                        <Ionicons
-                          name={u.uloga === 'admin' ? 'shield' : 'person'}
-                          size={16}
-                          color={u.aktivan ? '#16a34a' : '#ef4444'}
-                        />
-                        <Text style={[styles.userName, !u.aktivan && styles.userInactive]}>
-                          {u.ime} {u.prezime}
-                        </Text>
-                        <Text style={styles.userRole}>{u.uloga}</Text>
-                      </View>
-                    ))}
+                {expandedId === company._id && companyDetail && (
+                  <View style={styles.companyDetail}>
+                    <View style={styles.detailSection}>
+                      <Text style={styles.detailTitle}>Podaci firme</Text>
+                      {companyDetail.adresa && (
+                        <Text style={styles.detailText}>Adresa: {companyDetail.adresa}</Text>
+                      )}
+                      {companyDetail.oib && (
+                        <Text style={styles.detailText}>OIB: {companyDetail.oib}</Text>
+                      )}
+                      {companyDetail.email && (
+                        <Text style={styles.detailText}>Email: {companyDetail.email}</Text>
+                      )}
+                      {companyDetail.mobitel && (
+                        <Text style={styles.detailText}>Mobitel: {companyDetail.mobitel}</Text>
+                      )}
+                    </View>
+
+                    <View style={styles.detailSection}>
+                      <Text style={styles.detailTitle}>Statistike</Text>
+                      <Text style={styles.detailText}>
+                        Dizala: {companyDetail.stats?.elevatorCount || 0}
+                      </Text>
+                      <Text style={styles.detailText}>
+                        Servisi: {companyDetail.stats?.serviceCount || 0}
+                      </Text>
+                      <Text style={styles.detailText}>
+                        Popravci: {companyDetail.stats?.repairCount || 0}
+                      </Text>
+                    </View>
+
+                    <View style={styles.detailSection}>
+                      <Text style={styles.detailTitle}>
+                        Korisnici ({companyDetail.users?.length || 0})
+                      </Text>
+                      {(companyDetail.users || []).map((u) => (
+                        <View key={u._id} style={styles.userRow}>
+                          <Ionicons
+                            name={u.uloga === 'admin' ? 'shield' : 'person'}
+                            size={16}
+                            color={u.aktivan ? '#16a34a' : '#ef4444'}
+                          />
+                          <Text style={[styles.userName, !u.aktivan && styles.userInactive]}>
+                            {u.ime} {u.prezime}
+                          </Text>
+                          <Text style={[styles.userRole, { color: getRoleColor(u.uloga), backgroundColor: getRoleBg(u.uloga) }]}>{u.uloga}</Text>
+                        </View>
+                      ))}
+                    </View>
+
+                    <TouchableOpacity
+                      style={styles.deleteButton}
+                      onPress={() => handleDeleteCompany(company)}
+                    >
+                      <Ionicons name="trash" size={18} color="#fff" />
+                      <Text style={styles.deleteButtonText}>Obriši firmu i sve podatke</Text>
+                    </TouchableOpacity>
                   </View>
+                )}
+              </View>
+            ))}
 
-                  {/* Obriši firmu */}
-                  <TouchableOpacity
-                    style={styles.deleteButton}
-                    onPress={() => handleDeleteCompany(company)}
-                  >
-                    <Ionicons name="trash" size={18} color="#fff" />
-                    <Text style={styles.deleteButtonText}>Obriši firmu i sve podatke</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
-          ))}
+            {companies.length === 0 && (
+              <Text style={styles.emptyText}>Nema registriranih firmi</Text>
+            )}
+          </View>
+        )}
 
-          {companies.length === 0 && (
-            <Text style={styles.emptyText}>Nema registriranih firmi</Text>
-          )}
-        </View>
+        {/* TAB: Korisnici */}
+        {activeTab === 'korisnici' && (
+          <View style={styles.companiesSection}>
+            <Text style={styles.sectionTitle}>
+              Svi korisnici ({users.length})
+            </Text>
+
+            {users.map((u) => (
+              <View key={u._id} style={styles.companyCard}>
+                <TouchableOpacity
+                  style={styles.companyHeader}
+                  onPress={() => toggleUserExpand(u._id)}
+                >
+                  <View style={{ flex: 1 }}>
+                    <View style={styles.userHeaderRow}>
+                      <Ionicons
+                        name={u.uloga === 'admin' ? 'shield' : u.uloga === 'menadzer' ? 'briefcase' : 'person'}
+                        size={20}
+                        color={u.aktivan ? getRoleColor(u.uloga) : '#9ca3af'}
+                      />
+                      <Text style={[styles.companyName, !u.aktivan && { color: '#9ca3af' }]}>
+                        {u.ime} {u.prezime}
+                      </Text>
+                      {!u.aktivan && (
+                        <View style={styles.inactiveBadge}>
+                          <Text style={styles.inactiveBadgeText}>Neaktivan</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={styles.companyMeta}>{u.email}</Text>
+                    <Text style={styles.companyDate}>
+                      {u.companyNaziv} • <Text style={[{ color: getRoleColor(u.uloga), fontWeight: '600' }]}>{u.uloga}</Text>
+                    </Text>
+                  </View>
+                  <Ionicons
+                    name={expandedUserId === u._id ? 'chevron-up' : 'chevron-down'}
+                    size={22}
+                    color="#666"
+                  />
+                </TouchableOpacity>
+
+                {expandedUserId === u._id && userDetail && (
+                  <View style={styles.companyDetail}>
+                    <View style={styles.detailSection}>
+                      <Text style={styles.detailTitle}>Osobni podaci</Text>
+                      <Text style={styles.detailText}>Ime: {userDetail.ime} {userDetail.prezime}</Text>
+                      <Text style={styles.detailText}>Email: {userDetail.email}</Text>
+                      {userDetail.telefon && (
+                        <Text style={styles.detailText}>Telefon: {userDetail.telefon}</Text>
+                      )}
+                      <Text style={styles.detailText}>Uloga: {userDetail.uloga}</Text>
+                      <Text style={styles.detailText}>
+                        Status: {userDetail.aktivan ? 'Aktivan' : 'Neaktivan'}
+                      </Text>
+                      <Text style={styles.detailText}>
+                        Registriran: {new Date(userDetail.kreiranDatum).toLocaleDateString('hr-HR')}
+                      </Text>
+                    </View>
+
+                    <View style={styles.detailSection}>
+                      <Text style={styles.detailTitle}>Firma</Text>
+                      <Text style={styles.detailText}>
+                        Naziv: {userDetail.company?.naziv || 'Nepoznato'}
+                      </Text>
+                      {userDetail.company?.adresa && (
+                        <Text style={styles.detailText}>Adresa: {userDetail.company.adresa}</Text>
+                      )}
+                      {userDetail.company?.oib && (
+                        <Text style={styles.detailText}>OIB: {userDetail.company.oib}</Text>
+                      )}
+                      {userDetail.company?.email && (
+                        <Text style={styles.detailText}>Email firme: {userDetail.company.email}</Text>
+                      )}
+                    </View>
+
+                    <View style={styles.detailSection}>
+                      <Text style={styles.detailTitle}>Aktivnost</Text>
+                      <Text style={styles.detailText}>
+                        Servisi firme: {userDetail.stats?.serviceCount || 0}
+                      </Text>
+                      <Text style={styles.detailText}>
+                        Popravci firme: {userDetail.stats?.repairCount || 0}
+                      </Text>
+                    </View>
+                  </View>
+                )}
+              </View>
+            ))}
+
+            {users.length === 0 && (
+              <Text style={styles.emptyText}>Nema korisnika</Text>
+            )}
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -271,6 +423,34 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+  },
+  tabBar: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  tab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    borderBottomWidth: 3,
+    borderBottomColor: 'transparent',
+  },
+  tabActive: {
+    borderBottomColor: '#7c3aed',
+  },
+  tabText: {
+    fontSize: 15,
+    color: '#666',
+    fontWeight: '500',
+  },
+  tabTextActive: {
+    color: '#7c3aed',
+    fontWeight: '700',
   },
   backButton: {
     padding: 4,
@@ -417,5 +597,22 @@ const styles = StyleSheet.create({
     color: '#9ca3af',
     fontSize: 16,
     marginTop: 40,
+  },
+  userHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  inactiveBadge: {
+    backgroundColor: '#fee2e2',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+    marginLeft: 8,
+  },
+  inactiveBadgeText: {
+    fontSize: 11,
+    color: '#ef4444',
+    fontWeight: '600',
   },
 });

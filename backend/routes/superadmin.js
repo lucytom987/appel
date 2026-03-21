@@ -142,4 +142,62 @@ router.delete('/companies/:id', async (req, res) => {
   }
 });
 
+// GET /api/superadmin/users - Lista svih korisnika sa svim firmama
+router.get('/users', async (req, res) => {
+  try {
+    const users = await User.find()
+      .select('ime prezime email uloga aktivan telefon companyId kreiranDatum')
+      .sort({ kreiranDatum: -1 })
+      .lean();
+
+    // Dohvati nazive firmi
+    const companyIds = [...new Set(users.map(u => String(u.companyId)))];
+    const companies = await Company.find({ _id: { $in: companyIds } }).select('naziv').lean();
+    const companyMap = {};
+    companies.forEach(c => { companyMap[String(c._id)] = c.naziv; });
+
+    const enriched = users.map(u => ({
+      ...u,
+      companyNaziv: companyMap[String(u.companyId)] || 'Nepoznata firma',
+    }));
+
+    res.json({ success: true, data: enriched });
+  } catch (error) {
+    console.error('SuperAdmin users error:', error);
+    res.status(500).json({ message: 'Greška pri dohvaćanju korisnika' });
+  }
+});
+
+// GET /api/superadmin/users/:id - Detalji jednog korisnika
+router.get('/users/:id', async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id)
+      .select('ime prezime email uloga aktivan telefon companyId kreiranDatum azuriranDatum')
+      .lean();
+    if (!user) {
+      return res.status(404).json({ message: 'Korisnik nije pronađen' });
+    }
+
+    const company = await Company.findById(user.companyId).select('naziv adresa oib email').lean();
+
+    // Statistike korisnika
+    const [serviceCount, repairCount] = await Promise.all([
+      Service.countDocuments({ companyId: user.companyId, servpicer: user._id, is_deleted: { $ne: true } }).catch(() => 0),
+      Repair.countDocuments({ companyId: user.companyId, is_deleted: { $ne: true } }).catch(() => 0),
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        ...user,
+        company: company || { naziv: 'Nepoznata firma' },
+        stats: { serviceCount, repairCount },
+      },
+    });
+  } catch (error) {
+    console.error('SuperAdmin user detail error:', error);
+    res.status(500).json({ message: 'Greška pri dohvaćanju korisnika' });
+  }
+});
+
 module.exports = router;

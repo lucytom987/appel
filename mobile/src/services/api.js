@@ -226,6 +226,8 @@ export const superadminAPI = {
   getCompany: (id) => api.get(`/superadmin/companies/${id}`),
   getStats: () => api.get('/superadmin/stats'),
   deleteCompany: (id) => api.delete(`/superadmin/companies/${id}`),
+  getUsers: () => api.get('/superadmin/users'),
+  getUser: (id) => api.get(`/superadmin/users/${id}`),
 };
 
 // Repairs API

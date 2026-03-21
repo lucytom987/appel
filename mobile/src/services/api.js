@@ -1,11 +1,39 @@
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
+import Constants from 'expo-constants';
 import { syncQueue } from '../database/db';
 
-// Backend URL - koristi EXPO_PUBLIC_API_URL ako je postavljen, inače produkcija
-const DEFAULT_API_URL = 'https://appel-q97a.onrender.com/api';
+// Backend URL - hard-lock po app varijanti da se staging/prod ne pomiješaju
+const PRODUCTION_API_URL = 'https://appel-q97a.onrender.com/api';
+const STAGING_API_URL = 'https://appel-backend-staging.onrender.com/api';
+
+const detectedAndroidPackage =
+  Constants?.expoConfig?.android?.package ||
+  Constants?.manifest2?.extra?.expoClient?.android?.package ||
+  Constants?.manifest?.android?.package ||
+  '';
+
+const appVariantFromConfig =
+  Constants?.expoConfig?.extra?.appVariant ||
+  Constants?.manifest2?.extra?.expoClient?.extra?.appVariant ||
+  process.env.APP_VARIANT ||
+  '';
+
+const inferredStaging =
+  appVariantFromConfig === 'staging' ||
+  String(detectedAndroidPackage).endsWith('.staging');
+
+const appVariant = inferredStaging ? 'staging' : 'production';
+
 const rawApiUrl = process.env.EXPO_PUBLIC_API_URL || '';
-export const API_URL = rawApiUrl.trim().replace(/\/+$/, '') || DEFAULT_API_URL;
+const envApiUrl = rawApiUrl.trim().replace(/\/+$/, '');
+
+// staging app uvijek ide na staging backend (ignorira env override)
+export const API_URL = appVariant === 'staging'
+  ? STAGING_API_URL
+  : (envApiUrl || PRODUCTION_API_URL);
+
+console.log(`🌐 API config: variant=${appVariant}, package=${detectedAndroidPackage || 'n/a'}, url=${API_URL}`);
 
 // Axios instance sa default konfiguracijom
 const api = axios.create({
@@ -141,6 +169,7 @@ export const requestWithQueue = async (method, url, data = {}) => {
 export const authAPI = {
   login: (email, lozinka) => api.post('/auth/login', { email, lozinka }),
   register: (data) => api.post('/auth/register', data),
+  publicRegister: (data) => api.post('/auth/public-register', data),
   getMe: () => api.get('/auth/me'),
 };
 

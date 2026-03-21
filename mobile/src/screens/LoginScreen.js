@@ -16,7 +16,7 @@ import * as SecureStore from 'expo-secure-store';
 
 const APP_VERSION = '16.02.2026';
 
-export default function LoginScreen() {
+export default function LoginScreen({ navigation }) {
   const { login, loading, setUser } = useAuth();
   const [email, setEmail] = useState('');
   const [lozinka, setLozinka] = useState('');
@@ -94,6 +94,16 @@ export default function LoginScreen() {
             ) : (
               <Text style={styles.buttonText}>Prijavi se</Text>
             )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.registerLink}
+            onPress={() => navigation.navigate('Register')}
+            disabled={loading}
+          >
+            <Text style={styles.registerLinkText}>
+              Nemate račun? <Text style={styles.registerLinkBold}>Registrirajte se</Text>
+            </Text>
           </TouchableOpacity>
         </View>
 
@@ -177,5 +187,18 @@ const styles = StyleSheet.create({
     color: '#E3F2FD',
     marginTop: 40,
     fontSize: 12,
+  },
+  registerLink: {
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  registerLinkText: {
+    color: '#E3F2FD',
+    fontSize: 15,
+  },
+  registerLinkBold: {
+    fontWeight: 'bold',
+    color: '#fff',
+    textDecorationLine: 'underline',
   },
 });

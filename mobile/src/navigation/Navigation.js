@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 
 // Screens
 import LoginScreen from '../screens/LoginScreen';
+import RegisterScreen from '../screens/RegisterScreen';
 import HomeScreen from '../screens/HomeScreen';
 import ElevatorsListScreen from '../screens/ElevatorsListScreen';
 import ElevatorDetailsScreen from '../screens/ElevatorDetailsScreen';
@@ -89,7 +90,10 @@ export default function Navigation() {
             )}
           </>
         ) : (
-          <Stack.Screen name="Login" component={LoginScreen} />
+          <>
+            <Stack.Screen name="Login" component={LoginScreen} />
+            <Stack.Screen name="Register" component={RegisterScreen} />
+          </>
         )}
       </Stack.Navigator>
     </NavigationContainer>

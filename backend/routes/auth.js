@@ -1,6 +1,7 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const Company = require('../models/Company');
 const { authenticate } = require('../middleware/auth');
 const { logAction } = require('../services/auditService');
 
@@ -143,6 +144,69 @@ router.post('/register', authenticate, async (req, res) => {
     });
   } catch (error) {
     console.error('Register greška:', error);
+    res.status(500).json({ message: 'Greška pri registraciji' });
+  }
+});
+
+// POST /api/auth/public-register - Registracija nove stranke (javni endpoint)
+router.post('/public-register', async (req, res) => {
+  try {
+    const { ime, prezime, email, lozinka, nazivFirme } = req.body;
+
+    if (!ime || !prezime || !email || !lozinka || !nazivFirme) {
+      return res.status(400).json({ message: 'Sva polja su obavezna (ime, prezime, email, lozinka, nazivFirme)' });
+    }
+
+    if (lozinka.length < 6) {
+      return res.status(400).json({ message: 'Lozinka mora imati najmanje 6 znakova' });
+    }
+
+    // Kreiraj novu firmu
+    const novaFirma = new Company({ naziv: nazivFirme });
+    await novaFirma.save();
+
+    // Provjeri postoji li korisnik s tim emailom u novoj firmi (ne bi trebalo, ali za svaki slučaj)
+    const postojeciKorisnik = await User.findOne({ email, companyId: novaFirma._id });
+    if (postojeciKorisnik) {
+      await Company.findByIdAndDelete(novaFirma._id);
+      return res.status(400).json({ message: 'Korisnik s tim emailom već postoji' });
+    }
+
+    // Kreiraj admin korisnika
+    const adminKorisnik = new User({
+      companyId: novaFirma._id,
+      ime,
+      prezime,
+      email,
+      lozinka,
+      uloga: 'admin',
+      aktivan: true,
+    });
+    await adminKorisnik.save();
+
+    const { accessToken, refreshToken } = generateTokens(adminKorisnik._id);
+
+    await logAction({
+      korisnikId: adminKorisnik._id,
+      akcija: 'CREATE',
+      entitet: 'Company',
+      entitetId: novaFirma._id,
+      entitetNaziv: nazivFirme,
+      noveVrijednosti: { firma: novaFirma.toJSON(), korisnik: adminKorisnik.toJSON() },
+      ipAdresa: req.ip,
+      opis: `Nova registracija: ${email} za firmu "${nazivFirme}"`,
+    });
+
+    res.status(201).json({
+      token: accessToken,
+      refreshToken,
+      korisnik: adminKorisnik.toJSON(),
+    });
+  } catch (error) {
+    console.error('Public register greška:', error);
+    if (error.code === 11000) {
+      return res.status(400).json({ message: 'Korisnik s tim emailom već postoji' });
+    }
     res.status(500).json({ message: 'Greška pri registraciji' });
   }
 });

@@ -4,7 +4,11 @@
   "main": "index.js",
   "scripts": {
     "start": "expo start",
+    "start:staging": "set APP_VARIANT=staging&& set EXPO_PUBLIC_API_URL=https://appel-backend-staging.onrender.com/api&& expo start --clear",
+    "start:prod": "set APP_VARIANT=production&& set EXPO_PUBLIC_API_URL=https://appel-q97a.onrender.com/api&& expo start --clear",
     "android": "expo run:android",
+    "android:staging": "set APP_VARIANT=staging&& set EXPO_PUBLIC_API_URL=https://appel-backend-staging.onrender.com/api&& expo run:android",
+    "android:prod": "set APP_VARIANT=production&& set EXPO_PUBLIC_API_URL=https://appel-q97a.onrender.com/api&& expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web"
   },

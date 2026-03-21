@@ -231,6 +231,56 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const register = async (data) => {
+    try {
+      setLoading(true);
+      console.log('Pokušavam registraciju...', data.email);
+
+      let response;
+      try {
+        response = await authAPI.publicRegister(data);
+      } catch (err) {
+        const status = err.response?.status || err.status;
+        const networkProblem = !err.response && !err.status || status === 502 || status === 503;
+        if (networkProblem) {
+          setLoading(false);
+          return { success: false, message: 'Server trenutno nije dostupan. Pokušajte ponovo.' };
+        }
+        setLoading(false);
+        return {
+          success: false,
+          message: err.response?.data?.message || err.message || 'Greška pri registraciji',
+        };
+      }
+
+      const { token, refreshToken, korisnik } = response.data;
+      if (!token || !korisnik) {
+        throw new Error('Nevaljan registracijski odgovor');
+      }
+
+      await SecureStore.setItemAsync('userToken', token);
+      if (refreshToken) {
+        await SecureStore.setItemAsync('userRefreshToken', refreshToken);
+      }
+      await SecureStore.setItemAsync('userData', JSON.stringify(korisnik));
+
+      setUser(korisnik);
+      setCompanySetupRequired(true); // Nova firma uvijek treba setup
+      setLoading(false);
+
+      wakeBackendAndSync(true);
+
+      return { success: true };
+    } catch (error) {
+      console.error('Register greška:', error);
+      setLoading(false);
+      return {
+        success: false,
+        message: error.response?.data?.message || error.message || 'Greška pri registraciji',
+      };
+    }
+  };
+
   const logout = async () => {
     try {
       setLoading(true);
@@ -259,6 +309,7 @@ export const AuthProvider = ({ children }) => {
     companySetupRequired,
     setCompanySetupRequired,
     login,
+    register,
     logout,
   };
 

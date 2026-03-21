@@ -49,6 +49,7 @@ app.use('/api/chatrooms', require('./routes/chatrooms'));
 app.use('/api/messages', require('./routes/messages'));
 app.use('/api/simcards', require('./routes/simcards'));
 app.use('/api/audit-logs', require('./routes/auditLogs'));
+app.use('/api/superadmin', require('./routes/superadmin'));
 
 // Socket.io setup
 const activeUsers = new Map();

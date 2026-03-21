@@ -1,0 +1,140 @@
+const express = require('express');
+const { authenticate } = require('../middleware/auth');
+const Company = require('../models/Company');
+const User = require('../models/User');
+const Elevator = require('../models/Elevator');
+const Service = require('../models/Service');
+const Repair = require('../models/Repair');
+
+const router = express.Router();
+
+// Middleware: provjeri koji je korisnik superAdmin
+const requireSuperAdmin = async (req, res, next) => {
+  if (!req.user.superAdmin) {
+    return res.status(403).json({ message: 'Pristup dozvoljen samo super administratoru' });
+  }
+  next();
+};
+
+// Sve rute zahtijevaju auth + superAdmin
+router.use(authenticate, requireSuperAdmin);
+
+// GET /api/superadmin/companies - Lista svih firmi
+router.get('/companies', async (req, res) => {
+  try {
+    const companies = await Company.find().sort({ created_at: -1 }).lean();
+
+    // Za svaku firmu dohvati broj korisnika i dizala
+    const enriched = await Promise.all(
+      companies.map(async (company) => {
+        const [userCount, elevatorCount, adminUser] = await Promise.all([
+          User.countDocuments({ companyId: company._id, aktivan: true }),
+          Elevator.countDocuments({ companyId: company._id, is_deleted: { $ne: true } }),
+          User.findOne({ companyId: company._id, uloga: 'admin' }).select('ime prezime email').lean(),
+        ]);
+        return {
+          ...company,
+          userCount,
+          elevatorCount,
+          admin: adminUser,
+        };
+      })
+    );
+
+    res.json({ success: true, data: enriched });
+  } catch (error) {
+    console.error('SuperAdmin companies error:', error);
+    res.status(500).json({ message: 'Greška pri dohvaćanju firmi' });
+  }
+});
+
+// GET /api/superadmin/companies/:id - Detalji jedne firme
+router.get('/companies/:id', async (req, res) => {
+  try {
+    const company = await Company.findById(req.params.id).lean();
+    if (!company) {
+      return res.status(404).json({ message: 'Firma nije pronađena' });
+    }
+
+    const [users, elevatorCount, serviceCount, repairCount] = await Promise.all([
+      User.find({ companyId: company._id }).select('ime prezime email uloga aktivan kreiranDatum').lean(),
+      Elevator.countDocuments({ companyId: company._id, is_deleted: { $ne: true } }),
+      Service.countDocuments({ companyId: company._id, is_deleted: { $ne: true } }),
+      Repair.countDocuments({ companyId: company._id, is_deleted: { $ne: true } }),
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        ...company,
+        users,
+        stats: { elevatorCount, serviceCount, repairCount },
+      },
+    });
+  } catch (error) {
+    console.error('SuperAdmin company detail error:', error);
+    res.status(500).json({ message: 'Greška pri dohvaćanju detalja firme' });
+  }
+});
+
+// GET /api/superadmin/stats - Globalna statistika platforme
+router.get('/stats', async (req, res) => {
+  try {
+    const [companyCount, userCount, elevatorCount, serviceCount, repairCount] = await Promise.all([
+      Company.countDocuments(),
+      User.countDocuments({ aktivan: true }),
+      Elevator.countDocuments({ is_deleted: { $ne: true } }),
+      Service.countDocuments({ is_deleted: { $ne: true } }),
+      Repair.countDocuments({ is_deleted: { $ne: true } }),
+    ]);
+
+    // Zadnjih 5 registriranih firmi
+    const recentCompanies = await Company.find()
+      .sort({ created_at: -1 })
+      .limit(5)
+      .select('naziv created_at')
+      .lean();
+
+    res.json({
+      success: true,
+      data: {
+        companyCount,
+        userCount,
+        elevatorCount,
+        serviceCount,
+        repairCount,
+        recentCompanies,
+      },
+    });
+  } catch (error) {
+    console.error('SuperAdmin stats error:', error);
+    res.status(500).json({ message: 'Greška pri dohvaćanju statistike' });
+  }
+});
+
+// DELETE /api/superadmin/companies/:id - Obriši firmu i sve njene podatke
+router.delete('/companies/:id', async (req, res) => {
+  try {
+    const company = await Company.findById(req.params.id);
+    if (!company) {
+      return res.status(404).json({ message: 'Firma nije pronađena' });
+    }
+
+    // Obriši sve podatke firme
+    await Promise.all([
+      User.deleteMany({ companyId: company._id }),
+      Elevator.deleteMany({ companyId: company._id }),
+      Service.deleteMany({ companyId: company._id }),
+      Repair.deleteMany({ companyId: company._id }),
+    ]);
+
+    await Company.findByIdAndDelete(company._id);
+
+    res.json({ success: true, message: `Firma "${company.naziv}" i svi podaci obrisani` });
+  } catch (error) {
+    console.error('SuperAdmin delete company error:', error);
+    res.status(500).json({ message: 'Greška pri brisanju firme' });
+  }
+});
+
+module.exports = router;

@@ -220,6 +220,14 @@ export const usersAPI = {
   getPassword: (id) => api.get(`/users/${id}/password`),
 };
 
+// SuperAdmin API - Platform owner
+export const superadminAPI = {
+  getCompanies: () => api.get('/superadmin/companies'),
+  getCompany: (id) => api.get(`/superadmin/companies/${id}`),
+  getStats: () => api.get('/superadmin/stats'),
+  deleteCompany: (id) => api.delete(`/superadmin/companies/${id}`),
+};
+
 // Repairs API
 export const repairsAPI = {
   getAll: (params) => api.get('/repairs', { params }),

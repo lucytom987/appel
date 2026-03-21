@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -22,6 +22,11 @@ export default function RegisterScreen({ navigation }) {
   const [lozinka, setLozinka] = useState('');
   const [potvrdaLozinke, setPotvrdaLozinke] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const scrollRef = useRef(null);
+
+  const scrollToInput = (y) => {
+    scrollRef.current?.scrollTo({ y: Math.max(0, y - 150), animated: true });
+  };
 
   const handleRegister = async () => {
     if (!ime || !prezime || !email || !nazivFirme || !lozinka || !potvrdaLozinke) {
@@ -49,9 +54,10 @@ export default function RegisterScreen({ navigation }) {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
       >
@@ -98,9 +104,13 @@ export default function RegisterScreen({ navigation }) {
               value={nazivFirme}
               onChangeText={setNazivFirme}
               editable={!loading}
+              onFocus={(e) => e.target.measure((x, y, w, h, px, py) => scrollToInput(py))}
             />
 
-            <View style={styles.passwordContainer}>
+            <View 
+              style={styles.passwordContainer}
+              onLayout={() => {}}
+            >
               <TextInput
                 style={styles.passwordInput}
                 placeholder="Lozinka (min. 6 znakova)"
@@ -109,6 +119,7 @@ export default function RegisterScreen({ navigation }) {
                 onChangeText={setLozinka}
                 secureTextEntry={!showPassword}
                 editable={!loading}
+                onFocus={(e) => e.target.measure((x, y, w, h, px, py) => scrollToInput(py))}
               />
               <TouchableOpacity
                 style={styles.eyeButton}
@@ -126,6 +137,7 @@ export default function RegisterScreen({ navigation }) {
               onChangeText={setPotvrdaLozinke}
               secureTextEntry={!showPassword}
               editable={!loading}
+              onFocus={(e) => e.target.measure((x, y, w, h, px, py) => scrollToInput(py))}
             />
 
             <TouchableOpacity

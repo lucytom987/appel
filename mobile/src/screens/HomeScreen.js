@@ -438,6 +438,17 @@ export default function HomeScreen({ navigation }) {
                 <Ionicons name="chevron-forward" size={20} color="#999" />
               </TouchableOpacity>
             )}
+
+            {user?.superAdmin && (
+              <TouchableOpacity 
+                style={[styles.actionButton, { borderLeftColor: '#7c3aed', borderLeftWidth: 4 }]}
+                onPress={() => navigation.navigate('SuperAdmin')}
+              >
+                <Ionicons name="shield-checkmark" size={24} color="#7c3aed" />
+                <Text style={styles.actionText}>Super Admin Panel</Text>
+                <Ionicons name="chevron-forward" size={20} color="#999" />
+              </TouchableOpacity>
+            )}
           </View>
         )}
 

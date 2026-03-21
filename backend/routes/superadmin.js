@@ -62,7 +62,7 @@ router.get('/companies/:id', async (req, res) => {
     }
 
     const [users, elevatorCount, serviceCount, repairCount] = await Promise.all([
-      User.find({ companyId: company._id }).select('ime prezime email uloga aktivan kreiranDatum').lean(),
+      User.find({ companyId: company._id }).select('ime prezime email uloga aktivan telefon kreiranDatum').lean(),
       Elevator.countDocuments({ companyId: company._id, is_deleted: { $ne: true } }),
       Service.countDocuments({ companyId: company._id, is_deleted: { $ne: true } }),
       Repair.countDocuments({ companyId: company._id, is_deleted: { $ne: true } }),

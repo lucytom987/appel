@@ -16,29 +16,25 @@ import { useFocusEffect } from '@react-navigation/native';
 import { superadminAPI } from '../services/api';
 
 export default function SuperAdminScreen({ navigation }) {
-  const [activeTab, setActiveTab] = useState('firme');
   const [stats, setStats] = useState(null);
   const [companies, setCompanies] = useState([]);
-  const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
   const [companyDetail, setCompanyDetail] = useState(null);
   const [expandedUserId, setExpandedUserId] = useState(null);
-  const [userDetail, setUserDetail] = useState(null);
   const [passwordUserId, setPasswordUserId] = useState(null);
   const [newPassword, setNewPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
   const loadData = async () => {
     try {
-      const [statsRes, companiesRes, usersRes] = await Promise.all([
+      const [statsRes, companiesRes] = await Promise.all([
         superadminAPI.getStats(),
         superadminAPI.getCompanies(),
-        superadminAPI.getUsers(),
       ]);
       setStats(statsRes.data?.data || null);
       setCompanies(companiesRes.data?.data || []);
-      setUsers(usersRes.data?.data || []);
     } catch (err) {
       Alert.alert('Greška', err.message || 'Nije moguće dohvatiti podatke');
     } finally {
@@ -63,9 +59,15 @@ export default function SuperAdminScreen({ navigation }) {
     if (expandedId === companyId) {
       setExpandedId(null);
       setCompanyDetail(null);
+      setExpandedUserId(null);
+      setPasswordUserId(null);
+      setNewPassword('');
       return;
     }
     setExpandedId(companyId);
+    setExpandedUserId(null);
+    setPasswordUserId(null);
+    setNewPassword('');
     try {
       const res = await superadminAPI.getCompany(companyId);
       setCompanyDetail(res.data?.data || null);
@@ -74,19 +76,18 @@ export default function SuperAdminScreen({ navigation }) {
     }
   };
 
-  const toggleUserExpand = async (userId) => {
+  const toggleUserExpand = (userId) => {
     if (expandedUserId === userId) {
       setExpandedUserId(null);
-      setUserDetail(null);
+      setPasswordUserId(null);
+      setNewPassword('');
+      setShowPassword(false);
       return;
     }
     setExpandedUserId(userId);
-    try {
-      const res = await superadminAPI.getUser(userId);
-      setUserDetail(res.data?.data || null);
-    } catch (err) {
-      Alert.alert('Greška', 'Nije moguće dohvatiti detalje korisnika');
-    }
+    setPasswordUserId(null);
+    setNewPassword('');
+    setShowPassword(false);
   };
 
   const handleDeleteCompany = (company) => {
@@ -152,28 +153,6 @@ export default function SuperAdminScreen({ navigation }) {
         <Ionicons name="shield-checkmark" size={24} color="#fff" />
       </View>
 
-      {/* Tabs */}
-      <View style={styles.tabBar}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'firme' && styles.tabActive]}
-          onPress={() => setActiveTab('firme')}
-        >
-          <Ionicons name="business" size={18} color={activeTab === 'firme' ? '#7c3aed' : '#666'} />
-          <Text style={[styles.tabText, activeTab === 'firme' && styles.tabTextActive]}>
-            Firme ({companies.length})
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'korisnici' && styles.tabActive]}
-          onPress={() => setActiveTab('korisnici')}
-        >
-          <Ionicons name="people" size={18} color={activeTab === 'korisnici' ? '#7c3aed' : '#666'} />
-          <Text style={[styles.tabText, activeTab === 'korisnici' && styles.tabTextActive]}>
-            Korisnici ({users.length})
-          </Text>
-        </TouchableOpacity>
-      </View>
-
       <ScrollView
         style={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
@@ -207,250 +186,229 @@ export default function SuperAdminScreen({ navigation }) {
           </View>
         )}
 
-        {/* TAB: Firme */}
-        {activeTab === 'firme' && (
-          <View style={styles.companiesSection}>
-            <Text style={styles.sectionTitle}>
-              Registrirane firme ({companies.length})
-            </Text>
+        {/* Firme */}
+        <View style={styles.companiesSection}>
+          <Text style={styles.sectionTitle}>
+            Registrirane firme ({companies.length})
+          </Text>
 
-            {companies.map((company) => (
-              <View key={company._id} style={styles.companyCard}>
-                <TouchableOpacity
-                  style={styles.companyHeader}
-                  onPress={() => toggleExpand(company._id)}
-                >
-                  <View style={styles.companyInfo}>
-                    <Text style={styles.companyName}>{company.naziv || 'Bez naziva'}</Text>
-                    <Text style={styles.companyMeta}>
-                      {company.admin ? `${company.admin.ime} ${company.admin.prezime}` : 'Nema admina'}
-                      {' • '}{company.userCount} korisnika • {company.elevatorCount} dizala
+          {companies.map((company) => (
+            <View key={company._id} style={styles.companyCard}>
+              <TouchableOpacity
+                style={styles.companyHeader}
+                onPress={() => toggleExpand(company._id)}
+              >
+                <View style={styles.companyInfo}>
+                  <Text style={styles.companyName}>{company.naziv || 'Bez naziva'}</Text>
+                  <Text style={styles.companyMeta}>
+                    {company.admin ? `${company.admin.ime} ${company.admin.prezime}` : 'Nema admina'}
+                    {' • '}{company.userCount} korisnika • {company.elevatorCount} dizala
+                  </Text>
+                  <Text style={styles.companyDate}>
+                    Registrirano: {new Date(company.created_at).toLocaleDateString('hr-HR')}
+                  </Text>
+                </View>
+                <Ionicons
+                  name={expandedId === company._id ? 'chevron-up' : 'chevron-down'}
+                  size={22}
+                  color="#666"
+                />
+              </TouchableOpacity>
+
+              {expandedId === company._id && companyDetail && (
+                <View style={styles.companyDetail}>
+                  <View style={styles.detailSection}>
+                    <Text style={styles.detailTitle}>Podaci firme</Text>
+                    {companyDetail.adresa && (
+                      <Text style={styles.detailText}>Adresa: {companyDetail.adresa}</Text>
+                    )}
+                    {companyDetail.oib && (
+                      <Text style={styles.detailText}>OIB: {companyDetail.oib}</Text>
+                    )}
+                    {companyDetail.email && (
+                      <Text style={styles.detailText}>Email: {companyDetail.email}</Text>
+                    )}
+                    {companyDetail.mobitel && (
+                      <Text style={styles.detailText}>Mobitel: {companyDetail.mobitel}</Text>
+                    )}
+                  </View>
+
+                  <View style={styles.detailSection}>
+                    <Text style={styles.detailTitle}>Statistike</Text>
+                    <Text style={styles.detailText}>
+                      Dizala: {companyDetail.stats?.elevatorCount || 0}
                     </Text>
-                    <Text style={styles.companyDate}>
-                      Registrirano: {new Date(company.created_at).toLocaleDateString('hr-HR')}
+                    <Text style={styles.detailText}>
+                      Servisi: {companyDetail.stats?.serviceCount || 0}
+                    </Text>
+                    <Text style={styles.detailText}>
+                      Popravci: {companyDetail.stats?.repairCount || 0}
                     </Text>
                   </View>
-                  <Ionicons
-                    name={expandedId === company._id ? 'chevron-up' : 'chevron-down'}
-                    size={22}
-                    color="#666"
-                  />
-                </TouchableOpacity>
 
-                {expandedId === company._id && companyDetail && (
-                  <View style={styles.companyDetail}>
-                    <View style={styles.detailSection}>
-                      <Text style={styles.detailTitle}>Podaci firme</Text>
-                      {companyDetail.adresa && (
-                        <Text style={styles.detailText}>Adresa: {companyDetail.adresa}</Text>
-                      )}
-                      {companyDetail.oib && (
-                        <Text style={styles.detailText}>OIB: {companyDetail.oib}</Text>
-                      )}
-                      {companyDetail.email && (
-                        <Text style={styles.detailText}>Email: {companyDetail.email}</Text>
-                      )}
-                      {companyDetail.mobitel && (
-                        <Text style={styles.detailText}>Mobitel: {companyDetail.mobitel}</Text>
-                      )}
-                    </View>
-
-                    <View style={styles.detailSection}>
-                      <Text style={styles.detailTitle}>Statistike</Text>
-                      <Text style={styles.detailText}>
-                        Dizala: {companyDetail.stats?.elevatorCount || 0}
-                      </Text>
-                      <Text style={styles.detailText}>
-                        Servisi: {companyDetail.stats?.serviceCount || 0}
-                      </Text>
-                      <Text style={styles.detailText}>
-                        Popravci: {companyDetail.stats?.repairCount || 0}
-                      </Text>
-                    </View>
-
-                    <View style={styles.detailSection}>
-                      <Text style={styles.detailTitle}>
-                        Korisnici ({companyDetail.users?.length || 0})
-                      </Text>
-                      {(companyDetail.users || []).map((u) => (
-                        <View key={u._id} style={styles.userRow}>
+                  <View style={styles.detailSection}>
+                    <Text style={styles.detailTitle}>
+                      Članovi ({companyDetail.users?.length || 0})
+                    </Text>
+                    {(companyDetail.users || []).map((u) => (
+                      <View key={u._id} style={styles.memberCard}>
+                        <TouchableOpacity
+                          style={styles.memberHeader}
+                          onPress={() => toggleUserExpand(u._id)}
+                        >
                           <Ionicons
-                            name={u.uloga === 'admin' ? 'shield' : 'person'}
-                            size={16}
-                            color={u.aktivan ? '#16a34a' : '#ef4444'}
+                            name={u.uloga === 'admin' ? 'shield' : u.uloga === 'menadzer' ? 'briefcase' : 'person'}
+                            size={18}
+                            color={u.aktivan ? getRoleColor(u.uloga) : '#9ca3af'}
                           />
-                          <Text style={[styles.userName, !u.aktivan && styles.userInactive]}>
+                          <Text style={[styles.memberName, !u.aktivan && { color: '#9ca3af' }]}>
                             {u.ime} {u.prezime}
                           </Text>
-                          <Text style={[styles.userRole, { color: getRoleColor(u.uloga), backgroundColor: getRoleBg(u.uloga) }]}>{u.uloga}</Text>
-                        </View>
-                      ))}
-                    </View>
-
-                    <TouchableOpacity
-                      style={styles.deleteButton}
-                      onPress={() => handleDeleteCompany(company)}
-                    >
-                      <Ionicons name="trash" size={18} color="#fff" />
-                      <Text style={styles.deleteButtonText}>Obriši firmu i sve podatke</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </View>
-            ))}
-
-            {companies.length === 0 && (
-              <Text style={styles.emptyText}>Nema registriranih firmi</Text>
-            )}
-          </View>
-        )}
-
-        {/* TAB: Korisnici */}
-        {activeTab === 'korisnici' && (
-          <View style={styles.companiesSection}>
-            <Text style={styles.sectionTitle}>
-              Svi korisnici ({users.length})
-            </Text>
-
-            {users.map((u) => (
-              <View key={u._id} style={styles.companyCard}>
-                <TouchableOpacity
-                  style={styles.companyHeader}
-                  onPress={() => toggleUserExpand(u._id)}
-                >
-                  <View style={{ flex: 1 }}>
-                    <View style={styles.userHeaderRow}>
-                      <Ionicons
-                        name={u.uloga === 'admin' ? 'shield' : u.uloga === 'menadzer' ? 'briefcase' : 'person'}
-                        size={20}
-                        color={u.aktivan ? getRoleColor(u.uloga) : '#9ca3af'}
-                      />
-                      <Text style={[styles.companyName, !u.aktivan && { color: '#9ca3af' }]}>
-                        {u.ime} {u.prezime}
-                      </Text>
-                      {!u.aktivan && (
-                        <View style={styles.inactiveBadge}>
-                          <Text style={styles.inactiveBadgeText}>Neaktivan</Text>
-                        </View>
-                      )}
-                    </View>
-                    <Text style={styles.companyMeta}>{u.email}</Text>
-                    <Text style={styles.companyDate}>
-                      {u.companyNaziv} • <Text style={[{ color: getRoleColor(u.uloga), fontWeight: '600' }]}>{u.uloga}</Text>
-                    </Text>
-                  </View>
-                  <Ionicons
-                    name={expandedUserId === u._id ? 'chevron-up' : 'chevron-down'}
-                    size={22}
-                    color="#666"
-                  />
-                </TouchableOpacity>
-
-                {expandedUserId === u._id && userDetail && (
-                  <View style={styles.companyDetail}>
-                    <View style={styles.detailSection}>
-                      <Text style={styles.detailTitle}>Osobni podaci</Text>
-                      <Text style={styles.detailText}>Ime: {userDetail.ime} {userDetail.prezime}</Text>
-                      <Text style={styles.detailText}>Email: {userDetail.email}</Text>
-                      {userDetail.telefon && (
-                        <Text style={styles.detailText}>Telefon: {userDetail.telefon}</Text>
-                      )}
-                      <Text style={styles.detailText}>Uloga: {userDetail.uloga}</Text>
-                      <Text style={styles.detailText}>
-                        Status: {userDetail.aktivan ? 'Aktivan' : 'Neaktivan'}
-                      </Text>
-                      <Text style={styles.detailText}>
-                        Registriran: {new Date(userDetail.kreiranDatum).toLocaleDateString('hr-HR')}
-                      </Text>
-                    </View>
-
-                    <View style={styles.detailSection}>
-                      <Text style={styles.detailTitle}>Firma</Text>
-                      <Text style={styles.detailText}>
-                        Naziv: {userDetail.company?.naziv || 'Nepoznato'}
-                      </Text>
-                      {userDetail.company?.adresa && (
-                        <Text style={styles.detailText}>Adresa: {userDetail.company.adresa}</Text>
-                      )}
-                      {userDetail.company?.oib && (
-                        <Text style={styles.detailText}>OIB: {userDetail.company.oib}</Text>
-                      )}
-                      {userDetail.company?.email && (
-                        <Text style={styles.detailText}>Email firme: {userDetail.company.email}</Text>
-                      )}
-                    </View>
-
-                    <View style={styles.detailSection}>
-                      <Text style={styles.detailTitle}>Aktivnost</Text>
-                      <Text style={styles.detailText}>
-                        Servisi firme: {userDetail.stats?.serviceCount || 0}
-                      </Text>
-                      <Text style={styles.detailText}>
-                        Popravci firme: {userDetail.stats?.repairCount || 0}
-                      </Text>
-                    </View>
-
-                    <View style={styles.detailSection}>
-                      <Text style={styles.detailTitle}>Promjena lozinke</Text>
-                      {passwordUserId === u._id ? (
-                        <View>
-                          <TextInput
-                            style={styles.passwordInput}
-                            placeholder="Nova lozinka (min. 6 znakova)"
-                            value={newPassword}
-                            onChangeText={setNewPassword}
-                            secureTextEntry
-                            autoCapitalize="none"
+                          {!u.aktivan && (
+                            <View style={styles.inactiveBadge}>
+                              <Text style={styles.inactiveBadgeText}>Neaktivan</Text>
+                            </View>
+                          )}
+                          <Text style={[styles.userRole, { color: getRoleColor(u.uloga), backgroundColor: getRoleBg(u.uloga) }]}>
+                            {u.uloga}
+                          </Text>
+                          <Ionicons
+                            name={expandedUserId === u._id ? 'chevron-up' : 'chevron-down'}
+                            size={18}
+                            color="#999"
                           />
-                          <View style={styles.passwordActions}>
-                            <TouchableOpacity
-                              style={styles.passwordSaveBtn}
-                              onPress={async () => {
-                                if (newPassword.length < 6) {
-                                  Alert.alert('Greška', 'Lozinka mora imati najmanje 6 znakova');
-                                  return;
-                                }
-                                try {
-                                  const res = await superadminAPI.resetPassword(u._id, newPassword);
-                                  Alert.alert('Uspjeh', res.data.message);
-                                  setPasswordUserId(null);
-                                  setNewPassword('');
-                                } catch (err) {
-                                  Alert.alert('Greška', err.response?.data?.message || 'Greška pri promjeni lozinke');
-                                }
-                              }}
-                            >
-                              <Ionicons name="checkmark" size={18} color="#fff" />
-                              <Text style={styles.passwordSaveBtnText}>Spremi</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                              style={styles.passwordCancelBtn}
-                              onPress={() => { setPasswordUserId(null); setNewPassword(''); }}
-                            >
-                              <Text style={styles.passwordCancelBtnText}>Odustani</Text>
-                            </TouchableOpacity>
-                          </View>
-                        </View>
-                      ) : (
-                        <TouchableOpacity
-                          style={styles.changePasswordBtn}
-                          onPress={() => { setPasswordUserId(u._id); setNewPassword(''); }}
-                        >
-                          <Ionicons name="key" size={18} color="#7c3aed" />
-                          <Text style={styles.changePasswordBtnText}>Promijeni lozinku</Text>
                         </TouchableOpacity>
-                      )}
-                    </View>
-                  </View>
-                )}
-              </View>
-            ))}
 
-            {users.length === 0 && (
-              <Text style={styles.emptyText}>Nema korisnika</Text>
-            )}
-          </View>
-        )}
+                        {expandedUserId === u._id && (
+                          <View style={styles.memberDetail}>
+                            <View style={styles.memberInfoRow}>
+                              <Ionicons name="person" size={15} color="#6b7280" />
+                              <Text style={styles.memberInfoLabel}>Ime:</Text>
+                              <Text style={styles.memberInfoValue}>{u.ime} {u.prezime}</Text>
+                            </View>
+                            <View style={styles.memberInfoRow}>
+                              <Ionicons name="mail" size={15} color="#6b7280" />
+                              <Text style={styles.memberInfoLabel}>Email:</Text>
+                              <Text style={styles.memberInfoValue}>{u.email}</Text>
+                            </View>
+                            {u.telefon ? (
+                              <View style={styles.memberInfoRow}>
+                                <Ionicons name="call" size={15} color="#6b7280" />
+                                <Text style={styles.memberInfoLabel}>Mobitel:</Text>
+                                <Text style={styles.memberInfoValue}>{u.telefon}</Text>
+                              </View>
+                            ) : null}
+                            <View style={styles.memberInfoRow}>
+                              <Ionicons name="shield" size={15} color="#6b7280" />
+                              <Text style={styles.memberInfoLabel}>Uloga:</Text>
+                              <Text style={[styles.memberInfoValue, { color: getRoleColor(u.uloga), fontWeight: '600' }]}>{u.uloga}</Text>
+                            </View>
+                            <View style={styles.memberInfoRow}>
+                              <Ionicons name={u.aktivan ? 'checkmark-circle' : 'close-circle'} size={15} color={u.aktivan ? '#16a34a' : '#ef4444'} />
+                              <Text style={styles.memberInfoLabel}>Status:</Text>
+                              <Text style={[styles.memberInfoValue, { color: u.aktivan ? '#16a34a' : '#ef4444' }]}>
+                                {u.aktivan ? 'Aktivan' : 'Neaktivan'}
+                              </Text>
+                            </View>
+                            <View style={styles.memberInfoRow}>
+                              <Ionicons name="calendar" size={15} color="#6b7280" />
+                              <Text style={styles.memberInfoLabel}>Registriran:</Text>
+                              <Text style={styles.memberInfoValue}>
+                                {u.kreiranDatum ? new Date(u.kreiranDatum).toLocaleDateString('hr-HR') : '-'}
+                              </Text>
+                            </View>
+
+                            {/* Lozinka sekcija */}
+                            <View style={styles.passwordSection}>
+                              <View style={styles.memberInfoRow}>
+                                <Ionicons name="lock-closed" size={15} color="#6b7280" />
+                                <Text style={styles.memberInfoLabel}>Lozinka:</Text>
+                                <Text style={styles.memberInfoValue}>••••••••</Text>
+                              </View>
+                              <Text style={styles.passwordNote}>
+                                Lozinke su enkriptirane i ne mogu se prikazati. Možete postaviti novu lozinku.
+                              </Text>
+
+                              {passwordUserId === u._id ? (
+                                <View style={styles.passwordForm}>
+                                  <View style={styles.passwordInputRow}>
+                                    <TextInput
+                                      style={styles.passwordInput}
+                                      placeholder="Nova lozinka (min. 6 znakova)"
+                                      value={newPassword}
+                                      onChangeText={setNewPassword}
+                                      secureTextEntry={!showPassword}
+                                      autoCapitalize="none"
+                                    />
+                                    <TouchableOpacity
+                                      style={styles.eyeBtn}
+                                      onPress={() => setShowPassword(!showPassword)}
+                                    >
+                                      <Ionicons name={showPassword ? 'eye-off' : 'eye'} size={20} color="#6b7280" />
+                                    </TouchableOpacity>
+                                  </View>
+                                  <View style={styles.passwordActions}>
+                                    <TouchableOpacity
+                                      style={styles.passwordSaveBtn}
+                                      onPress={async () => {
+                                        if (newPassword.length < 6) {
+                                          Alert.alert('Greška', 'Lozinka mora imati najmanje 6 znakova');
+                                          return;
+                                        }
+                                        try {
+                                          const res = await superadminAPI.resetPassword(u._id, newPassword);
+                                          Alert.alert('Uspjeh', res.data.message);
+                                          setPasswordUserId(null);
+                                          setNewPassword('');
+                                          setShowPassword(false);
+                                        } catch (err) {
+                                          Alert.alert('Greška', err.response?.data?.message || 'Greška pri promjeni lozinke');
+                                        }
+                                      }}
+                                    >
+                                      <Ionicons name="checkmark" size={18} color="#fff" />
+                                      <Text style={styles.passwordSaveBtnText}>Spremi</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                      style={styles.passwordCancelBtn}
+                                      onPress={() => { setPasswordUserId(null); setNewPassword(''); setShowPassword(false); }}
+                                    >
+                                      <Text style={styles.passwordCancelBtnText}>Odustani</Text>
+                                    </TouchableOpacity>
+                                  </View>
+                                </View>
+                              ) : (
+                                <TouchableOpacity
+                                  style={styles.changePasswordBtn}
+                                  onPress={() => { setPasswordUserId(u._id); setNewPassword(''); setShowPassword(false); }}
+                                >
+                                  <Ionicons name="key" size={16} color="#7c3aed" />
+                                  <Text style={styles.changePasswordBtnText}>Promijeni lozinku</Text>
+                                </TouchableOpacity>
+                              )}
+                            </View>
+                          </View>
+                        )}
+                      </View>
+                    ))}
+                  </View>
+
+                  <TouchableOpacity
+                    style={styles.deleteButton}
+                    onPress={() => handleDeleteCompany(company)}
+                  >
+                    <Ionicons name="trash" size={18} color="#fff" />
+                    <Text style={styles.deleteButtonText}>Obriši firmu i sve podatke</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          ))}
+
+          {companies.length === 0 && (
+            <Text style={styles.emptyText}>Nema registriranih firmi</Text>
+          )}
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -478,34 +436,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-  },
-  tabBar: {
-    flexDirection: 'row',
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  tab: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 12,
-    borderBottomWidth: 3,
-    borderBottomColor: 'transparent',
-  },
-  tabActive: {
-    borderBottomColor: '#7c3aed',
-  },
-  tabText: {
-    fontSize: 15,
-    color: '#666',
-    fontWeight: '500',
-  },
-  tabTextActive: {
-    color: '#7c3aed',
-    fontWeight: '700',
   },
   backButton: {
     padding: 4,
@@ -608,69 +538,89 @@ const styles = StyleSheet.create({
     color: '#4b5563',
     marginBottom: 3,
   },
-  userRow: {
+  memberCard: {
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    marginBottom: 8,
+    overflow: 'hidden',
+  },
+  memberHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingVertical: 4,
+    padding: 12,
   },
-  userName: {
+  memberName: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1f2937',
+  },
+  memberDetail: {
+    borderTopWidth: 1,
+    borderTopColor: '#f3f4f6',
+    padding: 12,
+    backgroundColor: '#f9fafb',
+  },
+  memberInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 5,
+  },
+  memberInfoLabel: {
+    fontSize: 13,
+    color: '#6b7280',
+    width: 80,
+  },
+  memberInfoValue: {
     flex: 1,
     fontSize: 14,
     color: '#1f2937',
   },
-  userInactive: {
-    color: '#9ca3af',
-    textDecorationLine: 'line-through',
-  },
   userRole: {
-    fontSize: 12,
-    color: '#7c3aed',
+    fontSize: 11,
     fontWeight: '600',
-    backgroundColor: '#f3e8ff',
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 8,
-  },
-  deleteButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#ef4444',
-    paddingVertical: 12,
-    borderRadius: 10,
-    marginTop: 8,
-  },
-  deleteButtonText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  emptyText: {
-    textAlign: 'center',
-    color: '#9ca3af',
-    fontSize: 16,
-    marginTop: 40,
-  },
-  userHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
   },
   inactiveBadge: {
     backgroundColor: '#fee2e2',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 8,
-    marginLeft: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 6,
   },
   inactiveBadgeText: {
-    fontSize: 11,
+    fontSize: 10,
     color: '#ef4444',
     fontWeight: '600',
   },
+  passwordSection: {
+    marginTop: 8,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+  },
+  passwordNote: {
+    fontSize: 12,
+    color: '#9ca3af',
+    marginTop: 4,
+    marginBottom: 10,
+    fontStyle: 'italic',
+  },
+  passwordForm: {
+    marginTop: 4,
+  },
+  passwordInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
   passwordInput: {
+    flex: 1,
     backgroundColor: '#fff',
     borderWidth: 1,
     borderColor: '#d1d5db',
@@ -678,7 +628,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 14,
-    marginBottom: 10,
+  },
+  eyeBtn: {
+    padding: 10,
+    marginLeft: 4,
   },
   passwordActions: {
     flexDirection: 'row',
@@ -713,17 +666,37 @@ const styles = StyleSheet.create({
   changePasswordBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
     backgroundColor: '#f3e8ff',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
     borderRadius: 8,
     alignSelf: 'flex-start',
   },
   changePasswordBtnText: {
     color: '#7c3aed',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
+  },
+  deleteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#ef4444',
+    paddingVertical: 12,
+    borderRadius: 10,
+    marginTop: 8,
+  },
+  deleteButtonText: {
+    color: '#fff',
+    fontSize: 15,
     fontWeight: '600',
+  },
+  emptyText: {
+    textAlign: 'center',
+    color: '#9ca3af',
+    fontSize: 16,
+    marginTop: 40,
   },
 });

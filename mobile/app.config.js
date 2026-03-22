@@ -5,7 +5,7 @@ module.exports = ({ config }) => ({
   ...config,
   expo: {
     name: isStaging ? "APPEL TEST" : "APPEL",
-    slug: isStaging ? "mobile-staging" : "mobile",
+    slug: "mobile",
     version: "2.0.0",
     orientation: "portrait",
     icon: "./assets/icon.png",

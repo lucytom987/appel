@@ -22,7 +22,7 @@ module.exports = ({ config }) => ({
       bundleIdentifier: isStaging ? "com.appel.elevators.staging" : "com.appel.elevators",
     },
     android: {
-      versionCode: 9,
+      versionCode: 10,
       package: isStaging ? "com.appel.elevators.staging" : "com.appel.elevators",
       adaptiveIcon: {
         foregroundImage: "./assets/adaptive-icon.png",

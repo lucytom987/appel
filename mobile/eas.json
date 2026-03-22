@@ -14,7 +14,7 @@
     },
     "staging-playstore": {
       "android": {
-        "gradleCommand": ":app:bundleRelease"
+        "gradleCommand": ":app:bundleStagingRelease"
       },
       "env": {
         "APP_VARIANT": "staging",

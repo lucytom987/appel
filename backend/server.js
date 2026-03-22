@@ -39,16 +39,29 @@ const generalLimiter = rateLimit({
 app.use('/api/', generalLimiter);
 
 // Strogi rate limit za login/register (zaštita od brute force)
+const authWindowMs = 5 * 60 * 1000; // 5 minuta
+const authKeyGenerator = (req) => req.ip;
 const authLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 sat
-  max: 5, // max 5 pokušaja u 1 sat
-  message: { message: 'Previše pokušaja prijave, pokušajte ponovo za 1 sat' },
+  windowMs: authWindowMs,
+  max: 5, // max 5 neuspješnih pokušaja u 5 min
+  message: { message: 'Previše pokušaja prijave, pokušajte ponovo za 5 minuta' },
+  keyGenerator: authKeyGenerator,
   skipSuccessfulRequests: true, // broji samo neuspješne pokušaje (4xx/5xx)
   standardHeaders: true,
   legacyHeaders: false,
 });
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/public-register', authLimiter);
+
+// Uspješan login resetira brojač pokušaja za isti ključ (IP)
+app.use('/api/auth/login', (req, res, next) => {
+  res.on('finish', () => {
+    if (res.statusCode < 400) {
+      authLimiter.resetKey(authKeyGenerator(req));
+    }
+  });
+  next();
+});
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));

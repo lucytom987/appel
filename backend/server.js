@@ -43,6 +43,7 @@ const authLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 sat
   max: 5, // max 5 pokušaja u 1 sat
   message: { message: 'Previše pokušaja prijave, pokušajte ponovo za 1 sat' },
+  skipSuccessfulRequests: true, // broji samo neuspješne pokušaje (4xx/5xx)
   standardHeaders: true,
   legacyHeaders: false,
 });

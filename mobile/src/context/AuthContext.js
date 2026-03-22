@@ -157,13 +157,15 @@ export const AuthProvider = ({ children }) => {
       try {
         response = await authAPI.login(email, lozinka);
       } catch (err) {
-        const status = err.response?.status;
+        const status = err?.status || err?.response?.status;
+        const backendMessage = err?.message || err?.response?.data?.message;
+        const isNetwork = Boolean(err?.network) || !err?.response;
         // 429 = rate limit - prikaži poruku s backend-a
         if (status === 429) {
           setLoading(false);
-          return { success: false, message: err.response?.data?.message || 'Previše pokušaja prijave. Pokušajte ponovo za 1 sat.' };
+          return { success: false, message: backendMessage || 'Previše pokušaja prijave. Pokušajte ponovo za 1 sat.' };
         }
-        const networkProblem = !err.response || status === 502 || status === 503;
+        const networkProblem = isNetwork || status === 502 || status === 503;
         if (networkProblem) {
           const stillOnline = await checkOnlineStatus().catch(() => false);
           setLoading(false);

@@ -38,6 +38,9 @@ module.exports = ({ config }) => ({
     web: {
       favicon: "./assets/favicon.png",
     },
+    plugins: [
+      "expo-font",
+    ],
     extra: {
       eas: {
         projectId: "0d60b61b-9b5e-4b73-96b1-c9199484a26b",

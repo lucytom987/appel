@@ -9,8 +9,7 @@
       },
       "env": {
         "APP_VARIANT": "staging",
-        "EXPO_PUBLIC_API_URL": "https://appel-backend-staging.onrender.com/api",
-        "EXPO_PUBLIC_GOOGLE_MAPS_KEY": "AIzaSyCb9Lbr5riearPJlMGwCKIFAiAWfnQX9lg"
+        "EXPO_PUBLIC_API_URL": "https://appel-backend-staging.onrender.com/api"
       }
     },
     "staging-playstore": {
@@ -19,8 +18,7 @@
       },
       "env": {
         "APP_VARIANT": "staging",
-        "EXPO_PUBLIC_API_URL": "https://appel-backend-staging.onrender.com/api",
-        "EXPO_PUBLIC_GOOGLE_MAPS_KEY": "AIzaSyCb9Lbr5riearPJlMGwCKIFAiAWfnQX9lg"
+        "EXPO_PUBLIC_API_URL": "https://appel-backend-staging.onrender.com/api"
       }
     },
     "preview": {
@@ -38,8 +36,7 @@
       },
       "env": {
         "APP_VARIANT": "production",
-        "EXPO_PUBLIC_API_URL": "https://appel-q97a.onrender.com/api",
-        "EXPO_PUBLIC_GOOGLE_MAPS_KEY": "AIzaSyCb9Lbr5riearPJlMGwCKIFAiAWfnQX9lg"
+        "EXPO_PUBLIC_API_URL": "https://appel-q97a.onrender.com/api"
       }
     },
     "development": {

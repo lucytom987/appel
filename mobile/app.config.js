@@ -6,7 +6,7 @@ module.exports = ({ config }) => ({
   expo: {
     name: isStaging ? "APPEL TEST" : "APPEL",
     slug: isStaging ? "mobile-staging" : "mobile",
-    version: "1.2.2",
+    version: "2.0.0",
     orientation: "portrait",
     icon: "./assets/icon.png",
     userInterfaceStyle: "light",
@@ -22,7 +22,7 @@ module.exports = ({ config }) => ({
       bundleIdentifier: isStaging ? "com.appel.elevators.staging" : "com.appel.elevators",
     },
     android: {
-      versionCode: 6,
+      versionCode: 7,
       package: isStaging ? "com.appel.elevators.staging" : "com.appel.elevators",
       adaptiveIcon: {
         foregroundImage: "./assets/adaptive-icon.png",

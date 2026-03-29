@@ -20,6 +20,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@sparticuz/chromium": "^143.0.4",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
@@ -32,7 +33,7 @@
     "mongoose": "^8.0.0",
     "nodemailer": "^8.0.1",
     "pdfkit": "^0.15.2",
-    "puppeteer": "^24.38.0",
+    "puppeteer-core": "^24.40.0",
     "qrcode": "^1.5.4",
     "resend": "^6.9.3",
     "socket.io": "^4.8.1"

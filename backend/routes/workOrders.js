@@ -5,7 +5,9 @@ const crypto = require('crypto');
 const ejs = require('ejs');
 const QRCode = require('qrcode');
 const mongoose = require('mongoose');
-const puppeteer = require('puppeteer');
+const puppeteerCore = require('puppeteer-core');
+let chromium;
+try { chromium = require('@sparticuz/chromium'); } catch (e) { chromium = null; }
 
 const router = express.Router();
 const { authenticate } = require('../middleware/auth');
@@ -188,15 +190,23 @@ const renderWorkOrderHtml = async (workOrder, req, token) => {
 };
 
 const generatePdfBufferFromHtml = async (html) => {
-  const browser = await puppeteer.launch({
-    headless: 'new',
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-gpu',
-      '--single-process',
-    ],
+  let executablePath;
+  if (chromium) {
+    executablePath = await chromium.executablePath();
+  }
+
+  const browser = await puppeteerCore.launch({
+    headless: chromium ? chromium.headless : 'new',
+    executablePath: executablePath || '/usr/bin/google-chrome-stable',
+    args: chromium
+      ? chromium.args
+      : [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+          '--single-process',
+        ],
   });
 
   try {

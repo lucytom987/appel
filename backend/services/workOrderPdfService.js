@@ -1,4 +1,6 @@
-const puppeteer = require('puppeteer');
+const puppeteer = require('puppeteer-core');
+let chromium;
+try { chromium = require('@sparticuz/chromium'); } catch (e) { chromium = null; }
 const fs = require('fs');
 const path = require('path');
 const ejs = require('ejs');

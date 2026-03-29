@@ -190,7 +190,13 @@ const renderWorkOrderHtml = async (workOrder, req, token) => {
 const generatePdfBufferFromHtml = async (html) => {
   const browser = await puppeteer.launch({
     headless: 'new',
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--single-process',
+    ],
   });
 
   try {

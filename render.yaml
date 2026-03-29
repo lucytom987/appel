@@ -25,7 +25,8 @@ services:
     region: frankfurt
     plan: free
     branch: develop
-    buildCommand: cd backend && npm install
+    buildCommand: |
+      cd backend && npm install && npx puppeteer browsers install chrome
     startCommand: cd backend && npm start
     envVars:
       - key: NODE_ENV
@@ -38,3 +39,5 @@ services:
         generateValue: true
       - key: CORS_ORIGIN
         value: "*"
+      - key: PUPPETEER_CACHE_DIR
+        value: /opt/render/.cache/puppeteer

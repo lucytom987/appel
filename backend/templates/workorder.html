@@ -247,6 +247,20 @@
       object-fit: contain;
     }
 
+    .sig-line .sig-image {
+      max-height: 28mm;
+      max-width: 100%;
+      object-fit: contain;
+      display: block;
+    }
+
+    .absent-note {
+      font-size: 9px;
+      color: var(--muted);
+      font-style: italic;
+      margin-top: 1mm;
+    }
+
     @page {
       size: A4;
       margin: 0;
@@ -412,7 +426,7 @@
         <div class="sig-label">Potpis servisera</div>
         <div class="sig-line">
           <% if (workOrder && workOrder.signatureImage) { %>
-            <img src="<%= workOrder.signatureImage %>" alt="Potpis servisera">
+            <img class="sig-image" src="<%= workOrder.signatureImage %>" alt="Potpis servisera">
           <% } else { %>
             <%= workOrder && workOrder.signedByName || '' %>
           <% } %>
@@ -420,7 +434,16 @@
       </div>
       <div class="sig">
         <div class="sig-label">Potpis stranke</div>
-        <div class="sig-line"></div>
+        <div class="sig-line">
+          <% if (workOrder && workOrder.customerSignatureImage) { %>
+            <img class="sig-image" src="<%= workOrder.customerSignatureImage %>" alt="Potpis stranke">
+          <% } else if (workOrder && workOrder.customerAbsent) { %>
+            <span style="font-size: 10px; color: #64748b; font-style: italic;">Stranka nije bila prisutna</span>
+          <% } %>
+        </div>
+        <% if (workOrder && workOrder.customerAbsent && elevator && elevator.nazivStranke) { %>
+          <div class="absent-note">Stranka: <%= elevator.nazivStranke %></div>
+        <% } %>
       </div>
     </div>
   </div>

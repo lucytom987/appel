@@ -8,6 +8,7 @@ import { useAuth } from '../context/AuthContext';
 import { useFocusEffect } from '@react-navigation/native';
 import { usePhotoUpload } from '../hooks/usePhotoUpload';
 import ImageViewer from 'react-native-image-zoom-viewer';
+import SignatureModal from '../components/SignatureModal';
 import ms from '../utils/scale';
 
 const statusLabel = (repair) => {
@@ -107,6 +108,9 @@ export default function RepairDetailsScreen({ route, navigation }) {
   const [saving, setSaving] = useState(false);
   const [workOrder, setWorkOrder] = useState(null);
   const [loadingWorkOrder, setLoadingWorkOrder] = useState(false);
+  const [showSignatureModal, setShowSignatureModal] = useState(false);
+  const [pendingSignWorkOrderId, setPendingSignWorkOrderId] = useState(null);
+  const [signingLoading, setSigningLoading] = useState(false);
   const [korisnici, setKorisnici] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [showKolegePickerIndex, setShowKolegePickerIndex] = useState(null);
@@ -288,6 +292,40 @@ export default function RepairDetailsScreen({ route, navigation }) {
     }
   };
 
+  const openSignatureFlow = (woId) => {
+    setPendingSignWorkOrderId(woId);
+    setShowSignatureModal(true);
+  };
+
+  const handleSignatureConfirm = async ({ servicerSignature, customerSignature, customerAbsent }) => {
+    const woId = pendingSignWorkOrderId;
+    if (!woId) return;
+
+    setSigningLoading(true);
+    try {
+      const signerName = `${user?.ime || ''} ${user?.prezime || ''}`.trim() || user?.email || 'Serviser';
+      const signRes = await workOrdersAPI.sign(woId, {
+        signedByName: signerName,
+        sendNow: true,
+        signatureImage: servicerSignature || undefined,
+        customerSignatureImage: customerSignature || undefined,
+        customerAbsent: customerAbsent || false,
+      });
+      const signed = signRes?.data?.data;
+      setWorkOrder(signed);
+      setShowSignatureModal(false);
+      setPendingSignWorkOrderId(null);
+      Alert.alert(
+        'Radni nalog potpisan i poslan',
+        `Broj: ${signed?.workOrderNumber || ''}\nStatus: ${workOrderStatusLabel(signed?.status || 'sent')}`
+      );
+    } catch (err) {
+      Alert.alert('Greška', err?.response?.data?.message || err?.message || 'Potpis nije uspio');
+    } finally {
+      setSigningLoading(false);
+    }
+  };
+
   const handleCreateWorkOrder = async () => {
     const id = repairData._id || repairData.id;
     
@@ -356,23 +394,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
                   { text: 'Kasnije', style: 'cancel' },
                   {
                     text: 'Potpiši i pošalji',
-                    onPress: async () => {
-                      try {
-                        const signerName = `${user?.ime || ''} ${user?.prezime || ''}`.trim() || user?.email || 'Serviser';
-                        const signRes = await workOrdersAPI.sign(newWorkOrder.id, {
-                          signedByName: signerName,
-                          sendNow: true,
-                        });
-                        const signed = signRes?.data?.data;
-                        setWorkOrder(signed);
-                        Alert.alert(
-                          'Radni nalog potpisan i poslan',
-                          `Broj: ${signed?.workOrderNumber || ''}\nStatus: ${workOrderStatusLabel(signed?.status || 'sent')}\n\nLink za pregled:\n${signed?.viewUrl || '-'}`
-                        );
-                      } catch (err) {
-                        Alert.alert('Greška', err?.response?.data?.message || err?.message || 'Potpis nije uspio');
-                      }
-                    }
+                    onPress: () => openSignatureFlow(newWorkOrder.id || newWorkOrder._id),
                   }
                 ]
               );
@@ -413,23 +435,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
                   { text: 'Samo pregled', style: 'cancel' },
                   {
                     text: 'Potpiši',
-                    onPress: async () => {
-                      try {
-                        const signerName = `${user?.ime || ''} ${user?.prezime || ''}`.trim() || user?.email || 'Serviser';
-                        const signRes = await workOrdersAPI.sign(newWorkOrder.id, {
-                          signedByName: signerName,
-                          sendNow: true,
-                        });
-                        const signed = signRes?.data?.data;
-                        setWorkOrder(signed); // Ažuriraj state s potpisanom verzijom
-                        Alert.alert(
-                          'Radni nalog potpisan',
-                          `Status: ${workOrderStatusLabel(signed?.status || 'signed')}\nBroj: ${signed?.workOrderNumber || ''}\n\nLink za pregled:\n${signed?.viewUrl || '-'}`
-                        );
-                      } catch (err) {
-                        Alert.alert('Greška', err?.response?.data?.message || err?.message || 'Potpis nije uspio');
-                      }
-                    }
+                    onPress: () => openSignatureFlow(newWorkOrder.id || newWorkOrder._id),
                   }
                 ]
               );
@@ -632,38 +638,55 @@ export default function RepairDetailsScreen({ route, navigation }) {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Opis kvara</Text>
+          <View style={styles.sectionTitleRow}>
+            <Ionicons name="warning-outline" size={18} color="#ef4444" />
+            <Text style={styles.sectionTitle}>Opis kvara</Text>
+          </View>
           <TextInput
             style={[styles.input, styles.textArea]}
             value={opisKvara}
             onChangeText={setOpisKvara}
-            placeholder="Upiši opis kvara"
+            placeholder="Detaljno opišite kvar dizala..."
+            placeholderTextColor="#9ca3af"
             multiline
           />
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Opis popravka</Text>
+          <View style={styles.sectionTitleRow}>
+            <Ionicons name="construct-outline" size={18} color="#2563eb" />
+            <Text style={styles.sectionTitle}>Opis popravka</Text>
+          </View>
           <TextInput
             style={[styles.input, styles.textArea]}
             value={opisPopravka}
             onChangeText={setOpisPopravka}
-            placeholder="Što je rađeno na popravku"
+            placeholder="Opišite izvršeni popravak..."
+            placeholderTextColor="#9ca3af"
             multiline
           />
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Sudionici i radni sati</Text>
+          <View style={styles.sectionTitleRow}>
+            <Ionicons name="people-outline" size={18} color="#0ea5e9" />
+            <Text style={styles.sectionTitle}>Sudionici i radni sati</Text>
+          </View>
 
-          <Text style={styles.fieldLabel}>Radni sati (ti)</Text>
-          <TextInput
-            style={styles.input}
-            value={radniSatiGlavni}
-            onChangeText={setRadniSatiGlavni}
-            keyboardType="decimal-pad"
-            placeholder="npr. 2.5"
-          />
+          <Text style={styles.fieldLabel}>Tvoji radni sati</Text>
+          <View style={styles.hoursInputRow}>
+            <TextInput
+              style={[styles.input, styles.hoursInput]}
+              value={radniSatiGlavni}
+              onChangeText={setRadniSatiGlavni}
+              keyboardType="decimal-pad"
+              placeholder="Upiši radne sate"
+              placeholderTextColor="#9ca3af"
+            />
+            <View style={styles.hoursSuffix}>
+              <Text style={styles.hoursSuffixText}>h</Text>
+            </View>
+          </View>
 
           <View style={styles.additionalHeaderRow}>
             <Text style={[styles.sectionTitle, { fontSize: ms(15), marginTop: ms(14), marginBottom: ms(8), flex: 1 }]}>Dodatni serviseri</Text>
@@ -734,40 +757,52 @@ export default function RepairDetailsScreen({ route, navigation }) {
                 )}
 
                 <Text style={[styles.fieldLabel, { marginTop: ms(12) }]}>{`Radni sati (${label || `serviser ${index + 2}`})`}</Text>
-                <TextInput
-                  style={styles.input}
-                  value={entry.hours}
-                  onChangeText={(text) => updateAdditionalServicerHours(index, text)}
-                  keyboardType="decimal-pad"
-                  placeholder="npr. 1.5"
-                />
+                <View style={styles.hoursInputRow}>
+                  <TextInput
+                    style={[styles.input, styles.hoursInput]}
+                    value={entry.hours}
+                    onChangeText={(text) => updateAdditionalServicerHours(index, text)}
+                    keyboardType="decimal-pad"
+                    placeholder="npr. 1.5"
+                    placeholderTextColor="#9ca3af"
+                  />
+                  <View style={styles.hoursSuffix}>
+                    <Text style={styles.hoursSuffixText}>h</Text>
+                  </View>
+                </View>
               </View>
             );
           })}
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Utrošeni materijal</Text>
+          <View style={styles.sectionTitleRow}>
+            <Ionicons name="cube-outline" size={18} color="#f59e0b" />
+            <Text style={styles.sectionTitle}>Utrošeni materijal</Text>
+          </View>
           {materijalStavke.map((stavka, index) => (
             <View key={`mat-${index}`} style={styles.materijalRow}>
               <TextInput
                 style={[styles.input, styles.materijalNaziv]}
                 value={stavka.naziv}
                 onChangeText={(text) => updateMaterijalStavka(index, 'naziv', text)}
-                placeholder="Materijal"
+                placeholder="Naziv"
+                placeholderTextColor="#9ca3af"
               />
               <TextInput
                 style={[styles.input, styles.materijalKolicina]}
                 value={stavka.kolicina}
                 onChangeText={(text) => updateMaterijalStavka(index, 'kolicina', text)}
-                placeholder="Količina"
+                placeholder="Kol."
+                placeholderTextColor="#9ca3af"
                 keyboardType="decimal-pad"
               />
               <TextInput
                 style={[styles.input, styles.materijalJedinica]}
                 value={stavka.jedinica}
                 onChangeText={(text) => updateMaterijalStavka(index, 'jedinica', text)}
-                placeholder="Jedinica"
+                placeholder="Jed."
+                placeholderTextColor="#9ca3af"
               />
               <TouchableOpacity style={styles.removeMaterijalBtn} onPress={() => removeMaterijalStavka(index)}>
                 <Ionicons name="close-circle" size={22} color="#ef4444" />
@@ -778,18 +813,22 @@ export default function RepairDetailsScreen({ route, navigation }) {
             <Ionicons name="add-circle-outline" size={18} color="#2563eb" />
             <Text style={styles.addMaterijalText}>Dodaj stavku materijala</Text>
           </TouchableOpacity>
-          <Text style={[styles.fieldLabel, { marginTop: ms(10) }]}>Dodatna napomena (opcionalno)</Text>
+          <Text style={[styles.fieldLabel, { marginTop: ms(12) }]}>Dodatna napomena (opcionalno)</Text>
           <TextInput
-            style={[styles.input, styles.textArea]}
+            style={[styles.input, { minHeight: ms(60), textAlignVertical: 'top' }]}
             value={utroseniMaterijal}
             onChangeText={setUtroseniMaterijal}
-            placeholder="Dodatni opis materijala"
+            placeholder="Npr. materijal donesen iz skladišta"
+            placeholderTextColor="#9ca3af"
             multiline
           />
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Fotografije</Text>
+          <View style={styles.sectionTitleRow}>
+            <Ionicons name="camera-outline" size={18} color="#8b5cf6" />
+            <Text style={styles.sectionTitle}>Fotografije</Text>
+          </View>
           {photoError && (
             <View style={styles.errorBanner}>
               <Ionicons name="alert-circle" size={18} color="#dc2626" />
@@ -885,7 +924,10 @@ export default function RepairDetailsScreen({ route, navigation }) {
         </Modal>
 
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Status</Text>
+          <View style={styles.sectionTitleRow}>
+            <Ionicons name="flag-outline" size={18} color="#10b981" />
+            <Text style={styles.sectionTitle}>Status</Text>
+          </View>
           <View style={styles.statusChoiceRow}>
             {[
               { label: 'Prijavljen', value: 'pending', color: '#ef4444' },
@@ -970,32 +1012,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
             {workOrder.status === 'draft' && (
               <TouchableOpacity
                 style={[styles.secondaryButton, { marginTop: ms(8), backgroundColor: '#10b981', borderColor: '#10b981' }]}
-                onPress={async () => {
-                  Alert.alert(
-                    'Potpisivanje radnog naloga',
-                    'Želiš li potpisati i označiti radni nalog kao poslano?',
-                    [
-                      { text: 'Odustani', style: 'cancel' },
-                      {
-                        text: 'Potpiši',
-                        onPress: async () => {
-                          try {
-                            const signerName = `${user?.ime || ''} ${user?.prezime || ''}`.trim() || user?.email || 'Serviser';
-                            const signRes = await workOrdersAPI.sign(workOrder._id || workOrder.id, {
-                              signedByName: signerName,
-                              sendNow: true,
-                            });
-                            const signed = signRes?.data?.data;
-                            setWorkOrder(signed); // Ažuriraj lokalni state
-                            Alert.alert('Uspjeh', `Radni nalog ${signed?.workOrderNumber || ''} je potpisan i označen kao poslan.`);
-                          } catch (err) {
-                            Alert.alert('Greška', err?.response?.data?.message || err?.message || 'Potpis nije uspio');
-                          }
-                        }
-                      }
-                    ]
-                  );
-                }}
+                onPress={() => openSignatureFlow(workOrder._id || workOrder.id)}
               >
                 <Ionicons name="create-outline" size={18} color="#fff" />
                 <Text style={[styles.secondaryText, { color: '#fff', fontWeight: '700' }]}>Potpiši i označi kao poslano</Text>
@@ -1042,6 +1059,15 @@ export default function RepairDetailsScreen({ route, navigation }) {
         <View style={{ height: 60 }} />
       </ScrollView>
       </KeyboardAvoidingView>
+
+      <SignatureModal
+        visible={showSignatureModal}
+        signerName={`${user?.ime || ''} ${user?.prezime || ''}`.trim() || user?.email || 'Serviser'}
+        customerName={elevator?.nazivStranke || elevator?.kontaktOsoba?.ime || ''}
+        onConfirm={handleSignatureConfirm}
+        onCancel={() => { setShowSignatureModal(false); setPendingSignWorkOrderId(null); }}
+        loading={signingLoading}
+      />
     </View>
   );
 }
@@ -1051,34 +1077,40 @@ const styles = StyleSheet.create({
   header: { backgroundColor: '#fff', paddingTop: ms(50), paddingBottom: ms(15), paddingHorizontal: ms(20), flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: '#e5e5e5' },
   headerTitle: { fontSize: ms(19), fontWeight: '700', color: '#1f2937' },
   content: { flex: 1 },
-  card: { backgroundColor: '#fff', padding: ms(16), marginTop: ms(12), borderRadius: ms(12), shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 2 },
+  card: { backgroundColor: '#fff', padding: ms(16), marginTop: ms(12), marginHorizontal: ms(12), borderRadius: ms(14), shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },
   elevatorHero: { alignItems: 'center', marginTop: ms(12) },
   elevatorBadgeLarge: { paddingHorizontal: ms(16), paddingVertical: ms(10), borderRadius: ms(14), borderWidth: 2, backgroundColor: '#fff', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 2 },
   elevatorBadgeLargeText: { fontSize: ms(18), fontWeight: '800', color: '#111827' },
-  sectionTitle: { fontSize: ms(17), fontWeight: '800', color: '#111827' },
+  sectionTitle: { fontSize: ms(16), fontWeight: '700', color: '#111827' },
+  sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: ms(8), marginBottom: ms(12) },
   actionIconBtn: { paddingHorizontal: ms(6), paddingVertical: ms(4) },
   primaryButton: {
     marginTop: ms(20),
-    marginHorizontal: ms(20),
+    marginHorizontal: ms(16),
     backgroundColor: '#2563eb',
-    borderRadius: ms(10),
-    padding: ms(14),
+    borderRadius: ms(12),
+    padding: ms(16),
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: ms(8),
+    shadowColor: '#2563eb',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   primaryButtonText: {
     color: '#fff',
     fontWeight: '700',
-    fontSize: ms(15),
+    fontSize: ms(16),
   },
   workOrderButton: {
     marginTop: ms(12),
-    marginHorizontal: ms(20),
+    marginHorizontal: ms(16),
     backgroundColor: '#059669',
-    borderRadius: ms(10),
-    padding: ms(14),
+    borderRadius: ms(12),
+    padding: ms(16),
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1093,7 +1125,7 @@ const styles = StyleSheet.create({
     fontSize: ms(15),
   },
   secondaryButton: {
-    marginHorizontal: ms(20),
+    marginHorizontal: ms(16),
     borderWidth: 1,
     borderColor: '#2563eb',
     borderRadius: ms(10),
@@ -1149,16 +1181,42 @@ const styles = StyleSheet.create({
   },
   input: {
     borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: ms(8),
+    borderColor: '#e2e8f0',
+    borderRadius: ms(10),
     padding: ms(12),
     fontSize: ms(15),
     color: '#1f2937',
-    backgroundColor: '#f9fafb',
+    backgroundColor: '#f8fafc',
   },
   textArea: {
-    minHeight: ms(100),
+    minHeight: ms(80),
     textAlignVertical: 'top',
+  },
+  hoursInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  hoursInput: {
+    flex: 1,
+    borderTopRightRadius: 0,
+    borderBottomRightRadius: 0,
+    borderRightWidth: 0,
+  },
+  hoursSuffix: {
+    backgroundColor: '#e2e8f0',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderTopRightRadius: ms(10),
+    borderBottomRightRadius: ms(10),
+    paddingHorizontal: ms(14),
+    paddingVertical: ms(12),
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  hoursSuffixText: {
+    fontSize: ms(15),
+    fontWeight: '700',
+    color: '#64748b',
   },
   toggleRow: {
     flexDirection: 'row',
@@ -1181,16 +1239,18 @@ const styles = StyleSheet.create({
     marginBottom: ms(6),
   },
   statusChip: {
+    flex: 1,
     paddingHorizontal: ms(12),
-    paddingVertical: ms(8),
-    borderRadius: ms(10),
-    borderWidth: 1,
+    paddingVertical: ms(12),
+    borderRadius: ms(12),
+    borderWidth: 1.5,
     borderColor: '#e5e7eb',
     backgroundColor: '#fff',
+    alignItems: 'center',
   },
   statusChipActive: {
-    borderColor: '#2563eb',
-    backgroundColor: '#eff6ff',
+    borderWidth: 1.5,
+    backgroundColor: '#f0fdf4',
   },
   statusChipText: {
     fontSize: ms(14),
@@ -1224,9 +1284,9 @@ const styles = StyleSheet.create({
   },
   additionalServicerCard: {
     marginTop: ms(10),
-    padding: ms(10),
+    padding: ms(12),
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#e2e8f0',
     borderRadius: ms(12),
     backgroundColor: '#fafcff',
   },
@@ -1286,11 +1346,28 @@ const styles = StyleSheet.create({
     color: '#0f172a',
     fontWeight: '500',
   },
+  materijalHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: ms(6),
+    marginBottom: ms(4),
+    paddingHorizontal: ms(4),
+    paddingVertical: ms(6),
+    backgroundColor: '#f1f5f9',
+    borderRadius: ms(8),
+  },
+  materijalHeaderText: {
+    fontSize: ms(11),
+    fontWeight: '800',
+    color: '#64748b',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
   materijalRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: ms(6),
-    marginTop: ms(8),
+    marginTop: ms(6),
   },
   materijalNaziv: {
     flex: 1.5,
@@ -1306,15 +1383,22 @@ const styles = StyleSheet.create({
     paddingVertical: ms(4),
   },
   addMaterijalBtn: {
-    marginTop: ms(10),
+    marginTop: ms(12),
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: ms(6),
+    paddingVertical: ms(10),
+    borderWidth: 1,
+    borderColor: '#dbeafe',
+    borderRadius: ms(10),
+    borderStyle: 'dashed',
+    backgroundColor: '#f8faff',
   },
   addMaterijalText: {
     color: '#2563eb',
     fontWeight: '600',
-    fontSize: ms(14),
+    fontSize: ms(13),
   },
   modalActions: {
     flexDirection: 'row',

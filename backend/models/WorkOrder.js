@@ -26,6 +26,8 @@ const workOrderSchema = new mongoose.Schema({
   signedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   signedByName: { type: String },
   signatureImage: { type: String },
+  customerSignatureImage: { type: String },
+  customerAbsent: { type: Boolean, default: false },
 
   sentAt: { type: Date },
   sentChannels: [{ type: String }],

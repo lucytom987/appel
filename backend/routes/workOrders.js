@@ -343,6 +343,8 @@ router.post('/:id/sign', authenticate, async (req, res) => {
     const sendNow = req.body.sendNow !== false;
 
     workOrder.signatureImage = req.body.signatureImage || workOrder.signatureImage;
+    workOrder.customerSignatureImage = req.body.customerSignatureImage || workOrder.customerSignatureImage;
+    workOrder.customerAbsent = req.body.customerAbsent === true;
     workOrder.signedBy = req.user._id;
     workOrder.signedByName = signerName;
     workOrder.signedAt = new Date();

@@ -333,7 +333,7 @@ router.post('/:id/sign', authenticate, async (req, res) => {
     }
 
     const repair = await Repair.findOne({ _id: workOrder.repairId, companyId: req.companyId })
-      .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala brojUgovora')
+      .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala brojUgovora kontaktOsoba')
       .populate('serviserID', 'ime prezime email');
     if (!repair) {
       return res.status(404).json({ success: false, message: 'Povezani popravak nije pronađen ili ne pripada vašoj firmi' });
@@ -380,8 +380,10 @@ router.post('/:id/sign', authenticate, async (req, res) => {
           console.error('Greška pri generiranju PDF-a za email prilog:', pdfError);
         }
 
+        const customerEmail = repair.elevatorId?.kontaktOsoba?.email || null;
         await sendWorkOrderEmail(workOrder, company, repair, repair.elevatorId, downloadUrl, {
           subject: `Radni nalog ${workOrder.workOrderNumber}`,
+          customerEmail,
           attachments: pdfBase64
             ? [
                 {

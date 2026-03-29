@@ -373,26 +373,24 @@ router.post('/:id/sign', authenticate, async (req, res) => {
       try {
         const downloadUrl = `${baseUrl}/api/work-orders/download/${workOrder._id}?token=${encodeURIComponent(workOrder.viewToken)}`;
         const htmlForEmail = await renderWorkOrderHtml(workOrder.toObject(), req, workOrder.viewToken);
-        let pdfBase64 = null;
+        let pdfBuffer = null;
 
         try {
-          const pdfBuffer = await generatePdfBufferFromHtml(htmlForEmail);
-          pdfBase64 = pdfBuffer.toString('base64');
+          pdfBuffer = await generatePdfBufferFromHtml(htmlForEmail);
+          console.log('✅ PDF generiran za email prilog, veličina:', pdfBuffer.length, 'bajtova');
         } catch (pdfError) {
-          console.error('Greška pri generiranju PDF-a za email prilog:', pdfError);
+          console.error('❌ Greška pri generiranju PDF-a za email prilog:', pdfError.message);
         }
 
         const customerEmail = repair.elevatorId?.kontaktOsoba?.email || null;
         await sendWorkOrderEmail(workOrder, company, repair, repair.elevatorId, downloadUrl, {
           subject: `Radni nalog ${workOrder.workOrderNumber}`,
           customerEmail,
-          attachments: pdfBase64
+          attachments: pdfBuffer
             ? [
                 {
                   filename: `${workOrder.workOrderNumber || 'radni-nalog'}.pdf`,
-                  content: pdfBase64,
-                  type: 'application/pdf',
-                  disposition: 'attachment',
+                  content: pdfBuffer,
                 },
               ]
             : [],

@@ -7,7 +7,7 @@ module.exports = ({ config }) => ({
     name: isStaging ? "APPEL TEST" : "APPEL",
     slug: "mobile",
     version: "2.0.0",
-    orientation: "portrait",
+    orientation: "default",
     icon: "./assets/icon.png",
     userInterfaceStyle: "light",
     newArchEnabled: true,
@@ -40,6 +40,10 @@ module.exports = ({ config }) => ({
     },
     plugins: [
       "expo-font",
+      [
+        "expo-screen-orientation",
+        { "initialOrientation": "PORTRAIT" }
+      ],
     ],
     extra: {
       eas: {

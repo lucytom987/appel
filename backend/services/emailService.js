@@ -77,7 +77,7 @@ const buildCustomerHtml = (workOrder, company, elevator, downloadUrl, hasAttachm
 };
 
 // HTML template za firmu (kratki sažetak)
-const buildCompanyHtml = (workOrder, company, elevator) => {
+const buildCompanyHtml = (workOrder, company, elevator, hasAttachment) => {
   const lokacija = [elevator?.ulica, elevator?.mjesto].filter(Boolean).join(', ') || '-';
   return `
     <!DOCTYPE html>
@@ -110,7 +110,7 @@ const buildCompanyHtml = (workOrder, company, elevator) => {
           <p class="info-row">📅 <strong>Datum potpisa:</strong> ${formatDate(workOrder.signedAt, true)}</p>
         </div>
 
-        <p class="small">Ovaj email je automatski generiran. PDF radnog naloga je u privitku.</p>
+        <p class="small">Ovaj email je automatski generiran.${hasAttachment ? ' PDF radnog naloga je u privitku.' : ''}</p>
       </div>
     </body>
     </html>
@@ -146,7 +146,7 @@ const sendWorkOrderEmail = async (workOrder, company, repair, elevator, download
 
     // 1. Email firmi - kratki sažetak
     console.log('📧 Slanje emaila firmi...');
-    const companyHtml = buildCompanyHtml(workOrder, company, elevator);
+    const companyHtml = buildCompanyHtml(workOrder, company, elevator, hasAttachment);
     const companyResponse = await resend.emails.send({
       from: 'noreply@radni-nalog.uk',
       to: company.email,

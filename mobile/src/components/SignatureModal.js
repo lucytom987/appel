@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,11 +6,12 @@ import {
   Modal,
   TouchableOpacity,
   ActivityIndicator,
-  SafeAreaView,
   StatusBar,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import SignatureScreen from 'react-native-signature-canvas';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import * as ScreenOrientation from 'expo-screen-orientation';
 import ms from '../utils/scale';
 
 /**
@@ -93,6 +94,18 @@ export default function SignatureModal({
   const handleClearCustomer = () => {
     customerSigRef.current?.clearSignature();
   };
+
+  // Lock to landscape when modal opens, revert to portrait on close
+  useEffect(() => {
+    if (visible) {
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE_RIGHT);
+    } else {
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+    }
+    return () => {
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+    };
+  }, [visible]);
 
   const handleBack = () => {
     if (step === 'customer') {

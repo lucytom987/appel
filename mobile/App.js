@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { TouchableOpacity, View, Text, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as ScreenOrientation from 'expo-screen-orientation';
 import { AuthProvider } from './src/context/AuthContext';
 import Navigation from './src/navigation/Navigation';
 import { initDatabase, cleanupOrphans } from './src/database/db';
@@ -137,6 +138,11 @@ export default function App() {
   const [tip, setTip] = useState(null);
   const [showTip, setShowTip] = useState(false);
   const insets = useSafeAreaInsets();
+
+  useEffect(() => {
+    // Lock portrait on startup (landscape unlocked only for signature modal)
+    ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+  }, []);
 
   useEffect(() => {
     // Inicijaliziraj bazu i očisti siročad servisa/popravaka bez dizala

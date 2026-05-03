@@ -19,11 +19,11 @@ module.exports = ({ config }) => ({
     ios: {
       supportsTablet: true,
       buildNumber: "6",
-      bundleIdentifier: isStaging ? "com.appel.elevators.staging" : "com.appel.elevators",
+      bundleIdentifier: isStaging ? "com.appel.elevators.staging" : "hr.appel.elevators",
     },
     android: {
-      versionCode: 12,
-      package: isStaging ? "com.appel.elevators.staging" : "com.appel.elevators",
+      versionCode: 1,
+      package: isStaging ? "com.appel.elevators.staging" : "hr.appel.elevators",
       adaptiveIcon: {
         foregroundImage: "./assets/adaptive-icon.png",
         backgroundColor: "#ffffff",

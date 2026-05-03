@@ -9,6 +9,8 @@
     "android": "expo run:android",
     "android:staging": "set APP_VARIANT=staging&& set EXPO_PUBLIC_API_URL=https://appel-backend-staging.onrender.com/api&& expo run:android",
     "android:prod": "set APP_VARIANT=production&& set EXPO_PUBLIC_API_URL=https://appel-q97a.onrender.com/api&& expo run:android",
+    "build:local:eas:prod": "set APP_VARIANT=production&& set EXPO_PUBLIC_API_URL=https://appel-q97a.onrender.com/api&& npx eas build --platform android --profile production --local",
+    "build:local:aab:prod": "set APP_VARIANT=production&& set EXPO_PUBLIC_API_URL=https://appel-q97a.onrender.com/api&& cd android&& gradlew.bat :app:bundleProductionRelease",
     "ios": "expo run:ios",
     "web": "expo start --web"
   },

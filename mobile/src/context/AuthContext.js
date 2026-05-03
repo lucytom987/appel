@@ -192,9 +192,10 @@ export const AuthProvider = ({ children }) => {
 
       // Ako je admin, provjeri je li firma "setup"
       if (korisnik.uloga === 'admin') {
+        let setupRequired = false;
         try {
           const setupStatus = await companyAPI.checkSetupStatus();
-          setCompanySetupRequired(!setupStatus.data?.isSetup);
+          setupRequired = !setupStatus.data?.isSetup;
           console.log('✅ Company setup status:', setupStatus.data?.isSetup);
         } catch (setupError) {
           const status = setupError?.response?.status;
@@ -206,18 +207,23 @@ export const AuthProvider = ({ children }) => {
               const isSetup = Boolean(
                 companyData?.naziv?.trim() && companyData?.adresa?.trim() && companyData?.email?.trim()
               );
-              setCompanySetupRequired(!isSetup);
+              setupRequired = !isSetup;
               console.log('ℹ️ setup-status endpoint ne postoji, fallback na /company:', isSetup);
             } catch (fallbackError) {
+              const fallbackStatus = fallbackError?.response?.status;
+              const missingCompany = fallbackStatus === 404 || String(fallbackError?.message || '').includes('404');
               console.error('⚠️ Fallback setup provjera nije uspjela:', fallbackError.message);
-              setCompanySetupRequired(true);
+              // Setup je obavezno samo ako firma stvarno ne postoji; transient greške ne smiju blokirati app.
+              setupRequired = missingCompany;
             }
           } else {
             console.error('⚠️ Greška pri provjeri setup statusa:', setupError.message);
-            // Ako nema konekcije ili je server problem, ostavi setup required=true
-            setCompanySetupRequired(true);
+            // Ako je mreža/server privremeno nedostupan, nemoj forsirati CompanySetup ekran.
+            setupRequired = false;
           }
         }
+
+        setCompanySetupRequired(setupRequired);
       } else {
         setCompanySetupRequired(false);
       }

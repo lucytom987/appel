@@ -36,6 +36,7 @@ const auth = async (req, res, next) => {
     user.uloga = normalizeRole(user.uloga); // ne sprema se u bazu, samo u request kontekstu
     user.normalizedRole = user.uloga;
     req.user = user;
+    req.companyId = user.companyId || null;
     next();
   } catch (error) {
     console.error('❌ Auth greška:', error.message);

@@ -197,7 +197,7 @@ const buildWorkOrderTemplateData = async (workOrder, req, token) => {
 
   const materialItems = parseMaterialItems(normalizedRepair?.utroseniMaterijal);
   const hasStructuredMaterial = materialItems.some((item) => item.structured || item.kolicina || item.jedinica);
-  const companyLogoDataUrl = await toEmbeddedImageDataUrl(company?.logoUrl || company?.logo);
+  const companyLogoDataUrl = await toEmbeddedImageDataUrl(company?.logo);
 
   const viewUrl = `${resolveBaseUrl(req)}/api/work-orders/view/${workOrder._id}?token=${encodeURIComponent(token)}`;
   const qrCodeDataUrl = await QRCode.toDataURL(viewUrl, { margin: 1, width: 200 });

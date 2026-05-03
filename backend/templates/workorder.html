@@ -325,8 +325,8 @@
     <div class="topbar">
       <div class="brand">
         <div class="logo-box">
-          <% if ((typeof companyLogoDataUrl !== 'undefined' && companyLogoDataUrl) || (company && (company.logoUrl || company.logo))) { %>
-            <img src="<%= companyLogoDataUrl || company.logoUrl || company.logo %>" alt="<%= company.naziv || 'Logo' %>">
+          <% if ((typeof companyLogoDataUrl !== 'undefined' && companyLogoDataUrl) || (company && company.logo)) { %>
+            <img src="<%= companyLogoDataUrl || company.logo %>" alt="<%= company.naziv || 'Logo' %>">
           <% } else { %>
             <div class="logo-fallback"><%= (company && company.naziv || 'A').charAt(0).toUpperCase() %></div>
           <% } %>

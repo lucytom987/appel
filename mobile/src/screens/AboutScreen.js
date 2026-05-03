@@ -5,24 +5,12 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function AboutScreen({ navigation }) {
   const currentVersion = '16.02.2026';
-  const [versionTapCount, setVersionTapCount] = React.useState(0);
-
-  const handleVersionPress = () => {
-    const next = versionTapCount + 1;
-    if (next >= 5) {
-      setVersionTapCount(0);
-      Linking.openURL('https://www.pornhub.com').catch(() => {});
-    } else {
-      setVersionTapCount(next);
-    }
-  };
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -43,7 +31,7 @@ export default function AboutScreen({ navigation }) {
           </View>
           <Text style={styles.appName}>APPEL</Text>
           <Text style={styles.appTagline}>Aplikacija za upravljanje dizalima</Text>
-          <TouchableOpacity onPress={handleVersionPress} activeOpacity={0.8} style={styles.versionBadge}>
+          <TouchableOpacity activeOpacity={0.8} style={styles.versionBadge}>
             <Text style={styles.versionText}>
               v{currentVersion}
             </Text>

@@ -51,7 +51,7 @@ const CompanySettingsScreen = ({ navigation }) => {
         mobitel: companyData.mobitel || '',
         telefon: companyData.telefon || '',
         web: companyData.web || '',
-        logo: companyData.logo || companyData.logoUrl || '',
+        logo: companyData.logo || '',
       });
     } catch (error) {
       console.error('❌ Greška pri dohvaćanju podataka firme:', error);

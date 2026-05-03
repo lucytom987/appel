@@ -7,6 +7,7 @@ const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const { ipKeyGenerator } = require('express-rate-limit');
 const User = require('./models/User');
 const ChatRoom = require('./models/ChatRoom');
 const { setupSoftDeleteRetentionJob } = require('./services/retentionService');
@@ -40,7 +41,7 @@ app.use('/api/', generalLimiter);
 
 // Strogi rate limit za login/register (zaštita od brute force)
 const authWindowMs = 5 * 60 * 1000; // 5 minuta
-const authKeyGenerator = (req) => req.ip;
+const authKeyGenerator = (req) => ipKeyGenerator(req);
 const authLimiter = rateLimit({
   windowMs: authWindowMs,
   max: 5, // max 5 neuspješnih pokušaja u 5 min

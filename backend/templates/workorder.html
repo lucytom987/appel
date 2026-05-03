@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="hr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Obračun popravka dizala - <%= workOrder && workOrder.workOrderNumber || workOrderNumber || 'RN' %></title>
+  <style>
+    :root {
+      --ink: #0f172a;
+      --muted: #475569;
+      --line: #1e293b;
+      --line-soft: #94a3b8;
+      --panel: #f8fafc;
+      --accent: #0f4c81;
+      --accent-soft: #eaf2f9;
+      --bg: #ffffff;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      min-height: 297mm;
+      background: #e2e8f0;
+      color: var(--ink);
+      font-family: Arial, Helvetica, sans-serif;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .page {
+      width: 210mm;
+      min-height: 297mm;
+      margin: 8mm auto;
+      background: var(--bg);
+      box-shadow: 0 16px 40px rgba(15, 23, 42, 0.12);
+      padding: 7mm 7mm 9mm;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 4mm;
+      align-items: start;
+      border-bottom: 2px solid var(--line);
+      padding-bottom: 5mm;
+    }
+
+    .brand {
+      display: grid;
+      grid-template-columns: 24mm 1fr;
+      gap: 6mm;
+      align-items: start;
+    }
+
+    .logo-box {
+      width: 24mm;
+      height: 24mm;
+      border: 1.5px solid var(--line);
+      border-radius: 4mm;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    }
+
+    .logo-box img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    .logo-fallback {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--ink);
+    }
+
+    .company-name {
+      font-size: 16px;
+      font-weight: 800;
+      letter-spacing: 0.35px;
+      text-transform: uppercase;
+      margin-bottom: 2mm;
+      color: var(--line);
+    }
+
+    .company-info {
+      font-size: 11px;
+      line-height: 1.3;
+      color: var(--muted);
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      column-gap: 12mm;
+      row-gap: 0.75mm;
+    }
+
+    .company-info div { margin: 0.4mm 0; }
+
+    .title-wrap {
+      margin: 4mm 0 3mm;
+      text-align: center;
+    }
+
+    .title {
+      font-size: 20px;
+      font-weight: 900;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+      color: var(--line);
+      margin: 0;
+    }
+
+    .title-rule {
+      width: 56mm;
+      height: 2px;
+      background: var(--accent);
+      margin: 1.8mm auto 0;
+    }
+
+    table.form, .items-table {
+      font-size: 11px;
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    table.form {
+      border: 1.5px solid var(--line);
+    }
+
+    .form td,
+    .form th,
+    .items-table th,
+    .items-table td {
+      border: 1px solid var(--line);
+      padding: 2mm 2.2mm;
+      font-size: 11px;
+      vertical-align: top;
+    }
+
+    .form th,
+    .items-table th {
+      text-align: left;
+      font-weight: 800;
+      background: var(--accent-soft);
+      color: var(--line);
+    }
+
+    .label-cell {
+      width: 34mm;
+      font-weight: 800;
+      background: #eef3f9;
+      white-space: nowrap;
+      color: var(--line);
+    }
+
+    .fill {
+      min-height: 5.5mm;
+      white-space: pre-line;
+      word-break: break-word;
+    }
+
+    .small-fill { min-height: 5mm; }
+
+    .customer-name {
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.2px;
+      color: var(--line);
+    }
+
+    .description-box {
+      min-height: 44mm;
+      white-space: pre-line;
+      line-height: 1.4;
+      font-size: 11px;
+      word-break: break-word;
+    }
+
+    .section-head {
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.35px;
+      background: var(--accent-soft);
+      color: var(--line);
+    }
+
+    .items-table {
+      border-left: 1.5px solid var(--line);
+      border-right: 1.5px solid var(--line);
+      border-bottom: 1.5px solid var(--line);
+      margin-top: 3mm;
+    }
+
+    .items-table tbody tr:nth-child(even) {
+      background: #f8fbff;
+    }
+
+    .rowline { height: 7mm; }
+    .num { text-align: center; white-space: nowrap; }
+
+    .hours-summary {
+      font-weight: 800;
+      background: var(--panel);
+    }
+
+    .signatures {
+      margin-top: auto;
+      padding-top: 7mm;
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 6mm;
+      align-items: end;
+    }
+
+    .sig { font-size: 10.5px; }
+
+    .sig-label {
+      font-weight: 800;
+      margin-bottom: 2mm;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.45px;
+      color: var(--line);
+    }
+
+    .sig-line {
+      border-bottom: 2px solid var(--line);
+      padding-top: 2mm;
+      min-height: 8mm;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: flex-end;
+      overflow: hidden;
+    }
+
+    /* Standardized signature image sizing: fixed height, preserve aspect ratio */
+    .sig-line img {
+      height: 20mm;
+      width: auto;
+      max-width: 100%;
+      object-fit: contain;
+      display: block;
+    }
+
+    .sig-line .sig-image {
+      height: 20mm; /* fixed visual height for all signatures */
+      width: auto;
+      max-width: 100%;
+      object-fit: contain;
+      display: block;
+    }
+
+    .absent-note {
+      font-size: 9px;
+      color: var(--muted);
+      font-style: italic;
+      margin-top: 1mm;
+    }
+
+    @page {
+      size: A4;
+      margin: 0;
+    }
+
+    @media print {
+      html, body { background: #fff; }
+      .page {
+        width: 210mm;
+        min-height: 297mm;
+        margin: 0;
+        box-shadow: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <% 
+    const glavniSatiRaw = repair && repair.radniSati && repair.radniSati.glavni;
+    const glavniSatiNum = Number(glavniSatiRaw);
+    const dodatniServiseri = repair && Array.isArray(repair.dodatniServiseri) ? repair.dodatniServiseri : [];
+    const dodatniSatiRaw = repair && repair.radniSati && Array.isArray(repair.radniSati.dodatni)
+      ? repair.radniSati.dodatni
+      : [];
+    const legacyKolegaSatiRaw = repair && repair.radniSati ? repair.radniSati.kolega : null;
+    const activeServiserRows = [
+      {
+        naziv: repair && repair.serviserID
+          ? `${repair.serviserID.ime || ''} ${repair.serviserID.prezime || ''}`.trim() || repair.serviserID.email || ''
+          : '',
+        label: 'Serviser 1',
+        sati: glavniSatiRaw
+      },
+      ...dodatniServiseri.map((serviser, index) => ({
+        naziv: serviser
+          ? `${serviser.ime || ''} ${serviser.prezime || ''}`.trim() || serviser.email || ''
+          : '',
+        label: `Serviser ${index + 2}`,
+        sati: dodatniSatiRaw[index] != null ? dodatniSatiRaw[index] : (index === 0 ? legacyKolegaSatiRaw : null),
+      })),
+    ].filter((row, index) => index === 0 || row.naziv);
+    const serviserRows = Array.from({ length: 3 }, (_, index) => {
+      const existingRow = activeServiserRows[index];
+      if (existingRow) return existingRow;
+      return {
+        label: '',
+        naziv: '',
+        sati: '',
+      };
+    });
+    const totalSati = activeServiserRows.reduce((sum, row) => {
+      const satiNum = Number(row.sati);
+      return sum + (Number.isFinite(satiNum) ? satiNum : 0);
+    }, 0);
+  %>
+
+  <div class="page">
+    <div class="topbar">
+      <div class="brand">
+        <div class="logo-box">
+          <% if ((typeof companyLogoDataUrl !== 'undefined' && companyLogoDataUrl) || (company && (company.logoUrl || company.logo))) { %>
+            <img src="<%= companyLogoDataUrl || company.logoUrl || company.logo %>" alt="<%= company.naziv || 'Logo' %>">
+          <% } else { %>
+            <div class="logo-fallback"><%= (company && company.naziv || 'A').charAt(0).toUpperCase() %></div>
+          <% } %>
+        </div>
+        <div>
+          <div class="company-name"><%= company && company.naziv || 'SERVISNA FIRMA' %></div>
+          <div class="company-info">
+            <div>Adresa: <%= company && company.adresa || '-' %></div>
+            <div>Tel.: <%= company && company.telefon || '-' %></div>
+            <div>OIB: <%= company && company.oib || '-' %></div>
+            <div>Mob.: <%= company && company.mobitel || '-' %></div>
+            <div>E-mail: <%= company && company.email || '-' %></div>
+            <div>Web: <%= company && company.web || '-' %></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="title-wrap">
+      <h1 class="title">Obračun popravka dizala</h1>
+      <div class="title-rule"></div>
+    </div>
+
+    <table class="form">
+      <tr>
+        <td class="label-cell">Broj ugovora</td>
+        <td><div class="fill small-fill"><%= elevator && elevator.brojUgovora || '-' %></div></td>
+        <td class="label-cell">Broj radnog naloga</td>
+        <td><div class="fill small-fill"><%= workOrder && workOrder.workOrderNumber || '-' %></div></td>
+      </tr>
+      <tr>
+        <td class="label-cell">Broj dizala</td>
+        <td colspan="3"><div class="fill small-fill"><%= elevator && elevator.brojDizala || '-' %></div></td>
+      </tr>
+      <tr>
+        <td class="label-cell">Naziv potrošača</td>
+        <td colspan="3"><div class="fill small-fill customer-name"><%= elevator && elevator.nazivStranke || '-' %></div></td>
+      </tr>
+      <tr>
+        <td class="label-cell">Adresa</td>
+        <td colspan="3"><div class="fill small-fill"><%= elevator ? [elevator.ulica, elevator.mjesto].filter(Boolean).join(', ') || '-' : '-' %></div></td>
+      </tr>
+      <tr>
+        <td class="label-cell section-head">Opis izvršenih radova</td>
+        <td colspan="3"><div class="description-box"><%= repair && repair.opisPopravka || 'Nema zapisanog opisa izvršenih radova.' %></div></td>
+      </tr>
+    </table>
+
+    <table class="items-table">
+      <thead>
+        <tr>
+          <th style="width: 146mm;">Naziv utrošenog materijala - dijelovi</th>
+          <th style="width: 22mm;" class="num">J.M.</th>
+          <th style="width: 22mm;" class="num">Količina</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% if (Array.isArray(materialItems) && materialItems.length && hasStructuredMaterial) { %>
+          <% materialItems.forEach((item) => { %>
+            <tr>
+              <td><%= item.naziv || '-' %></td>
+              <td class="num"><%= item.jedinica || '-' %></td>
+              <td class="num"><%= item.kolicina || '-' %></td>
+            </tr>
+          <% }) %>
+        <% } else if (repair && repair.utroseniMaterijal) { %>
+          <tr>
+            <td><%= repair.utroseniMaterijal %></td>
+            <td class="num">-</td>
+            <td class="num">-</td>
+          </tr>
+        <% } %>
+        <tr class="rowline"><td></td><td></td><td></td></tr>
+        <tr class="rowline"><td></td><td></td><td></td></tr>
+        <tr class="rowline"><td></td><td></td><td></td></tr>
+        <tr class="rowline"><td></td><td></td><td></td></tr>
+      </tbody>
+    </table>
+
+    <table class="form" style="margin-top:4mm;">
+      <% serviserRows.forEach((row, index) => { %>
+        <tr>
+          <td class="label-cell"><%= row.label %></td>
+          <td><div class="fill small-fill"><%= row.naziv || '' %></div></td>
+          <td class="label-cell"><%= row.label ? 'Radni sati' : '' %></td>
+          <td><div class="fill small-fill"><%= row.sati != null && row.sati !== '' ? formatHoursHR(row.sati) : '' %></div></td>
+        </tr>
+      <% }) %>
+      <tr class="hours-summary">
+        <td colspan="3" style="text-align:right; font-weight:800;">Ukupno sati</td>
+        <td><div class="fill small-fill"><strong><%= formatHoursHR(totalSati) %></strong></div></td>
+      </tr>
+    </table>
+
+    <div class="signatures">
+      <div class="sig">
+        <div class="sig-label">Nadnevak</div>
+        <div class="sig-line"><%= formatDateHR(workOrder && (workOrder.signedAt || workOrder.created_at)) %></div>
+      </div>
+      <div class="sig">
+        <div class="sig-label">Potpis servisera</div>
+        <div class="sig-line">
+          <% if (workOrder && workOrder.signatureImage) { %>
+            <img class="sig-image" src="<%= workOrder.signatureImage %>" alt="Potpis servisera">
+          <% } else { %>
+            <%= workOrder && workOrder.signedByName || '' %>
+          <% } %>
+        </div>
+      </div>
+      <div class="sig">
+        <div class="sig-label">Potpis stranke</div>
+        <div class="sig-line">
+          <% if (workOrder && workOrder.customerSignatureImage) { %>
+            <img class="sig-image" src="<%= workOrder.customerSignatureImage %>" alt="Potpis stranke">
+          <% } else if (workOrder && workOrder.customerAbsent) { %>
+            <span style="font-size: 10px; color: #64748b; font-style: italic;">Stranka nije bila prisutna</span>
+          <% } %>
+        </div>
+        <% if (workOrder && workOrder.customerAbsent && elevator && elevator.nazivStranke) { %>
+          <div class="absent-note">Stranka: <%= elevator.nazivStranke %></div>
+        <% } %>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

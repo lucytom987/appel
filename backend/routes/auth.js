@@ -1,10 +1,17 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const Company = require('../models/Company');
 const { authenticate } = require('../middleware/auth');
 const { logAction } = require('../services/auditService');
 
 const router = express.Router();
+
+// Hardkodirani super admin - SAMO ovi emailovi imaju pristup
+const SUPER_ADMIN_EMAILS = (process.env.SUPER_ADMIN_EMAILS || 'vidacek.tomek@gmail.com,vidacek@appel.com')
+  .split(',')
+  .map(e => e.trim().toLowerCase());
+const isSuperAdmin = (email) => email && SUPER_ADMIN_EMAILS.includes(email.toLowerCase());
 
 // Helper za generiranje access/refresh tokena
 const generateTokens = (userId) => {
@@ -26,13 +33,26 @@ const generateTokens = (userId) => {
 // POST /api/auth/login - Prijava korisnika
 router.post('/login', async (req, res) => {
   try {
-    const { email, lozinka } = req.body;
+    const { email, lozinka, companyId, firmaId } = req.body;
+    const loginCompanyId = companyId || firmaId;
 
     if (!email || !lozinka) {
       return res.status(400).json({ message: 'Email i lozinka su obavezni' });
     }
 
-    const user = await User.findOne({ email });
+    let user;
+    if (loginCompanyId) {
+      user = await User.findOne({ email, companyId: loginCompanyId });
+    } else {
+      const matches = await User.find({ email, aktivan: true }).limit(2);
+      if (matches.length > 1) {
+        return res.status(409).json({
+          message: 'Pronađeno je više korisnika s istim emailom. Pošaljite i companyId pri prijavi.',
+        });
+      }
+      user = matches[0];
+    }
+
     if (!user || !user.aktivan) {
       return res.status(401).json({ message: 'Nevaljani email ili lozinka' });
     }
@@ -44,10 +64,13 @@ router.post('/login', async (req, res) => {
 
     const { accessToken, refreshToken } = generateTokens(user._id);
 
+    const korisnikData = user.toJSON();
+    korisnikData.superAdmin = isSuperAdmin(user.email);
+
     res.json({
       token: accessToken,
       refreshToken,
-      korisnik: user.toJSON(),
+      korisnik: korisnikData,
     });
   } catch (error) {
     console.error('Login greška:', error);
@@ -96,12 +119,13 @@ router.post('/register', authenticate, async (req, res) => {
       return res.status(403).json({ message: 'Samo admin može registrirati nove korisnike' });
     }
 
-    const postojeciKorisnik = await User.findOne({ email });
+    const postojeciKorisnik = await User.findOne({ email, companyId: req.companyId });
     if (postojeciKorisnik) {
-      return res.status(400).json({ message: 'Korisnik s tim emailom već postoji' });
+      return res.status(400).json({ message: 'Korisnik s tim emailom već postoji u vašoj firmi' });
     }
 
     const noviKorisnik = new User({
+      companyId: req.companyId,
       ime,
       prezime,
       email,
@@ -133,9 +157,77 @@ router.post('/register', authenticate, async (req, res) => {
   }
 });
 
+// POST /api/auth/public-register - Registracija nove stranke (javni endpoint)
+router.post('/public-register', async (req, res) => {
+  try {
+    const { ime, prezime, email, lozinka, nazivFirme } = req.body;
+
+    if (!ime || !prezime || !email || !lozinka || !nazivFirme) {
+      return res.status(400).json({ message: 'Sva polja su obavezna (ime, prezime, email, lozinka, nazivFirme)' });
+    }
+
+    if (lozinka.length < 6) {
+      return res.status(400).json({ message: 'Lozinka mora imati najmanje 6 znakova' });
+    }
+
+    // Kreiraj novu firmu
+    const novaFirma = new Company({ naziv: nazivFirme });
+    await novaFirma.save();
+
+    // Provjeri postoji li korisnik s tim emailom u novoj firmi (ne bi trebalo, ali za svaki slučaj)
+    const postojeciKorisnik = await User.findOne({ email, companyId: novaFirma._id });
+    if (postojeciKorisnik) {
+      await Company.findByIdAndDelete(novaFirma._id);
+      return res.status(400).json({ message: 'Korisnik s tim emailom već postoji' });
+    }
+
+    // Kreiraj admin korisnika
+    const adminKorisnik = new User({
+      companyId: novaFirma._id,
+      ime,
+      prezime,
+      email,
+      lozinka,
+      uloga: 'admin',
+      aktivan: true,
+    });
+    await adminKorisnik.save();
+
+    const { accessToken, refreshToken } = generateTokens(adminKorisnik._id);
+
+    await logAction({
+      korisnikId: adminKorisnik._id,
+      akcija: 'CREATE',
+      entitet: 'Company',
+      entitetId: novaFirma._id,
+      entitetNaziv: nazivFirme,
+      noveVrijednosti: { firma: novaFirma.toJSON(), korisnik: adminKorisnik.toJSON() },
+      ipAdresa: req.ip,
+      opis: `Nova registracija: ${email} za firmu "${nazivFirme}"`,
+    });
+
+    res.status(201).json({
+      token: accessToken,
+      refreshToken,
+      korisnik: adminKorisnik.toJSON(),
+    });
+  } catch (error) {
+    console.error('Public register greška:', error);
+    if (error.code === 11000) {
+      return res.status(400).json({ message: 'Korisnik s tim emailom već postoji' });
+    }
+    res.status(500).json({ message: 'Greška pri registraciji' });
+  }
+});
+
 // GET /api/auth/me - Trenutni korisnik
 router.get('/me', authenticate, (req, res) => {
-  res.json(req.user.toJSON());
+  const data = req.user.toJSON();
+  data.superAdmin = isSuperAdmin(req.user.email);
+  res.json(data);
 });
+
+// Export isSuperAdmin za korištenje u drugim rutama
+router.isSuperAdmin = isSuperAdmin;
 
 module.exports = router;

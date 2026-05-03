@@ -5,7 +5,11 @@ const dotenv = require('dotenv');
 const http = require('http');
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const User = require('./models/User');
+const ChatRoom = require('./models/ChatRoom');
+const { setupSoftDeleteRetentionJob } = require('./services/retentionService');
 
 dotenv.config();
 
@@ -18,18 +22,55 @@ const io = new Server(server, {
   }
 });
 
-// Middleware
+// CORS mora biti PRIJE rate limitera da 429 odgovor ima CORS headere
 app.use(cors());
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+// Security middleware
+app.use(helmet());
+
+// Rate limiting - opća zaštita
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minuta
+  max: 300, // max 300 zahtjeva po IP u 15 min
+  message: { message: 'Previše zahtjeva, pokušajte ponovo za 15 minuta' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api/', generalLimiter);
+
+// Strogi rate limit za login/register (zaštita od brute force)
+const authWindowMs = 5 * 60 * 1000; // 5 minuta
+const authKeyGenerator = (req) => req.ip;
+const authLimiter = rateLimit({
+  windowMs: authWindowMs,
+  max: 5, // max 5 neuspješnih pokušaja u 5 min
+  message: { message: 'Previše pokušaja prijave, pokušajte ponovo za 5 minuta' },
+  keyGenerator: authKeyGenerator,
+  skipSuccessfulRequests: true, // broji samo neuspješne pokušaje (4xx/5xx)
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/public-register', authLimiter);
+
+// Uspješan login resetira brojač pokušaja za isti ključ (IP)
+app.use('/api/auth/login', (req, res, next) => {
+  res.on('finish', () => {
+    if (res.statusCode < 400) {
+      authLimiter.resetKey(authKeyGenerator(req));
+    }
+  });
+  next();
+});
+
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // MongoDB Connection
 mongoose.connect(process.env.MONGODB_URI)
-  .then(async () => {
+  .then(() => {
     console.log('✅ MongoDB povezan');
-    // Seed default korisnici
-    const seedDefaultUsers = require('./utils/seedUsers');
-    await seedDefaultUsers();
+    setupSoftDeleteRetentionJob();
   })
   .catch((err) => console.error('❌ MongoDB greška:', err));
 
@@ -44,6 +85,7 @@ app.use('/api/chatrooms', require('./routes/chatrooms'));
 app.use('/api/messages', require('./routes/messages'));
 app.use('/api/simcards', require('./routes/simcards'));
 app.use('/api/audit-logs', require('./routes/auditLogs'));
+app.use('/api/superadmin', require('./routes/superadmin'));
 
 // Socket.io setup
 const activeUsers = new Map();
@@ -68,6 +110,7 @@ io.on('connection', async (socket) => {
     }
 
     socket.userId = String(user._id);
+    socket.companyId = String(user.companyId);
     activeUsers.set(socket.userId, socket.id);
     console.log(`✅ Auth socket: ${user.email} (${socket.userId})`);
   } catch (err) {
@@ -77,16 +120,36 @@ io.on('connection', async (socket) => {
   }
 
   // Join chat room
-  socket.on('join-room', (roomId) => {
-    if (!socket.userId) return;
-    socket.join(`room-${roomId}`);
-    console.log(`📍 Korisnik ${socket.userId} pridružen room-${roomId}`);
+  socket.on('join-room', async (roomId) => {
+    if (!socket.userId || !socket.companyId) return;
+    try {
+      const room = await ChatRoom.findOne({ _id: roomId, companyId: socket.companyId }).select('_id');
+      if (!room) {
+        socket.emit('chat-error', 'Chat soba nije pronađena u vašoj firmi');
+        return;
+      }
+      socket.join(`room-${roomId}`);
+      console.log(`📍 Korisnik ${socket.userId} pridružen room-${roomId}`);
+    } catch (error) {
+      socket.emit('chat-error', 'Greška pri ulasku u chat sobu');
+    }
   });
 
   // Send message
-  socket.on('send-message', (data) => {
-    if (!socket.userId) return;
+  socket.on('send-message', async (data) => {
+    if (!socket.userId || !socket.companyId) return;
     const { roomId, message } = data;
+    try {
+      const room = await ChatRoom.findOne({ _id: roomId, companyId: socket.companyId }).select('_id');
+      if (!room) {
+        socket.emit('chat-error', 'Chat soba nije pronađena u vašoj firmi');
+        return;
+      }
+    } catch (error) {
+      socket.emit('chat-error', 'Greška pri slanju poruke');
+      return;
+    }
+
     io.to(`room-${roomId}`).emit('new-message', {
       senderId: socket.userId,
       message,
@@ -118,7 +181,7 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 5000;
-const HOST = process.env.NODE_ENV === 'production' ? '0.0.0.0' : 'localhost';
+const HOST = process.env.NODE_ENV === 'development' ? 'localhost' : '0.0.0.0';
 
 server.listen(PORT, HOST, () => {
   console.log(`🚀 APPEL Backend pokrenut na portu ${PORT}`);

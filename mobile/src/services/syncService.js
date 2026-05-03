@@ -708,6 +708,9 @@ export const syncRepairsFromServer = async () => {
           id: r._id,
           elevatorId,
           serviserID,
+          dodatniServiseri: r.dodatniServiseri || [],
+          radniSati: r.radniSati || {},
+          utroseniMaterijal: r.utroseniMaterijal,
           datumPrijave: r.datumPrijave,
           datumPopravka: r.datumPopravka,
           opisKvara: r.opisKvara,
@@ -893,6 +896,9 @@ export const syncRepairsToServer = async () => {
           radniNalogPotpisan: Boolean(r.radniNalogPotpisan),
           popravkaUPotpunosti: Boolean(r.popravkaUPotpunosti),
           napomene: r.napomene,
+          dodatniServiseri: r.dodatniServiseri || [],
+          radniSati: r.radniSati || {},
+          utroseniMaterijal: r.utroseniMaterijal,
           photos: r.photos || [],
           prijavio: r.prijavio,
           kontaktTelefon: r.kontaktTelefon,
@@ -901,7 +907,11 @@ export const syncRepairsToServer = async () => {
         });
         const serverId = res?.data?.data?._id || res?.data?._id || res?.data?.id;
         if (serverId) {
-          repairDB.markSynced(r.id, serverId);
+          try {
+            repairDB.markSynced(r.id, serverId);
+          } catch (markErr) {
+            console.error('❌ Failed to markSynced after create:', r.id, '→', serverId, markErr?.message);
+          }
         } else {
           console.log('Repair create: missing server id for', r.id);
         }
@@ -949,6 +959,9 @@ export const syncRepairsToServer = async () => {
                 radniNalogPotpisan: Boolean(r.radniNalogPotpisan),
                 popravkaUPotpunosti: Boolean(r.popravkaUPotpunosti),
                 napomene: r.napomene,
+                dodatniServiseri: r.dodatniServiseri || [],
+                radniSati: r.radniSati || {},
+                utroseniMaterijal: r.utroseniMaterijal,
                 photos: r.photos || [],
                 prijavio: r.prijavio,
               kontaktTelefon: r.kontaktTelefon,
@@ -957,7 +970,11 @@ export const syncRepairsToServer = async () => {
             });
             const serverId = res?.data?.data?._id || res?.data?._id || res?.data?.id;
             if (serverId) {
-              repairDB.markSynced(r.id, serverId);
+              try {
+                repairDB.markSynced(r.id, serverId);
+              } catch (markErr) {
+                console.error('❌ Failed to markSynced after retry create:', r.id, '→', serverId, markErr?.message);
+              }
             } else {
               console.log('Repair create (retry): missing server id for', r.id);
             }
@@ -977,6 +994,9 @@ export const syncRepairsToServer = async () => {
           radniNalogPotpisan: Boolean(r.radniNalogPotpisan),
           popravkaUPotpunosti: Boolean(r.popravkaUPotpunosti),
           napomene: r.napomene,
+          dodatniServiseri: r.dodatniServiseri || [],
+          radniSati: r.radniSati || {},
+          utroseniMaterijal: r.utroseniMaterijal,
           photos: r.photos || [],
           prijavio: r.prijavio,
           kontaktTelefon: r.kontaktTelefon,
@@ -985,7 +1005,11 @@ export const syncRepairsToServer = async () => {
           deleted_at: r.is_deleted ? (r.deleted_at || new Date().toISOString()) : undefined,
           serviserID,
         });
-        repairDB.markSynced(r.id, r.id);
+        try {
+          repairDB.markSynced(r.id, r.id);
+        } catch (markErr) {
+          console.error('❌ Failed to markSynced after update:', r.id, markErr?.message);
+        }
       }
     } catch (err) {
       const status = err?.response?.status || err?.status;

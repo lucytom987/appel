@@ -20,6 +20,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { elevatorDB, serviceDB, userDB } from '../database/db';
 import { servicesAPI, usersAPI } from '../services/api';
+import ms from '../utils/scale';
 
 const baseChecklistState = {
   lubrication: false,
@@ -297,8 +298,8 @@ export default function EditServiceScreen({ route, navigation }) {
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? (insets.top + 60) : 0}
+        behavior="padding"
+        keyboardVerticalOffset={Platform.OS === 'ios' ? (insets.top + 60) : ms(2)}
       >
         <ScrollView
           ref={scrollViewRef}

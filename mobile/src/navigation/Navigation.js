@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 
 // Screens
 import LoginScreen from '../screens/LoginScreen';
+import RegisterScreen from '../screens/RegisterScreen';
 import HomeScreen from '../screens/HomeScreen';
 import ElevatorsListScreen from '../screens/ElevatorsListScreen';
 import ElevatorDetailsScreen from '../screens/ElevatorDetailsScreen';
@@ -26,6 +27,8 @@ import ChatRoomsScreen from '../screens/ChatRoomsScreen';
 import ChatRoomScreen from '../screens/ChatRoomScreen';
 import UserManagementScreen from '../screens/UserManagementScreen';
 import AddUserScreen from '../screens/AddUserScreen';
+import CompanySettingsScreen from '../screens/CompanySettingsScreen';
+import SuperAdminScreen from '../screens/SuperAdminScreen';
 import MapScreen from '../screens/MapScreen';
 import AboutScreen from '../screens/AboutScreen';
 
@@ -33,7 +36,7 @@ const Stack = createNativeStackNavigator();
 
 // Glavni navigation
 export default function Navigation() {
-  const { user, loading } = useAuth();
+  const { user, loading, companySetupRequired } = useAuth();
 
   if (loading) {
     return (
@@ -48,31 +51,51 @@ export default function Navigation() {
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {user ? (
           <>
-            <Stack.Screen name="Home" component={HomeScreen} />
-            <Stack.Screen name="Elevators" component={ElevatorsListScreen} />
-            <Stack.Screen name="ElevatorDetails" component={ElevatorDetailsScreen} />
-            <Stack.Screen name="AddElevator" component={AddElevatorScreen} />
-            <Stack.Screen name="EditElevator" component={EditElevatorScreen} />
-            <Stack.Screen name="Services" component={ServicesListScreen} />
-            <Stack.Screen name="ServiceDetails" component={ServiceDetailsScreen} />
-            <Stack.Screen name="EditService" component={EditServiceScreen} />
-            <Stack.Screen name="AddService" component={AddServiceScreen} />
-            <Stack.Screen name="Repairs" component={RepairsListScreen} />
-            <Stack.Screen name="RepairDetails" component={RepairDetailsScreen} />
-            <Stack.Screen name="EditRepair" component={EditRepairScreen} />
-            <Stack.Screen name="AddRepair" component={AddRepairScreen} />
-            <Stack.Screen name="AddTrebaloBi" component={AddTrebaloBiScreen} />
-            <Stack.Screen name="TrebaloBiDetails" component={TrebaloBiDetailsScreen} />
-            <Stack.Screen name="EditTrebaloBi" component={EditTrebaloBiScreen} />
-            <Stack.Screen name="ChatRooms" component={ChatRoomsScreen} />
-            <Stack.Screen name="ChatRoom" component={ChatRoomScreen} />
-            <Stack.Screen name="UserManagement" component={UserManagementScreen} />
-            <Stack.Screen name="AddUser" component={AddUserScreen} />
-            <Stack.Screen name="Map" component={MapScreen} />
-            <Stack.Screen name="About" component={AboutScreen} />
+            {/* Ako je admin i nije setup - prikaži FORCED CompanySettings ekran */}
+            {companySetupRequired ? (
+              <Stack.Screen 
+                name="CompanySetup" 
+                component={CompanySettingsScreen}
+                options={{
+                  headerShown: false,
+                  gestureEnabled: false, // Nema povratka
+                  animationEnabled: true,
+                }}
+              />
+            ) : (
+              <>
+                <Stack.Screen name="Home" component={HomeScreen} />
+                <Stack.Screen name="Elevators" component={ElevatorsListScreen} />
+                <Stack.Screen name="ElevatorDetails" component={ElevatorDetailsScreen} />
+                <Stack.Screen name="AddElevator" component={AddElevatorScreen} />
+                <Stack.Screen name="EditElevator" component={EditElevatorScreen} />
+                <Stack.Screen name="Services" component={ServicesListScreen} />
+                <Stack.Screen name="ServiceDetails" component={ServiceDetailsScreen} />
+                <Stack.Screen name="EditService" component={EditServiceScreen} />
+                <Stack.Screen name="AddService" component={AddServiceScreen} />
+                <Stack.Screen name="Repairs" component={RepairsListScreen} />
+                <Stack.Screen name="RepairDetails" component={RepairDetailsScreen} />
+                <Stack.Screen name="EditRepair" component={EditRepairScreen} />
+                <Stack.Screen name="AddRepair" component={AddRepairScreen} />
+                <Stack.Screen name="AddTrebaloBi" component={AddTrebaloBiScreen} />
+                <Stack.Screen name="TrebaloBiDetails" component={TrebaloBiDetailsScreen} />
+                <Stack.Screen name="EditTrebaloBi" component={EditTrebaloBiScreen} />
+                <Stack.Screen name="ChatRooms" component={ChatRoomsScreen} />
+                <Stack.Screen name="ChatRoom" component={ChatRoomScreen} />
+                <Stack.Screen name="UserManagement" component={UserManagementScreen} />
+                <Stack.Screen name="AddUser" component={AddUserScreen} />
+                <Stack.Screen name="CompanySettings" component={CompanySettingsScreen} />
+                <Stack.Screen name="SuperAdmin" component={SuperAdminScreen} />
+                <Stack.Screen name="Map" component={MapScreen} />
+                <Stack.Screen name="About" component={AboutScreen} />
+              </>
+            )}
           </>
         ) : (
-          <Stack.Screen name="Login" component={LoginScreen} />
+          <>
+            <Stack.Screen name="Login" component={LoginScreen} />
+            <Stack.Screen name="Register" component={RegisterScreen} />
+          </>
         )}
       </Stack.Navigator>
     </NavigationContainer>

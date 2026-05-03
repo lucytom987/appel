@@ -14,6 +14,22 @@ const CLOUDINARY_CONFIG = {
 const TARGET_SIZE_KB = 300;
 const TARGET_SIZE_BYTES = TARGET_SIZE_KB * 1024;
 
+const getOutputConfig = (mimeType) => {
+  if (mimeType === 'image/png' || mimeType === 'image/webp') {
+    return {
+      format: ImageManipulator.SaveFormat.PNG,
+      mimeType: 'image/png',
+      extension: 'png',
+    };
+  }
+
+  return {
+    format: ImageManipulator.SaveFormat.JPEG,
+    mimeType: 'image/jpeg',
+    extension: 'jpg',
+  };
+};
+
 export const usePhotoUpload = () => {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState(null);
@@ -24,13 +40,14 @@ export const usePhotoUpload = () => {
    * @param {object} meta - width/height ako su dostupni
    * @returns {Promise<{uri: string, size: number}>}
    */
-  const compressImage = useCallback(async (imageUri, meta = {}) => {
+  const compressImage = useCallback(async (imageUri, meta = {}, sourceMimeType = 'image/jpeg') => {
     try {
       let quality = 1.0;
       let width = typeof meta.width === 'number' ? meta.width : 0;
       let height = typeof meta.height === 'number' ? meta.height : 0;
       const maxDim = 2400;
       let compressed;
+      const outputConfig = getOutputConfig(sourceMimeType);
 
       const getFileSize = async (uri) => {
         try {
@@ -56,7 +73,7 @@ export const usePhotoUpload = () => {
       }
 
       if (originalSize > 0 && originalSize <= TARGET_SIZE_BYTES) {
-        return { uri: imageUri, size: originalSize };
+        return { uri: imageUri, size: originalSize, mimeType: sourceMimeType };
       }
 
       // Iterativna kompresija - smanjuj kvalitetu dok ne dođeš do ciljane veličine
@@ -64,7 +81,7 @@ export const usePhotoUpload = () => {
         compressed = await ImageManipulator.manipulateAsync(
           imageUri,
           [{ resize: { width, height } }],
-          { compress: quality, format: ImageManipulator.SaveFormat.JPEG }
+          { compress: quality, format: outputConfig.format }
         );
 
         const sizeInBytes = compressed?.uri ? await getFileSize(compressed.uri) : 0;
@@ -74,7 +91,8 @@ export const usePhotoUpload = () => {
           // Dozvoli 10% tolerancije
           return {
             uri: compressed.uri,
-            size: sizeInBytes
+            size: sizeInBytes,
+            mimeType: outputConfig.mimeType,
           };
         }
 
@@ -82,7 +100,8 @@ export const usePhotoUpload = () => {
         if (!sizeInBytes) {
           return {
             uri: compressed.uri,
-            size: 0
+            size: 0,
+            mimeType: outputConfig.mimeType,
           };
         }
 
@@ -99,7 +118,8 @@ export const usePhotoUpload = () => {
       const lastSize = compressed?.uri ? await getFileSize(compressed.uri) : 0;
       return {
         uri: compressed?.uri || imageUri,
-        size: lastSize || originalSize || TARGET_SIZE_BYTES
+        size: lastSize || originalSize || TARGET_SIZE_BYTES,
+        mimeType: outputConfig.mimeType,
       };
     } catch (err) {
       console.error('❌ Greška pri kompresiji slike:', err);
@@ -119,10 +139,10 @@ export const usePhotoUpload = () => {
     }
 
     const asset = result.assets[0];
-    const maxSizeBytes = 50 * 1024 * 1024; // 50MB max
+    const maxSizeBytes = 2 * 1024 * 1024; // 2MB max
 
     if (asset.fileSize && asset.fileSize > maxSizeBytes) {
-      setError('Slika je prevelika (max 50MB)');
+      setError('Slika je prevelika (max 2MB)');
       return false;
     }
 
@@ -144,12 +164,13 @@ export const usePhotoUpload = () => {
   const uploadToCloudinary = useCallback(async (compressedUri, mimeType) => {
     try {
       const formData = new FormData();
+      const outputConfig = getOutputConfig(mimeType);
 
       // Spremi datoteku
       formData.append('file', {
         uri: compressedUri,
-        type: mimeType || 'image/jpeg',
-        name: `photo_${Date.now()}.jpg`
+        type: outputConfig.mimeType,
+        name: `photo_${Date.now()}.${outputConfig.extension}`
       });
 
       // Dodaj unsigned preset
@@ -230,7 +251,7 @@ export const usePhotoUpload = () => {
       });
 
       // Kompresiraj
-      const compressed = await compressImage(asset.uri, { width: asset.width, height: asset.height });
+      const compressed = await compressImage(asset.uri, { width: asset.width, height: asset.height }, mimeType);
       console.log('✅ Kompresija gotova:', {
         originalUri: asset.uri,
         compressedUri: compressed.uri,
@@ -238,7 +259,7 @@ export const usePhotoUpload = () => {
       });
 
       // Uploadiraj na Cloudinary
-      const uploadResult = await uploadToCloudinary(compressed.uri, mimeType);
+      const uploadResult = await uploadToCloudinary(compressed.uri, compressed.mimeType || mimeType);
 
       console.log('✅ Upload gotov:', uploadResult.url);
       setUploading(false);
@@ -278,8 +299,8 @@ export const usePhotoUpload = () => {
       const asset = result.assets[0];
       const mimeType = asset.mimeType || 'image/jpeg';
 
-      const compressed = await compressImage(asset.uri, { width: asset.width, height: asset.height });
-      const uploadResult = await uploadToCloudinary(compressed.uri, mimeType);
+      const compressed = await compressImage(asset.uri, { width: asset.width, height: asset.height }, mimeType);
+      const uploadResult = await uploadToCloudinary(compressed.uri, compressed.mimeType || mimeType);
 
       console.log('✅ Foto snimljena i uploadana:', uploadResult.url);
       setUploading(false);

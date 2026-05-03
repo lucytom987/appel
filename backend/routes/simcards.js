@@ -11,7 +11,7 @@ router.get('/', authenticate, async (req, res) => {
     const { aktivna, elevatorId, limit = 100, skip = 0 } = req.query;
     const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 0, 1), 200);
     const parsedSkip = Math.max(parseInt(skip, 10) || 0, 0);
-    const filter = {};
+    const filter = { companyId: req.companyId };
     if (typeof aktivna !== 'undefined') filter.aktivna = aktivna === 'true' || aktivna === true;
     if (elevatorId) filter.elevatorId = elevatorId;
 
@@ -40,6 +40,7 @@ router.get('/expiring/soon', authenticate, async (req, res) => {
     futureDate.setDate(today.getDate() + daysAhead);
 
     const simcards = await SimCard.find({
+      companyId: req.companyId,
       datumIsteka: { $gte: today, $lte: futureDate },
       aktivna: true
     })
@@ -57,15 +58,16 @@ router.get('/expiring/soon', authenticate, async (req, res) => {
 // GET /api/simcards/stats/overview - statistika
 router.get('/stats/overview', authenticate, async (req, res) => {
   try {
-    const total = await SimCard.countDocuments();
-    const active = await SimCard.countDocuments({ aktivna: true });
-    const inactive = await SimCard.countDocuments({ aktivna: false });
+    const total = await SimCard.countDocuments({ companyId: req.companyId });
+    const active = await SimCard.countDocuments({ companyId: req.companyId, aktivna: true });
+    const inactive = await SimCard.countDocuments({ companyId: req.companyId, aktivna: false });
 
     const today = new Date();
     const futureDate = new Date();
     futureDate.setDate(today.getDate() + 7);
 
     const expiringSoon = await SimCard.countDocuments({
+      companyId: req.companyId,
       datumIsteka: { $gte: today, $lte: futureDate },
       aktivna: true
     });
@@ -80,7 +82,7 @@ router.get('/stats/overview', authenticate, async (req, res) => {
 // GET /api/simcards/:id - detalj
 router.get('/:id', authenticate, async (req, res) => {
   try {
-    const simcard = await SimCard.findById(req.params.id)
+    const simcard = await SimCard.findOne({ _id: req.params.id, companyId: req.companyId })
       .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala')
       .lean();
 
@@ -98,11 +100,19 @@ router.get('/:id', authenticate, async (req, res) => {
 // POST /api/simcards - kreiraj
 router.post('/', authenticate, async (req, res) => {
   try {
-    const simcard = new SimCard(req.body);
+    const payload = { ...req.body, companyId: req.companyId };
+    if (payload.elevatorId) {
+      const elevator = await Elevator.findOne({ _id: payload.elevatorId, companyId: req.companyId, is_deleted: { $ne: true } });
+      if (!elevator) {
+        return res.status(400).json({ success: false, message: 'Odabrano dizalo nije pronađeno u vašoj firmi' });
+      }
+    }
+
+    const simcard = new SimCard(payload);
     await simcard.save();
 
     if (simcard.elevatorId) {
-      await Elevator.findByIdAndUpdate(simcard.elevatorId, { simCard: simcard._id });
+      await Elevator.findOneAndUpdate({ _id: simcard.elevatorId, companyId: req.companyId }, { simCard: simcard._id });
     }
 
     await logAction({
@@ -128,22 +138,30 @@ router.post('/', authenticate, async (req, res) => {
 // PUT /api/simcards/:id - ažuriraj
 router.put('/:id', authenticate, async (req, res) => {
   try {
-    const oldSimCard = await SimCard.findById(req.params.id).lean();
+    const oldSimCard = await SimCard.findOne({ _id: req.params.id, companyId: req.companyId }).lean();
     if (!oldSimCard) {
       return res.status(404).json({ success: false, message: 'SIM kartica nije pronađena' });
     }
 
-    const simcard = await SimCard.findByIdAndUpdate(
-      req.params.id,
-      { ...req.body, azuriranDatum: new Date() },
+    const nextElevatorId = req.body.elevatorId;
+    if (nextElevatorId) {
+      const elevator = await Elevator.findOne({ _id: nextElevatorId, companyId: req.companyId, is_deleted: { $ne: true } });
+      if (!elevator) {
+        return res.status(400).json({ success: false, message: 'Odabrano dizalo nije pronađeno u vašoj firmi' });
+      }
+    }
+
+    const simcard = await SimCard.findOneAndUpdate(
+      { _id: req.params.id, companyId: req.companyId },
+      { ...req.body, companyId: req.companyId, azuriranDatum: new Date() },
       { new: true, runValidators: true }
     ).populate('elevatorId', 'nazivStranke ulica brojDizala');
 
     if (oldSimCard.elevatorId && String(oldSimCard.elevatorId) !== String(simcard.elevatorId || '')) {
-      await Elevator.findByIdAndUpdate(oldSimCard.elevatorId, { $unset: { simCard: 1 } });
+      await Elevator.findOneAndUpdate({ _id: oldSimCard.elevatorId, companyId: req.companyId }, { $unset: { simCard: 1 } });
     }
     if (simcard.elevatorId) {
-      await Elevator.findByIdAndUpdate(simcard.elevatorId, { simCard: simcard._id });
+      await Elevator.findOneAndUpdate({ _id: simcard.elevatorId, companyId: req.companyId }, { simCard: simcard._id });
     }
 
     await logAction({
@@ -167,13 +185,13 @@ router.put('/:id', authenticate, async (req, res) => {
 // DELETE /api/simcards/:id - brisanje
 router.delete('/:id', authenticate, checkRole(['menadzer', 'admin']), async (req, res) => {
   try {
-    const simcard = await SimCard.findById(req.params.id);
+    const simcard = await SimCard.findOne({ _id: req.params.id, companyId: req.companyId });
     if (!simcard) {
       return res.status(404).json({ success: false, message: 'SIM kartica nije pronađena' });
     }
 
     if (simcard.elevatorId) {
-      await Elevator.findByIdAndUpdate(simcard.elevatorId, { $unset: { simCard: 1 } });
+      await Elevator.findOneAndUpdate({ _id: simcard.elevatorId, companyId: req.companyId }, { $unset: { simCard: 1 } });
     }
 
     await simcard.deleteOne();

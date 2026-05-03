@@ -9,6 +9,13 @@ const repairSchema = new mongoose.Schema({
 
   opisKvara: { type: String, required: true },
   opisPopravka: String,
+  dodatniServiseri: [{ type: String }],
+  radniSati: {
+    glavni: { type: Number, min: 0 },
+    kolega: { type: Number, min: 0 },
+    dodatni: [{ type: Number, min: 0 }],
+  },
+  utroseniMaterijal: String,
 
   status: {
     type: String,

@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Print from 'expo-print';
 import { serviceDB, elevatorDB, userDB } from '../database/db';
 import { syncAll } from '../services/syncService';
 import { useAuth } from '../context/AuthContext';
@@ -469,6 +470,73 @@ export default function ServicesListScreen({ navigation }) {
     }
   }, [loadServices, refreshAnnualOccurrences]);
 
+  const handlePrintNotServiced = useCallback(async () => {
+    try {
+      const rows = dedupedServices.map((item) => {
+        const elevator = resolveElevatorForService(item);
+        const display = buildElevatorDisplay(elevator);
+        const sljedeciServisDate = parseDate(item.sljedeciServis);
+        const daysUntilNext = sljedeciServisDate
+          ? Math.ceil((sljedeciServisDate - new Date()) / (1000 * 60 * 60 * 24))
+          : null;
+        const statusLabel = daysUntilNext === null
+          ? '-'
+          : daysUntilNext < 0
+            ? `Prekoračeno ${Math.abs(daysUntilNext)}d`
+            : `${daysUntilNext}d`;
+        const lastServiceDate = parseDate(item.datum || item.serviceDate);
+        const lastServiceLabel = lastServiceDate ? lastServiceDate.toLocaleDateString('hr-HR') : '-';
+        const nextServiceLabel = sljedeciServisDate ? sljedeciServisDate.toLocaleDateString('hr-HR') : '-';
+
+        return { title: display.title, lastService: lastServiceLabel, nextService: nextServiceLabel, status: statusLabel, overdue: daysUntilNext !== null && daysUntilNext < 0 };
+      });
+
+      const tableRows = rows.map((r, i) => `
+        <tr style="${r.overdue ? 'background:#fee2e2;' : i % 2 === 0 ? 'background:#f9fafb;' : ''}">
+          <td style="padding:6px 10px;border-bottom:1px solid #e5e7eb;">${i + 1}</td>
+          <td style="padding:6px 10px;border-bottom:1px solid #e5e7eb;">${r.title}</td>
+          <td style="padding:6px 10px;border-bottom:1px solid #e5e7eb;text-align:center;">${r.lastService}</td>
+          <td style="padding:6px 10px;border-bottom:1px solid #e5e7eb;text-align:center;">${r.nextService}</td>
+          <td style="padding:6px 10px;border-bottom:1px solid #e5e7eb;text-align:center;font-weight:600;${r.overdue ? 'color:#dc2626;' : ''}">${r.status}</td>
+        </tr>
+      `).join('');
+
+      const html = `
+        <html>
+        <head><meta charset="utf-8"><style>
+          body { font-family: Arial, sans-serif; padding: 20px; }
+          h1 { font-size: 18px; color: #1f2937; margin-bottom: 4px; }
+          h2 { font-size: 14px; color: #6b7280; font-weight: 400; margin-bottom: 16px; }
+          table { width: 100%; border-collapse: collapse; font-size: 12px; }
+          th { background: #1f2937; color: #fff; padding: 8px 10px; text-align: left; }
+          .summary { margin-top: 16px; font-size: 12px; color: #6b7280; }
+        </style></head>
+        <body>
+          <h1>Neservisirana dizala — ${MONTHS[selectedMonth]} ${selectedYear}</h1>
+          <h2>Ukupno: ${rows.length} lokacija</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Lokacija</th>
+                <th style="text-align:center;">Zadnji servis</th>
+                <th style="text-align:center;">Sljedeći servis</th>
+                <th style="text-align:center;">Status</th>
+              </tr>
+            </thead>
+            <tbody>${tableRows}</tbody>
+          </table>
+          <p class="summary">Generirano: ${new Date().toLocaleDateString('hr-HR')} ${new Date().toLocaleTimeString('hr-HR', { hour: '2-digit', minute: '2-digit' })}</p>
+        </body>
+        </html>
+      `;
+
+      await Print.printAsync({ html });
+    } catch (e) {
+      console.error('Greška pri printanju:', e);
+    }
+  }, [dedupedServices, selectedMonth, selectedYear]);
+
   const renderServiceItem = ({ item }) => {
     if (!item || typeof item !== 'object') {
       return (
@@ -625,17 +693,28 @@ export default function ServicesListScreen({ navigation }) {
       </View>
 
       <View style={[styles.summaryBar, styles.summaryBarColumn]}>
-        <TouchableOpacity
-          style={[styles.summaryPill, styles.summaryPillPressable]}
-          onPress={() => {
-            setTempMonth(selectedMonth);
-            setTempYear(selectedYear);
-            setPeriodPickerOpen(true);
-          }}
-        >
-          <Ionicons name="calendar-outline" size={18} color="#0f172a" />
-          <Text style={styles.summaryDateText}>{MONTHS[selectedMonth]} {selectedYear}</Text>
-        </TouchableOpacity>
+        <View style={styles.summaryRow}>
+          <TouchableOpacity
+            style={[styles.summaryPill, styles.summaryPillPressable]}
+            onPress={() => {
+              setTempMonth(selectedMonth);
+              setTempYear(selectedYear);
+              setPeriodPickerOpen(true);
+            }}
+          >
+            <Ionicons name="calendar-outline" size={18} color="#0f172a" />
+            <Text style={styles.summaryDateText}>{MONTHS[selectedMonth]} {selectedYear}</Text>
+          </TouchableOpacity>
+          {filter === 'notServiced' && dedupedServices.length > 0 && (
+            <TouchableOpacity
+              style={styles.printButton}
+              onPress={handlePrintNotServiced}
+            >
+              <Ionicons name="print-outline" size={20} color="#fff" />
+              <Text style={styles.printButtonText}>Printaj</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       <FlatList
@@ -855,6 +934,13 @@ const styles = StyleSheet.create({
   summaryBarColumn: {
     gap: 10,
   },
+  summaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    width: '100%',
+  },
   summaryPill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -872,6 +958,21 @@ const styles = StyleSheet.create({
     flex: 0,
     width: 'auto',
     alignSelf: 'center',
+  },
+  printButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#0ea5e9',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    minHeight: 44,
+  },
+  printButtonText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 14,
   },
   summaryPillGreen: {
     backgroundColor: '#dcfce7',

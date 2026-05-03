@@ -20,6 +20,7 @@ import { useAuth } from '../context/AuthContext';
 import { serviceDB, elevatorDB, userDB } from '../database/db';
 import { servicesAPI, usersAPI } from '../services/api';
 import { usePhotoUpload } from '../hooks/usePhotoUpload';
+import ms from '../utils/scale';
 
 export default function AddServiceScreen({ navigation, route }) {
   const { elevator } = route.params || {};
@@ -437,8 +438,8 @@ export default function AddServiceScreen({ navigation, route }) {
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={(insets?.top || 0) + 60}
+        behavior="padding"
+        keyboardVerticalOffset={Platform.OS === 'ios' ? (insets?.top || 0) + 60 : ms(2)}
       >
         <ScrollView
           style={styles.content}

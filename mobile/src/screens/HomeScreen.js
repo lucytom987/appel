@@ -414,28 +414,50 @@ export default function HomeScreen({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        {/* Admin sekcija - samo za administratore */}
-        {user?.uloga === 'admin' && !offlineDemo && (
+        {/* Admin sekcija - samo za administratore i menadžere */}
+        {(user?.uloga === 'admin' || user?.uloga === 'menadzer') && !offlineDemo && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Administracija</Text>
             
             <TouchableOpacity 
               style={[styles.actionButton, styles.adminButton]}
-              onPress={() => navigation.navigate('UserManagement')}
+              onPress={() => navigation.navigate('CompanySettings')}
             >
-              <Ionicons name="people" size={24} color="#FF6B6B" />
-              <Text style={styles.actionText}>Upravljanje korisnicima</Text>
+              <Ionicons name="business" size={24} color="#2563eb" />
+              <Text style={styles.actionText}>Postavke firme</Text>
               <Ionicons name="chevron-forward" size={20} color="#999" />
             </TouchableOpacity>
+
+            {user?.uloga === 'admin' && (
+              <TouchableOpacity 
+                style={[styles.actionButton, styles.adminButton]}
+                onPress={() => navigation.navigate('UserManagement')}
+              >
+                <Ionicons name="people" size={24} color="#FF6B6B" />
+                <Text style={styles.actionText}>Upravljanje korisnicima</Text>
+                <Ionicons name="chevron-forward" size={20} color="#999" />
+              </TouchableOpacity>
+            )}
+
+            {user?.superAdmin && (
+              <TouchableOpacity 
+                style={[styles.actionButton, { borderLeftColor: '#7c3aed', borderLeftWidth: 4 }]}
+                onPress={() => navigation.navigate('SuperAdmin')}
+              >
+                <Ionicons name="shield-checkmark" size={24} color="#7c3aed" />
+                <Text style={styles.actionText}>Super Admin Panel</Text>
+                <Ionicons name="chevron-forward" size={20} color="#999" />
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
-        {user?.uloga === 'admin' && offlineDemo && (
+        {(user?.uloga === 'admin' || user?.uloga === 'menadzer') && offlineDemo && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Administracija</Text>
             <View style={styles.offlineAdminBox}>
               <Ionicons name="lock-closed" size={20} color="#ef4444" />
-              <Text style={styles.offlineAdminText}>Offline demo korisnik – upravljanje korisnicima nedostupno dok se ne prijaviš online.</Text>
+              <Text style={styles.offlineAdminText}>Offline demo korisnik – administracija nedostupna dok se ne prijaviš online.</Text>
             </View>
           </View>
         )}

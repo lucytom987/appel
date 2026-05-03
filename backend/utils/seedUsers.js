@@ -1,10 +1,25 @@
 const User = require('../models/User');
+const Company = require('../models/Company');
 
 /**
- * Inicijaliziraj default admin korisnika ako ne postoji
+ * Inicijaliziraj default company i admin korisnika ako ne postoje
  */
 async function seedDefaultUsers() {
   try {
+    // Kreiraj default company ako ne postoji
+    let defaultCompany = await Company.findOne({ naziv: 'APPEL SERVICE d.o.o.' });
+    if (!defaultCompany) {
+      defaultCompany = new Company({
+        naziv: 'APPEL SERVICE d.o.o.',
+        adresa: 'Varaždin, Hrvatska',
+        oib: '12345678901',
+        telefon: '+385 91 000 0000',
+        email: 'info@appel.hr',
+      });
+      await defaultCompany.save();
+      console.log('✅ Default company je kreiran');
+    }
+
     // Provjeri da li admin već postoji
     const existingAdmin = await User.findOne({ email: 'vidacek@appel.com' });
     if (existingAdmin) {
@@ -20,7 +35,8 @@ async function seedDefaultUsers() {
       lozinka: 'vidacek123',
       uloga: 'admin',
       telefon: '0987654321',
-      aktivan: true
+      aktivan: true,
+      companyId: defaultCompany._id,
     });
 
     await admin.save();

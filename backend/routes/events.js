@@ -11,7 +11,7 @@ router.get('/', authenticate, async (req, res) => {
     const { elevatorId, eventType, status, startDate, endDate, serviserId, updatedAfter, limit = 200, skip = 0, includeDeleted } = req.query;
     const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 0, 1), 500);
     const parsedSkip = Math.max(parseInt(skip, 10) || 0, 0);
-    const filter = {};
+    const filter = { companyId: req.companyId };
     
     if (!includeDeleted) filter.is_deleted = { $ne: true };
 
@@ -66,7 +66,7 @@ router.get('/', authenticate, async (req, res) => {
 router.get('/:id', authenticate, async (req, res) => {
   try {
     const { id } = req.params;
-    const event = await Event.findById(id)
+    const event = await Event.findOne({ _id: id, companyId: req.companyId })
       .populate('elevatorId', 'brojUgovora nazivStranke ulica mjesto brojDizala')
       .populate('repair.serviserID', 'ime prezime email')
       .populate('serviceNote.serviserID', 'ime prezime email')
@@ -94,12 +94,13 @@ router.post('/', authenticate, async (req, res) => {
       return res.status(400).json({ success: false, message: 'elevatorId i eventType su obavezni' });
     }
 
-    const elevator = await Elevator.findById(elevatorId);
+    const elevator = await Elevator.findOne({ _id: elevatorId, companyId: req.companyId, is_deleted: { $ne: true } });
     if (!elevator) {
-      return res.status(404).json({ success: false, message: 'Dizalo nije pronađeno' });
+      return res.status(404).json({ success: false, message: 'Dizalo nije pronađeno ili ne pripada vašoj firmi' });
     }
 
     const eventData = {
+      companyId: req.companyId,
       elevatorId,
       eventType,
       napomene,
@@ -154,7 +155,7 @@ router.post('/', authenticate, async (req, res) => {
     await event.save();
     await logAction(user._id, 'CREATE', 'Event', event._id);
 
-    const populated = await Event.findById(event._id)
+    const populated = await Event.findOne({ _id: event._id, companyId: req.companyId })
       .populate('elevatorId', 'brojUgovora nazivStranke ulica mjesto brojDizala')
       .populate('repair.serviserID', 'ime prezime email')
       .populate('serviceNote.serviserID', 'ime prezime email')
@@ -175,7 +176,7 @@ router.put('/:id', authenticate, async (req, res) => {
     const { user } = req;
     const { repair, serviceNote, activity, napomene, datum } = req.body;
 
-    const event = await Event.findById(id);
+    const event = await Event.findOne({ _id: id, companyId: req.companyId });
     if (!event) {
       return res.status(404).json({ success: false, message: 'Događaj nije pronađen' });
     }
@@ -209,7 +210,7 @@ router.put('/:id', authenticate, async (req, res) => {
     await event.save();
     await logAction(user._id, 'UPDATE', 'Event', event._id);
 
-    const updated = await Event.findById(event._id)
+    const updated = await Event.findOne({ _id: event._id, companyId: req.companyId })
       .populate('elevatorId', 'brojUgovora nazivStranke ulica mjesto brojDizala')
       .populate('repair.serviserID', 'ime prezime email')
       .populate('serviceNote.serviserID', 'ime prezime email')
@@ -229,7 +230,7 @@ router.delete('/:id', authenticate, async (req, res) => {
     const { id } = req.params;
     const { user } = req;
 
-    const event = await Event.findById(id);
+    const event = await Event.findOne({ _id: id, companyId: req.companyId });
     if (!event) {
       return res.status(404).json({ success: false, message: 'Događaj nije pronađen' });
     }
@@ -256,6 +257,7 @@ router.get('/elevator/:elevatorId', authenticate, async (req, res) => {
     const parsedSkip = Math.max(parseInt(skip, 10) || 0, 0);
 
     const filter = {
+      companyId: req.companyId,
       elevatorId,
       is_deleted: { $ne: true }
     };

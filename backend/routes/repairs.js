@@ -1,9 +1,46 @@
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
 const Repair = require('../models/Repair');
 const Elevator = require('../models/Elevator');
+const User = require('../models/User');
 const { authenticate, checkRole } = require('../middleware/auth');
 const { logAction } = require('../services/auditService');
+
+const normalizeAdditionalTechnicians = async (value, companyId) => {
+  const raw = Array.isArray(value) ? value : [];
+  const ids = raw
+    .map((entry) => (typeof entry === 'object' ? entry?._id || entry?.id : entry))
+    .filter((entry) => typeof entry === 'string' && mongoose.Types.ObjectId.isValid(entry));
+
+  if (!ids.length) return [];
+
+  const users = await User.find({ _id: { $in: ids }, companyId, aktivan: { $ne: false } })
+    .select('_id')
+    .lean();
+  return users.map((user) => String(user._id));
+};
+
+const normalizeWorkHours = (value) => {
+  const input = value && typeof value === 'object' ? value : {};
+  const parse = (v) => {
+    if (v === null || v === undefined || v === '') return null;
+    const number = Number(v);
+    return Number.isFinite(number) && number >= 0 ? number : null;
+  };
+
+  const additionalHours = Array.isArray(input.dodatni)
+    ? input.dodatni.map(parse)
+    : [];
+
+  const legacyColleagueHours = parse(input.kolega);
+
+  return {
+    glavni: parse(input.glavni),
+    kolega: legacyColleagueHours ?? additionalHours[0] ?? null,
+    dodatni: additionalHours,
+  };
+};
 
 // GET /api/repairs - popis popravaka (filtri)
 router.get('/', authenticate, async (req, res) => {
@@ -143,10 +180,33 @@ router.post('/', authenticate, async (req, res) => {
     );
 
     const now = new Date();
+    
+    // Provjeri duplikate - ako postoji popravka sa istim poljem i datumom, vrati postojeću
+    const existingRepair = await Repair.findOne({
+      companyId: req.companyId,
+      elevatorId: req.body.elevatorId || req.body.elevator,
+      opisKvara: req.body.opisKvara,
+      datumPrijave: req.body.datumPrijave || { $gte: new Date(now.getTime() - 60000) }, // zadnjih 60s
+      is_deleted: { $ne: true },
+    }).lean();
+
+    if (existingRepair) {
+      console.log(`⚠️ Duplikat popravka pronađen, vraćam postojeću: ${existingRepair._id}`);
+      const populated = await Repair.findById(existingRepair._id)
+        .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala')
+        .populate('serviserID', 'ime prezime email');
+      return res.status(201).json({ success: true, message: 'Popravak već postoji', data: populated });
+    }
+
+    const normalizedAdditionalTechnicians = await normalizeAdditionalTechnicians(req.body.dodatniServiseri, req.companyId);
+    const normalizedWorkHours = normalizeWorkHours(req.body.radniSati);
     const repair = new Repair({
       ...req.body,
       elevatorId: req.body.elevatorId || req.body.elevator,
       serviserID: req.user._id,
+      dodatniServiseri: normalizedAdditionalTechnicians,
+      radniSati: normalizedWorkHours,
+      utroseniMaterijal: typeof req.body.utroseniMaterijal === 'string' ? req.body.utroseniMaterijal.trim() : '',
       status: req.body.status || 'pending',
       trebaloBi: trebFlag,
       datumPrijave: req.body.datumPrijave || now,
@@ -208,11 +268,16 @@ router.put('/:id', authenticate, async (req, res) => {
     }
 
     const now = new Date();
+    const normalizedAdditionalTechnicians = await normalizeAdditionalTechnicians(req.body.dodatniServiseri, req.companyId);
+    const normalizedWorkHours = normalizeWorkHours(req.body.radniSati);
 
     const updatePayload = {
       ...req.body,
       elevatorId: req.body.elevatorId || req.body.elevator || existing.elevatorId,
       serviserID: req.body.serviserID || existing.serviserID,
+      dodatniServiseri: normalizedAdditionalTechnicians,
+      radniSati: normalizedWorkHours,
+      utroseniMaterijal: typeof req.body.utroseniMaterijal === 'string' ? req.body.utroseniMaterijal.trim() : '',
       trebaloBi: trebFlag,
       azuriranDatum: now,
       updated_at: now,

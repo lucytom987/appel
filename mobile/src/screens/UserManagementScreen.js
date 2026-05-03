@@ -43,7 +43,7 @@ const UserManagementScreen = ({ navigation }) => {
   if (!online) {
     return (
       <View style={styles.centeredContainer}>
-        <Ionicons name="wifi-off" size={64} color="#FF6B6B" />
+        <Ionicons name="wifi-outline" size={64} color="#FF6B6B" />
         <Text style={styles.errorText}>Upravljanje korisnicima zahtijeva konekciju na internet!</Text>
         <Text style={styles.infoText}>Trebate biti online da biste upravljali korisnicima.</Text>
       </View>

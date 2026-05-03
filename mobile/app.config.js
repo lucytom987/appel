@@ -1,10 +1,13 @@
+const APP_VARIANT = process.env.APP_VARIANT || 'production';
+const isStaging = APP_VARIANT === 'staging';
+
 module.exports = ({ config }) => ({
   ...config,
   expo: {
-    name: "APPEL",
-    slug: "appel",
-    version: "1.2.2",
-    orientation: "portrait",
+    name: isStaging ? "APPEL TEST" : "APPEL",
+    slug: "mobile",
+    version: "2.0.0",
+    orientation: "default",
     icon: "./assets/icon.png",
     userInterfaceStyle: "light",
     newArchEnabled: true,
@@ -16,10 +19,11 @@ module.exports = ({ config }) => ({
     ios: {
       supportsTablet: true,
       buildNumber: "6",
+      bundleIdentifier: isStaging ? "com.appel.elevators.staging" : "com.appel.elevators",
     },
     android: {
-      versionCode: 6,
-      package: "com.appel.elevators",
+      versionCode: 11,
+      package: isStaging ? "com.appel.elevators.staging" : "com.appel.elevators",
       adaptiveIcon: {
         foregroundImage: "./assets/adaptive-icon.png",
         backgroundColor: "#ffffff",
@@ -34,10 +38,18 @@ module.exports = ({ config }) => ({
     web: {
       favicon: "./assets/favicon.png",
     },
+    plugins: [
+      "expo-font",
+      [
+        "expo-screen-orientation",
+        { "initialOrientation": "PORTRAIT" }
+      ],
+    ],
     extra: {
       eas: {
         projectId: "0d60b61b-9b5e-4b73-96b1-c9199484a26b",
       },
+      appVariant: APP_VARIANT,
       googleMapsApiKey: process.env.EXPO_PUBLIC_GOOGLE_MAPS_KEY || "",
     },
   },

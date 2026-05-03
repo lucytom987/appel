@@ -108,7 +108,13 @@ JWT_SECRET=tvoj-tajni-kljuc
 PORT=5000
 NODE_ENV=development
 CORS_ORIGIN=*
+SOFT_DELETE_RETENTION_DAYS=60
 ```
+
+### Automatsko čišćenje obrisanih zapisa
+- Soft-obrisani zapisi (`is_deleted=true`) se automatski trajno brišu nakon 60 dana.
+- Čišćenje se izvrši pri pokretanju backenda i zatim jednom dnevno.
+- Kolekcije uključene u purge: `repairs`, `services`, `events`.
 
 ### Pokretanje servera
 ```powershell

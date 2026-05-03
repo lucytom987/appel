@@ -112,9 +112,9 @@ router.get('/stats/monthly', authenticate, async (req, res) => {
     const startDate = new Date(currentYear, currentMonth - 1, 1);
     const endDate = new Date(currentYear, currentMonth, 0, 23, 59, 59);
 
-    const baseFilter = { is_deleted: { $ne: true } };
+    const baseFilter = { companyId: req.companyId, is_deleted: { $ne: true } };
     const total = await Service.countDocuments({ ...baseFilter, datum: { $gte: startDate, $lte: endDate } });
-    const totalElevators = await Elevator.countDocuments({ is_deleted: { $ne: true } });
+    const totalElevators = await Elevator.countDocuments({ companyId: req.companyId, is_deleted: { $ne: true } });
     const servicedElevatorIds = await Service.distinct('elevatorId', { ...baseFilter, datum: { $gte: startDate, $lte: endDate } });
     const needsService = totalElevators - servicedElevatorIds.length;
 

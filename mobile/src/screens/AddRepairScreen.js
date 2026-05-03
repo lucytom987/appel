@@ -17,6 +17,7 @@ import * as SecureStore from 'expo-secure-store';
 import { useAuth } from '../context/AuthContext';
 import { repairDB } from '../database/db';
 import { repairsAPI } from '../services/api';
+import ms from '../utils/scale';
 
 export default function AddRepairScreen({ navigation, route }) {
   const { elevator } = route.params || {};
@@ -197,10 +198,10 @@ export default function AddRepairScreen({ navigation, route }) {
         <View style={{ width: 24 }} />
       </View>
 
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
+        behavior="padding"
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : ms(2)}
       >
         <ScrollView
           style={styles.content}

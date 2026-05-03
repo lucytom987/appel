@@ -22,6 +22,7 @@ import LocationPickerModal from '../components/LocationPickerModal';
 import { elevatorDB, serviceDB, repairDB } from '../database/db';
 import { elevatorsAPI, servicesAPI, repairsAPI } from '../services/api';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import ms from '../utils/scale';
 
 export default function EditElevatorScreen({ navigation, route }) {
   const { elevator } = route.params;
@@ -617,8 +618,8 @@ export default function EditElevatorScreen({ navigation, route }) {
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={(insets?.top || 0) + 50}
+        behavior="padding"
+        keyboardVerticalOffset={Platform.OS === 'ios' ? (insets?.top || 0) + 50 : ms(2)}
       >
         <ScrollView
           style={styles.content}

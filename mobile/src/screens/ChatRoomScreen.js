@@ -21,6 +21,7 @@ import { useAuth } from '../context/AuthContext';
 import { messageDB } from '../database/db';
 import { chatroomsAPI } from '../services/api';
 import { chatroomDB } from '../database/db';
+import ms from '../utils/scale';
 const defaultAccent = { color: '#e5e7eb', meta: '#d1d5db' };
 const SEND_COLOR = '#0ea5e9';
 
@@ -447,8 +448,8 @@ export default function ChatRoomScreen({ route, navigation }) {
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? (insets?.top || 0) + 6 : 0}
+        behavior="padding"
+        keyboardVerticalOffset={Platform.OS === 'ios' ? (insets?.top || 0) + 6 : ms(2)}
       >
         <FlatList
           ref={listRef}

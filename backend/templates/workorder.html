@@ -241,14 +241,18 @@
       overflow: hidden;
     }
 
+    /* Standardized signature image sizing: fixed height, preserve aspect ratio */
     .sig-line img {
-      max-height: 22px;
+      height: 20mm;
+      width: auto;
       max-width: 100%;
       object-fit: contain;
+      display: block;
     }
 
     .sig-line .sig-image {
-      max-height: 28mm;
+      height: 20mm; /* fixed visual height for all signatures */
+      width: auto;
       max-width: 100%;
       object-fit: contain;
       display: block;
@@ -321,8 +325,8 @@
     <div class="topbar">
       <div class="brand">
         <div class="logo-box">
-          <% if (company && (company.logoUrl || company.logo)) { %>
-            <img src="<%= company.logoUrl || company.logo %>" alt="<%= company.naziv || 'Logo' %>">
+          <% if ((typeof companyLogoDataUrl !== 'undefined' && companyLogoDataUrl) || (company && (company.logoUrl || company.logo))) { %>
+            <img src="<%= companyLogoDataUrl || company.logoUrl || company.logo %>" alt="<%= company.naziv || 'Logo' %>">
           <% } else { %>
             <div class="logo-fallback"><%= (company && company.naziv || 'A').charAt(0).toUpperCase() %></div>
           <% } %>

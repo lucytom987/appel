@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import * as SecureStore from 'expo-secure-store';
+import ms from '../utils/scale';
 
 const APP_VERSION = '16.02.2026';
 
@@ -38,7 +39,8 @@ export default function LoginScreen({ navigation }) {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior="padding"
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : ms(2)}
     >
       <View style={styles.formContainer}>
         {/* Logo/Header */}

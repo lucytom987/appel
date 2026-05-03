@@ -138,6 +138,38 @@ const isTokenValid = (workOrder, token) => {
   return expires.getTime() > Date.now();
 };
 
+const toEmbeddedImageDataUrl = async (value) => {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+
+  if (raw.startsWith('data:image/')) return raw;
+  if (!/^https?:\/\//i.test(raw)) return raw;
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    const response = await fetch(raw, {
+      signal: controller.signal,
+      redirect: 'follow',
+      headers: {
+        Accept: 'image/*,*/*;q=0.8',
+      },
+    });
+    clearTimeout(timeout);
+
+    if (!response.ok) return raw;
+    const contentType = response.headers.get('content-type') || 'image/png';
+    const bytes = Buffer.from(await response.arrayBuffer());
+
+    // Prevent huge inlined payloads in HTML/PDF
+    if (bytes.length > 3 * 1024 * 1024) return raw;
+
+    return `data:${contentType};base64,${bytes.toString('base64')}`;
+  } catch (error) {
+    return raw;
+  }
+};
+
 const buildWorkOrderTemplateData = async (workOrder, req, token) => {
   const company = await Company.findById(workOrder.companyId).lean();
   const repair = await Repair.findById(workOrder.repairId)
@@ -165,6 +197,7 @@ const buildWorkOrderTemplateData = async (workOrder, req, token) => {
 
   const materialItems = parseMaterialItems(normalizedRepair?.utroseniMaterijal);
   const hasStructuredMaterial = materialItems.some((item) => item.structured || item.kolicina || item.jedinica);
+  const companyLogoDataUrl = await toEmbeddedImageDataUrl(company?.logoUrl || company?.logo);
 
   const viewUrl = `${resolveBaseUrl(req)}/api/work-orders/view/${workOrder._id}?token=${encodeURIComponent(token)}`;
   const qrCodeDataUrl = await QRCode.toDataURL(viewUrl, { margin: 1, width: 200 });
@@ -173,6 +206,7 @@ const buildWorkOrderTemplateData = async (workOrder, req, token) => {
     workOrderNumber: workOrder.workOrderNumber,
     workOrder,
     company,
+    companyLogoDataUrl,
     repair: normalizedRepair,
     elevator,
     qrCodeDataUrl,
@@ -295,14 +329,34 @@ router.post('/from-repair/:repairId', authenticate, async (req, res) => {
       workOrder.updated_at = new Date();
     }
 
-    // PRIVREMENO ISKLJUČENO - PDF generiranje
-    // const qrUrl = `${baseUrl}/api/work-orders/view/${workOrder._id}?token=${encodeURIComponent(workOrder.viewToken)}`;
-    // const qrCodeDataUrl = await generateQRCode(qrUrl);
-    // const generated = await generatePdfFromHtml({ workOrder, repair, elevator: repair.elevatorId, company, qrCodeDataUrl });
-    // workOrder.pdfFileName = generated.fileName;
-    // workOrder.pdfPath = generated.filePath;
-    // workOrder.lastGeneratedAt = new Date();
+    // Generate and save PDF on server for draft (optional)
     await workOrder.save();
+    try {
+      const html = await renderWorkOrderHtml(workOrder.toObject(), req, workOrder.viewToken);
+      let pdfBuffer = null;
+      try {
+        pdfBuffer = await generatePdfBufferFromHtml(html);
+      } catch (pdfErr) {
+        console.error('Greška pri generiranju PDF-a za draft radni nalog:', pdfErr.message);
+      }
+
+      if (pdfBuffer) {
+        ensureDir();
+        const fileName = `${workOrder.workOrderNumber || workOrder._id}.pdf`;
+        const filePath = path.join(OUTPUT_DIR, fileName);
+        try {
+          await fs.promises.writeFile(filePath, pdfBuffer);
+          workOrder.pdfFileName = fileName;
+          workOrder.pdfPath = filePath;
+          workOrder.lastGeneratedAt = new Date();
+          await workOrder.save();
+        } catch (writeErr) {
+          console.error('Greška pri spremanju PDF-a na disk:', writeErr.message);
+        }
+      }
+    } catch (err) {
+      console.error('Neuspjela generacija ili spremanje PDF za draft:', err.message || err);
+    }
 
     await logAction({
       korisnikId: req.user._id,
@@ -394,6 +448,20 @@ router.post('/:id/sign', authenticate, async (req, res) => {
         try {
           pdfBuffer = await generatePdfBufferFromHtml(htmlForEmail);
           console.log('✅ PDF generiran za email prilog, veličina:', pdfBuffer.length, 'bajtova');
+
+          // Save signed PDF to disk (overwrite if exists)
+          try {
+            ensureDir();
+            const fileName = `${workOrder.workOrderNumber || workOrder._id}.pdf`;
+            const filePath = path.join(OUTPUT_DIR, fileName);
+            await fs.promises.writeFile(filePath, pdfBuffer);
+            workOrder.pdfFileName = fileName;
+            workOrder.pdfPath = filePath;
+            workOrder.lastGeneratedAt = new Date();
+            await workOrder.save();
+          } catch (saveErr) {
+            console.error('Greška pri spremanju potpisanog PDF-a na disk:', saveErr.message || saveErr);
+          }
         } catch (pdfError) {
           console.error('❌ Greška pri generiranju PDF-a za email prilog:', pdfError.message);
         }
@@ -521,6 +589,45 @@ router.get('/by-repair/:repairId', authenticate, async (req, res) => {
   } catch (error) {
     console.error('Greška pri dohvaćanju radnog naloga:', error);
     return res.status(500).json({ message: 'Greška poslužitelja' });
+  }
+});
+
+// Delete saved PDF for a work order (clears stored file and db fields)
+router.delete('/:id/pdf', authenticate, async (req, res) => {
+  try {
+    const workOrder = await WorkOrder.findOne({ _id: req.params.id, companyId: req.companyId });
+    if (!workOrder) return res.status(404).json({ success: false, message: 'Radni nalog nije pronađen' });
+
+    if (workOrder.pdfPath) {
+      try {
+        if (fs.existsSync(workOrder.pdfPath)) {
+          await fs.promises.unlink(workOrder.pdfPath);
+        }
+      } catch (unlinkErr) {
+        console.error('Greška pri brisanju PDF datoteke:', unlinkErr.message || unlinkErr);
+        // continue to clear db fields even if file deletion failed
+      }
+    }
+
+    workOrder.pdfFileName = null;
+    workOrder.pdfPath = null;
+    workOrder.lastGeneratedAt = new Date();
+    await workOrder.save();
+
+    await logAction({
+      korisnikId: req.user._id,
+      akcija: 'DELETE',
+      entitet: 'WorkOrderPDF',
+      entitetId: workOrder._id,
+      entitetNaziv: workOrder.workOrderNumber,
+      ipAdresa: req.ip,
+      opis: 'Obrisan spremljeni PDF radnog naloga'
+    });
+
+    return res.json({ success: true, message: 'Spremljeni PDF obrisan' });
+  } catch (error) {
+    console.error('Greška pri brisanju spremljenog PDF-a:', error);
+    return res.status(500).json({ success: false, message: 'Greška pri brisanju PDF-a' });
   }
 });
 

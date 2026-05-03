@@ -12,6 +12,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
+import ms from '../utils/scale';
 
 export default function RegisterScreen({ navigation }) {
   const { register, loading } = useAuth();
@@ -54,7 +55,8 @@ export default function RegisterScreen({ navigation }) {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior="padding"
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : ms(2)}
     >
       <ScrollView
         ref={scrollRef}

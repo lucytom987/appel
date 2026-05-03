@@ -623,8 +623,8 @@ export default function RepairDetailsScreen({ route, navigation }) {
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? ms(90) : ms(20)}
+        behavior="padding"
+        keyboardVerticalOffset={Platform.OS === 'ios' ? ms(90) : ms(2)}
       >
       <ScrollView style={styles.content} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: ms(100) }}>
         <View style={styles.elevatorHero}>

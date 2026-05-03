@@ -192,8 +192,8 @@ const CompanySettingsScreen = ({ navigation }) => {
 
       <KeyboardAvoidingView
         style={styles.keyboardWrap}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? ms(92) : ms(20)}
+        behavior="padding"
+        keyboardVerticalOffset={Platform.OS === 'ios' ? ms(92) : ms(2)}
       >
       <ScrollView
         style={styles.content}
@@ -532,7 +532,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: ms(8),
     padding: ms(16),
-    paddingBottom: Platform.OS === 'android' ? ms(70) : ms(16),
+    paddingBottom: ms(16),
     backgroundColor: '#fff',
     borderTopWidth: 1,
     borderTopColor: '#e5e5e5',

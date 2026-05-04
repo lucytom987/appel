@@ -12,7 +12,7 @@ router.get('/', authenticate, async (req, res) => {
     const { updatedAfter, includeDeleted = 'false', limit = 200, skip = 0 } = req.query;
     const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 0, 1), 500);
     const parsedSkip = Math.max(parseInt(skip, 10) || 0, 0);
-    const filter = {};
+    const filter = { companyId: req.companyId };
 
     if (includeDeleted !== 'true') {
       filter.is_deleted = { $ne: true };
@@ -52,7 +52,7 @@ router.get('/', authenticate, async (req, res) => {
 // @access  Private
 router.get('/stats/overview', authenticate, async (req, res) => {
   try {
-    const baseFilter = { is_deleted: { $ne: true } };
+    const baseFilter = { companyId: req.companyId, is_deleted: { $ne: true } };
     const total = await Elevator.countDocuments(baseFilter);
     const active = await Elevator.countDocuments({ ...baseFilter, status: 'aktivan' });
     const inactive = await Elevator.countDocuments({ ...baseFilter, status: 'neaktivan' });
@@ -79,7 +79,7 @@ router.get('/stats/overview', authenticate, async (req, res) => {
 // @access  Private
 router.get('/:id', authenticate, async (req, res) => {
   try {
-    const elevator = await Elevator.findOne({ _id: req.params.id, is_deleted: { $ne: true } })
+    const elevator = await Elevator.findOne({ _id: req.params.id, companyId: req.companyId, is_deleted: { $ne: true } })
       .lean();
 
     if (!elevator) {
@@ -109,6 +109,7 @@ router.post('/', authenticate, async (req, res) => {
   try {
     const elevator = new Elevator({
       ...req.body,
+      companyId: req.companyId,
       kreiranOd: req.user._id,
       updated_by: req.user._id,
       updated_at: new Date(),
@@ -151,7 +152,7 @@ router.post('/', authenticate, async (req, res) => {
 // @access  Private (bilo koja uloga)
 router.put('/:id', authenticate, async (req, res) => {
   try {
-    const oldElevator = await Elevator.findById(req.params.id).lean();
+    const oldElevator = await Elevator.findOne({ _id: req.params.id, companyId: req.companyId }).lean();
     
     if (!oldElevator || oldElevator.is_deleted) {
       return res.status(404).json({
@@ -211,7 +212,7 @@ router.put('/:id', authenticate, async (req, res) => {
 // @access  Private (bilo koja uloga)
 router.delete('/:id', authenticate, checkRole(['menadzer', 'admin']), async (req, res) => {
   try {
-    const elevator = await Elevator.findById(req.params.id);
+    const elevator = await Elevator.findOne({ _id: req.params.id, companyId: req.companyId });
 
     if (!elevator || elevator.is_deleted) {
       return res.status(404).json({

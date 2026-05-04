@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 
 const elevatorSchema = new mongoose.Schema({
+  companyId: { type: mongoose.Schema.Types.ObjectId, ref: 'Company', required: true },
   // Osnovno
   brojUgovora: { type: String }, // Opcionalno
   nazivStranke: { type: String, required: true },

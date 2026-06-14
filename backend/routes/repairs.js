@@ -68,6 +68,7 @@ router.get('/', authenticate, async (req, res) => {
     const repairs = await Repair.find(filter)
       .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala')
       .populate('serviserID', 'ime prezime email')
+      .populate('completedBy', 'ime prezime email')
       .sort({ datumPrijave: -1 })
       .skip(parsedSkip)
       .limit(parsedLimit)
@@ -149,6 +150,7 @@ router.get('/:id', authenticate, async (req, res) => {
     const repair = await Repair.findOne({ _id: req.params.id, companyId: req.companyId, is_deleted: { $ne: true } })
       .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala')
       .populate('serviserID', 'ime prezime email uloga')
+      .populate('completedBy', 'ime prezime email')
       .lean();
 
     if (!repair) {
@@ -183,6 +185,8 @@ router.post('/', authenticate, async (req, res) => {
     );
 
     const now = new Date();
+    const completedByName = `${req.user?.ime || ''} ${req.user?.prezime || ''}`.trim() || req.user?.email || '';
+    const isCompleted = req.body.status === 'completed';
     
     // Provjeri duplikate - ako postoji popravka sa istim poljem i datumom, vrati postojeću
     const existingRepair = await Repair.findOne({
@@ -197,7 +201,8 @@ router.post('/', authenticate, async (req, res) => {
       console.log(`⚠️ Duplikat popravka pronađen, vraćam postojeću: ${existingRepair._id}`);
       const populated = await Repair.findById(existingRepair._id)
         .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala')
-        .populate('serviserID', 'ime prezime email');
+        .populate('serviserID', 'ime prezime email')
+        .populate('completedBy', 'ime prezime email');
       return res.status(201).json({ success: true, message: 'Popravak već postoji', data: populated });
     }
 
@@ -214,6 +219,10 @@ router.post('/', authenticate, async (req, res) => {
       status: req.body.status || 'pending',
       trebaloBi: trebFlag,
       datumPrijave: req.body.datumPrijave || now,
+      datumPopravka: isCompleted ? (req.body.datumPopravka || now) : req.body.datumPopravka,
+      completedBy: isCompleted ? req.user._id : undefined,
+      completedByName: isCompleted ? completedByName : undefined,
+      completedAt: isCompleted ? (req.body.datumPopravka || now) : undefined,
       updated_at: now,
       updated_by: req.user._id,
       is_deleted: false,
@@ -234,6 +243,7 @@ router.post('/', authenticate, async (req, res) => {
 
     await repair.populate('elevatorId', 'nazivStranke ulica mjesto brojDizala');
     await repair.populate('serviserID', 'ime prezime email');
+    await repair.populate('completedBy', 'ime prezime email');
 
     res.status(201).json({ success: true, message: 'Popravak kreiran', data: repair });
   } catch (error) {
@@ -258,6 +268,10 @@ router.put('/:id', authenticate, async (req, res) => {
     if (Object.prototype.hasOwnProperty.call(req.body, 'flag')) {
       delete req.body.flag;
     }
+    // completedBy je server-controlled polje
+    delete req.body.completedBy;
+    delete req.body.completedByName;
+    delete req.body.completedAt;
 
     const trebFlag = (() => {
       if (typeof req.body.trebaloBi === 'boolean') return req.body.trebaloBi;
@@ -270,6 +284,10 @@ router.put('/:id', authenticate, async (req, res) => {
     if (req.body.status === 'completed' && existing.status !== 'completed') {
       req.body.datumPopravka = req.body.datumPopravka || new Date();
     }
+
+    const completingNow = req.body.status === 'completed' && existing.status !== 'completed';
+    const reopening = req.body.status && req.body.status !== 'completed' && existing.status === 'completed';
+    const completedByName = `${req.user?.ime || ''} ${req.user?.prezime || ''}`.trim() || req.user?.email || '';
 
     const now = new Date();
     const normalizedAdditionalTechnicians = await normalizeAdditionalTechnicians(req.body.dodatniServiseri, req.companyId);
@@ -288,9 +306,20 @@ router.put('/:id', authenticate, async (req, res) => {
       updated_by: req.user._id,
     };
 
+    if (completingNow) {
+      updatePayload.completedBy = req.user._id;
+      updatePayload.completedByName = completedByName;
+      updatePayload.completedAt = req.body.datumPopravka || now;
+    } else if (reopening) {
+      updatePayload.completedBy = null;
+      updatePayload.completedByName = null;
+      updatePayload.completedAt = null;
+    }
+
     const repair = await Repair.findByIdAndUpdate(req.params.id, updatePayload, { new: true, runValidators: true })
       .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala')
-      .populate('serviserID', 'ime prezime email');
+      .populate('serviserID', 'ime prezime email')
+      .populate('completedBy', 'ime prezime email');
 
     await logAction({
       korisnikId: req.user._id,

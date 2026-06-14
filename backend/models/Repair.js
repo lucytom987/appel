@@ -24,6 +24,11 @@ const repairSchema = new mongoose.Schema({
     default: 'pending'
   },
 
+  // Tko je zaključio popravak kao završen
+  completedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  completedByName: String,
+  completedAt: Date,
+
   // Oznaka za "trebalo bi" stavke (ne hitni kvar)
   trebaloBi: { type: Boolean, default: false },
 
@@ -65,5 +70,6 @@ repairSchema.index({ datumPopravka: -1 });
 repairSchema.index({ azuriranDatum: -1 });
 repairSchema.index({ updated_at: -1 });
 repairSchema.index({ is_deleted: 1 });
+repairSchema.index({ completedBy: 1 });
 
 module.exports = mongoose.model('Repair', repairSchema);

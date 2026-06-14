@@ -20,7 +20,7 @@ router.get('/', authenticate, async (req, res) => {
 // GET /api/users/lite - Ograniceni popis
 router.get('/lite', authenticate, async (req, res) => {
   try {
-    const users = await User.find({ companyId: req.companyId }, 'ime prezime uloga aktivan email telefon').sort({ prezime: 1, ime: 1 }).lean();
+    const users = await User.find({ companyId: req.companyId }, 'ime prezime uloga aktivan email telefon companyId').sort({ prezime: 1, ime: 1 }).lean();
     res.json(users);
   } catch (error) {
     console.error('Greska pri dohvacanju korisnika (lite):', error);

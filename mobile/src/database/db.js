@@ -75,6 +75,7 @@ export const initDatabase = () => {
       -- Korisnici (lokalni cache)
       CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY,
+        companyId TEXT,
         ime TEXT,
         prezime TEXT,
         email TEXT UNIQUE,
@@ -141,6 +142,9 @@ export const initDatabase = () => {
         id TEXT PRIMARY KEY,
         elevatorId TEXT,
         serviserID TEXT,
+        completedBy TEXT,
+        completedByName TEXT,
+        completedAt TEXT,
         datumPrijave TEXT,
         datumPopravka TEXT,
         opisKvara TEXT,
@@ -282,6 +286,9 @@ export const initDatabase = () => {
     try { db.execSync('ALTER TABLE repairs ADD COLUMN dodatniServiseri TEXT;'); } catch (e) {}
     try { db.execSync('ALTER TABLE repairs ADD COLUMN radniSati TEXT;'); } catch (e) {}
     try { db.execSync('ALTER TABLE repairs ADD COLUMN utroseniMaterijal TEXT;'); } catch (e) {}
+    try { db.execSync('ALTER TABLE repairs ADD COLUMN completedBy TEXT;'); } catch (e) {}
+    try { db.execSync('ALTER TABLE repairs ADD COLUMN completedByName TEXT;'); } catch (e) {}
+    try { db.execSync('ALTER TABLE repairs ADD COLUMN completedAt TEXT;'); } catch (e) {}
     try { db.execSync('ALTER TABLE services ADD COLUMN dodatniServiseri TEXT;'); } catch (e) {}
     try { db.execSync('ALTER TABLE services ADD COLUMN is_deleted INTEGER DEFAULT 0;'); } catch (e) {}
     try { db.execSync('ALTER TABLE services ADD COLUMN deleted_at TEXT;'); } catch (e) {}
@@ -298,6 +305,7 @@ export const initDatabase = () => {
     try { db.execSync('ALTER TABLE events ADD COLUMN updated_at INTEGER;'); } catch (e) {}
     try { db.execSync('ALTER TABLE events ADD COLUMN sync_status TEXT DEFAULT "synced";'); } catch (e) {}
     try { db.execSync('ALTER TABLE events ADD COLUMN synced INTEGER DEFAULT 0;'); } catch (e) {}
+    try { db.execSync('ALTER TABLE users ADD COLUMN companyId TEXT;'); } catch (e) {}
     try { db.execSync('ALTER TABLE elevators ADD COLUMN is_deleted INTEGER DEFAULT 0;'); } catch (e) {}
     try { db.execSync('ALTER TABLE elevators ADD COLUMN deleted_at TEXT;'); } catch (e) {}
     try { db.execSync('ALTER TABLE elevators ADD COLUMN updated_by TEXT;'); } catch (e) {}
@@ -741,6 +749,9 @@ export const repairDB = {
       dodatniServiseri: typeof r.dodatniServiseri === 'string' ? JSON.parse(r.dodatniServiseri || '[]') : (r.dodatniServiseri || []),
       radniSati: typeof r.radniSati === 'string' ? JSON.parse(r.radniSati || '{}') : (r.radniSati || {}),
       photos: typeof r.photos === 'string' ? JSON.parse(r.photos || '[]') : (r.photos || []),
+      completedBy: r.completedBy || null,
+      completedByName: r.completedByName || null,
+      completedAt: r.completedAt || null,
       // Repair model doesn't have nested JSON fields, but keep consistent
     }));
   },
@@ -752,7 +763,10 @@ export const repairDB = {
       trebaloBi: toBoolean(repair.trebaloBi),
       dodatniServiseri: typeof repair.dodatniServiseri === 'string' ? JSON.parse(repair.dodatniServiseri || '[]') : (repair.dodatniServiseri || []),
       radniSati: typeof repair.radniSati === 'string' ? JSON.parse(repair.radniSati || '{}') : (repair.radniSati || {}),
-      photos: typeof repair.photos === 'string' ? JSON.parse(repair.photos || '[]') : (repair.photos || [])
+      photos: typeof repair.photos === 'string' ? JSON.parse(repair.photos || '[]') : (repair.photos || []),
+      completedBy: repair.completedBy || null,
+      completedByName: repair.completedByName || null,
+      completedAt: repair.completedAt || null,
     } : null;
   },
   
@@ -775,15 +789,18 @@ export const repairDB = {
     }
 
     return db.runSync(
-      `INSERT INTO repairs (id, elevatorId, serviserID, datumPrijave, datumPopravka, 
+      `INSERT INTO repairs (id, elevatorId, serviserID, completedBy, completedByName, completedAt, datumPrijave, datumPopravka, 
        opisKvara, opisPopravka, trebaloBi, status, radniNalogPotpisan, popravkaUPotpunosti, 
        napomene, dodatniServiseri, radniSati, utroseniMaterijal, photos, prijavio, kontaktTelefon, primioPoziv, kreiranDatum, azuriranDatum, 
        is_deleted, deleted_at, updated_by, updated_at, sync_status, synced) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         elevatorId,
         serviserID,
+        repair.completedBy || null,
+        repair.completedByName || null,
+        repair.completedAt || null,
         repair.datumPrijave,
         repair.datumPopravka,
         repair.opisKvara,
@@ -830,12 +847,15 @@ export const repairDB = {
     }
 
     return db.runSync(
-      `UPDATE repairs SET elevatorId=?, serviserID=?, datumPrijave=?, datumPopravka=?, opisKvara=?, 
+      `UPDATE repairs SET elevatorId=?, serviserID=?, completedBy=?, completedByName=?, completedAt=?, datumPrijave=?, datumPopravka=?, opisKvara=?, 
        opisPopravka=?, trebaloBi=?, status=?, radniNalogPotpisan=?, popravkaUPotpunosti=?, 
        napomene=?, dodatniServiseri=?, radniSati=?, utroseniMaterijal=?, photos=?, prijavio=?, kontaktTelefon=?, primioPoziv=?, azuriranDatum=?, is_deleted=?, deleted_at=?, updated_by=?, updated_at=?, sync_status=?, synced=? WHERE id=?`,
       [
         elevatorId,
         serviserID,
+        repair.completedBy || null,
+        repair.completedByName || null,
+        repair.completedAt || null,
         repair.datumPrijave,
         repair.datumPopravka,
         repair.opisKvara,
@@ -1087,10 +1107,11 @@ export const userDB = {
   
   insert: (user) => {
     return db.runSync(
-      `INSERT INTO users (id, ime, prezime, email, uloga, telefon, privremenaLozinka, aktivan, synced, updated_at) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT OR REPLACE INTO users (id, companyId, ime, prezime, email, uloga, telefon, privremenaLozinka, aktivan, synced, updated_at) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         user.id || user._id,
+        user.companyId || null,
         user.ime,
         user.prezime,
         user.email,
@@ -1106,8 +1127,9 @@ export const userDB = {
   
   update: (id, user) => {
     return db.runSync(
-      `UPDATE users SET ime=?, prezime=?, uloga=?, telefon=?, privremenaLozinka=?, aktivan=?, synced=?, updated_at=? WHERE id=?`,
+      `UPDATE users SET companyId=?, ime=?, prezime=?, uloga=?, telefon=?, privremenaLozinka=?, aktivan=?, synced=?, updated_at=? WHERE id=?`,
       [
+        user.companyId || null,
         user.ime,
         user.prezime,
         user.uloga,

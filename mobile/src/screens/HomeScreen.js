@@ -43,15 +43,16 @@ export default function HomeScreen({ navigation }) {
       setOfflineDemo(Boolean(token && token.startsWith('offline_token_')));
     })();
   }, []);
-  const [stats, setStats] = useState({
-    totalElevators: 0,
-    servicedElevatorsThisMonth: 0,
-    servicesThisMonth: 0,
-    repairsPending: 0,
-    repairsTrebaloBi: 0,
-    repairsCompleted: 0,
-    repairsUrgent: 0,
-  });
+   const [stats, setStats] = useState({
+     totalElevators: 0,
+     elevatorsRequiringServiceThisMonth: 0,
+     servicedElevatorsThisMonth: 0,
+     servicesThisMonth: 0,
+     repairsPending: 0,
+     repairsTrebaloBi: 0,
+     repairsUnsigned: 0,
+     repairsUrgent: 0,
+   });
   const [refreshing, setRefreshing] = useState(false);
 
   // Konvertiraj isOnline u boolean eksplicitno
@@ -77,7 +78,7 @@ export default function HomeScreen({ navigation }) {
   useEffect(() => {
     loadStats();
     fetchUnread();
-  }, []);
+  }, [fetchUnread]);
 
   useFocusEffect(
     useCallback(() => {
@@ -92,12 +93,13 @@ export default function HomeScreen({ navigation }) {
         return () => sub.remove();
       }
       return undefined;
-    }, [])
+    }, [fetchUnread])
   );
 
-  const serviceProgress = stats.totalElevators
-    ? Math.min(1, Math.max(0, stats.servicedElevatorsThisMonth / stats.totalElevators))
-    : 0;
+   // Gauge se računa prema dizalima koja trebaju biti servisirana ovaj mjesec
+   const serviceProgress = stats.elevatorsRequiringServiceThisMonth
+     ? Math.min(1, Math.max(0, stats.servicedElevatorsThisMonth / stats.elevatorsRequiringServiceThisMonth))
+     : 0;
 
   // Semicircle only (no labels/dashes)
 
@@ -110,11 +112,49 @@ export default function HomeScreen({ navigation }) {
     }).start();
   }, [serviceProgress]);
 
-  const loadStats = () => {
+  function loadStats() {
     try {
       const elevators = elevatorDB.getAll() || [];
       const servicesAll = serviceDB.getAll() || [];
       const repairs = repairDB.getAll() || [];
+
+      const parseAnyDate = (value) => {
+        if (value === null || value === undefined || value === '') return null;
+
+        if (value instanceof Date) {
+          return Number.isNaN(value.getTime()) ? null : value;
+        }
+
+        if (typeof value === 'number') {
+          const d = new Date(value);
+          return Number.isNaN(d.getTime()) ? null : d;
+        }
+
+        const raw = String(value).trim();
+        if (!raw) return null;
+
+        // Epoch kao string
+        if (/^\d{10,13}$/.test(raw)) {
+          const n = Number(raw.length === 10 ? `${raw}000` : raw);
+          const d = new Date(n);
+          if (!Number.isNaN(d.getTime())) return d;
+        }
+
+        // Euro format: dd.mm.yyyy ili dd-mm-yyyy
+        const parts = raw.split(/[./-]/).filter(Boolean);
+        if (parts.length === 3 && parts[0].length <= 2 && parts[1].length <= 2 && parts[2].length === 4) {
+          const dd = Number(parts[0]);
+          const mm = Number(parts[1]);
+          const yyyy = Number(parts[2]);
+          const d = new Date(yyyy, mm - 1, dd);
+          if (!Number.isNaN(d.getTime()) && d.getDate() === dd && d.getMonth() === mm - 1 && d.getFullYear() === yyyy) {
+            return d;
+          }
+        }
+
+        const d = new Date(raw);
+        return Number.isNaN(d.getTime()) ? null : d;
+      };
 
       const normalizeStatus = (s) => {
         if (!s) return 'pending';
@@ -124,22 +164,34 @@ export default function HomeScreen({ navigation }) {
         return s;
       };
 
-      // Broji samo aktivna, neobrisana dizala
-      const activeElevators = elevators.filter(e => e.status === 'aktivan' && !e.is_deleted);
+      // Broji sva neobrisana dizala osim eksplicitno neaktivnih
+      const activeElevators = elevators.filter((e) => !e.is_deleted && String(e.status || '').toLowerCase() !== 'neaktivan');
+      const activeElevatorIds = new Set(
+        activeElevators
+          .map((e) => {
+            const id = e.id || e._id;
+            return id ? String(id) : null;
+          })
+          .filter(Boolean)
+      );
 
       // Izgradi skup postojećih ID-eva dizala (lokalni id ili _id), izuzmi obrisane
       const existingElevatorIds = new Set(
         elevators
           .filter(e => !e.is_deleted)
-          .map(e => e.id || e._id)
+          .map(e => {
+            const id = e.id || e._id;
+            return id ? String(id) : null;
+          })
           .filter(Boolean)
       );
 
       // Normaliziraj i filtriraj servise koji pripadaju postojećim dizalima
       const validServicesRaw = servicesAll.filter(s => {
-        const elevatorId = typeof s.elevatorId === 'object' && s.elevatorId !== null
+        const elevatorIdRaw = typeof s.elevatorId === 'object' && s.elevatorId !== null
           ? (s.elevatorId._id || s.elevatorId.id)
           : s.elevatorId;
+        const elevatorId = elevatorIdRaw ? String(elevatorIdRaw) : null;
         return elevatorId && existingElevatorIds.has(elevatorId);
       });
 
@@ -155,26 +207,74 @@ export default function HomeScreen({ navigation }) {
 
       // Servisi ovaj mjesec
       const now = new Date();
+      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
       const thisMonth = services.filter(s => {
         // ✅ FIX: Pokušaj oboje - novi 'datum' i stari 'serviceDate' ako migration nije završena
         const dateStr = s.datum || s.serviceDate;
         if (!dateStr) return false;
-        
-        const date = new Date(dateStr);
+
+        const date = parseAnyDate(dateStr);
+        if (!date) return false;
         return date.getMonth() === now.getMonth() && 
                date.getFullYear() === now.getFullYear();
       });
 
-      // Jedinstvena dizala servisirana ovaj mjesec
-      const servicedElevatorsSet = new Set(
-        thisMonth.map((s) => {
-          const eid = typeof s.elevatorId === 'object' && s.elevatorId !== null
-            ? (s.elevatorId._id || s.elevatorId.id)
-            : s.elevatorId;
-          return eid || null;
-        }).filter(Boolean)
+      // ===== LOGIKA: due = sljedeciServis do kraja mjeseca (uključuje overdue) =====
+      const resolveDueDate = (elevator) => {
+        const nextRaw = elevator?.sljedeciServis;
+        const nextDate = parseAnyDate(nextRaw);
+        if (nextDate) return nextDate;
+
+        const lastRaw = elevator?.zadnjiServis;
+        const lastDate = parseAnyDate(lastRaw);
+        if (lastDate) {
+          const interval = Number(elevator?.intervalServisa || 1);
+          const computed = new Date(lastDate);
+          computed.setMonth(computed.getMonth() + (Number.isFinite(interval) && interval > 0 ? interval : 1));
+          return computed;
+        }
+
+        return null;
+      };
+
+      const servicedThisMonthIds = new Set(
+        thisMonth
+          .map((s) => {
+            const sid = typeof s.elevatorId === 'object' && s.elevatorId !== null
+              ? (s.elevatorId._id || s.elevatorId.id)
+              : s.elevatorId;
+            return sid ? String(sid) : null;
+          })
+          .filter(Boolean)
       );
-      const servicedElevatorsThisMonth = servicedElevatorsSet.size;
+
+      const dueElevatorIds = new Set();
+
+      activeElevators.forEach((elevator) => {
+        const elevatorId = elevator.id || elevator._id;
+        if (!elevatorId) return;
+        const elevatorKey = String(elevatorId);
+
+        const dueDate = resolveDueDate(elevator);
+        if (!dueDate) return;
+
+        // Due ako je rok do kraja mjeseca (uključuje prethodno propuštene servise)
+        if (dueDate <= endOfMonth) {
+          dueElevatorIds.add(elevatorKey);
+        }
+      });
+
+      // KPI za mjesec: trebalo servisirati = (due po roku) U (servisirano ovaj mjesec)
+      // Time servisirana dizala ne ispadaju iz nazivnika nakon što im se sljedeciServis pomakne u idući mjesec.
+      const servicedActiveIds = new Set(
+        Array.from(servicedThisMonthIds).filter((id) => activeElevatorIds.has(String(id)))
+      );
+      const requiredThisMonthIds = new Set([...dueElevatorIds, ...servicedActiveIds]);
+
+      const elevatorsRequiringServiceThisMonth = requiredThisMonthIds.size;
+      const servicedElevatorsThisMonth = servicedActiveIds.size;
+
+      // Servisirana brojimo samo među dizalima koja su bila due u odabranom mjesecu.
 
       // Filtriraj popravke: preskoči obrisane i one čije je dizalo obrisano ili ne postoji
       const filteredRepairs = repairs
@@ -219,37 +319,40 @@ export default function HomeScreen({ navigation }) {
             rawType === 'trebalobi' || rawType === 'trebalo_bi' || rawType === 'trebalo-bi' || rawType === 'trebalo' ||
             rawLower === 'in_progress' || rawLower === 'u tijeku' || rawLower === 'u_tijeku'
           );
+          const isSigned = r.radniNalogPotpisan === true || r.radniNalogPotpisan === 1 || String(r.radniNalogPotpisan).toLowerCase() === 'true';
 
           if (isTrebaloBi) acc.trebaloBi += 1;
           else if (status === 'pending') acc.pending += 1;
-          else if (status === 'completed') acc.completed += 1;
+          if (!isTrebaloBi && status === 'completed' && !isSigned) acc.unsigned += 1;
           return acc;
         },
-        { pending: 0, trebaloBi: 0, completed: 0 }
+        { pending: 0, trebaloBi: 0, unsigned: 0 }
       );
 
-      setStats({
-        totalElevators: activeElevators.length,
-        servicedElevatorsThisMonth,
-        servicesThisMonth: thisMonth.length,
-        repairsPending: statusCounts.pending,
-        repairsTrebaloBi: statusCounts.trebaloBi,
-        repairsCompleted: statusCounts.completed,
-        repairsUrgent: 0, // U novoj shemi nema priority polja
-      });
+       setStats({
+         totalElevators: activeElevators.length,
+         elevatorsRequiringServiceThisMonth,
+         servicedElevatorsThisMonth,
+         servicesThisMonth: thisMonth.length,
+         repairsPending: statusCounts.pending,
+         repairsTrebaloBi: statusCounts.trebaloBi,
+         repairsUnsigned: statusCounts.unsigned,
+         repairsUrgent: 0, // U novoj shemi nema priority polja
+       });
     } catch (error) {
-      console.error('Greška pri učitavanju statistike:', error);
-      setStats({
-        totalElevators: 0,
-        servicedElevatorsThisMonth: 0,
-        servicesThisMonth: 0,
-        repairsPending: 0,
-        repairsTrebaloBi: 0,
-        repairsCompleted: 0,
+       console.error('Greška pri učitavanju statistike:', error);
+       setStats({
+         totalElevators: 0,
+         elevatorsRequiringServiceThisMonth: 0,
+         servicedElevatorsThisMonth: 0,
+         servicesThisMonth: 0,
+         repairsPending: 0,
+         repairsTrebaloBi: 0,
+         repairsUnsigned: 0,
         repairsUrgent: 0,
       });
     }
-  };
+  }
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -389,9 +492,9 @@ export default function HomeScreen({ navigation }) {
               </ImageBackground>
             </View>
             <Text style={styles.statNumber}>
-              {stats.servicedElevatorsThisMonth}/{stats.totalElevators}
+              {stats.servicedElevatorsThisMonth}/{stats.elevatorsRequiringServiceThisMonth}
             </Text>
-            <Text style={styles.statLabel}>Dizala servisirana ovaj mjesec</Text>
+            <Text style={styles.statLabel}>Servisirano / trebalo servisirati</Text>
           </TouchableOpacity>
 
           <TouchableOpacity 
@@ -408,7 +511,7 @@ export default function HomeScreen({ navigation }) {
                 TREBALO BI: <Text style={styles.repairsTrebaloBi}>{stats.repairsTrebaloBi}</Text>
               </Text>
               <Text style={styles.repairsSubLabel}>
-                ZAVRŠENO: <Text style={styles.repairsCompleted}>{stats.repairsCompleted}</Text>
+                NEPOTPISANO: <Text style={styles.repairsUnsigned}>{stats.repairsUnsigned}</Text>
               </Text>
             </View>
           </TouchableOpacity>
@@ -596,8 +699,8 @@ const styles = StyleSheet.create({
   repairsTrebaloBi: {
     color: '#f59e0b',
   },
-  repairsCompleted: {
-    color: '#10b981',
+  repairsUnsigned: {
+    color: '#2563eb',
   },
   gaugeWrapper: {
     width: GAUGE_SIZE + 20,

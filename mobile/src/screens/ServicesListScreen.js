@@ -39,8 +39,38 @@ const MONTHS = [
 
 // helper za datume
 const parseDate = (value) => {
-  if (!value) return null;
-  const d = new Date(value);
+  if (value === null || value === undefined || value === '') return null;
+
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+
+  if (typeof value === 'number') {
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  const raw = String(value).trim();
+  if (!raw) return null;
+
+  if (/^\d{10,13}$/.test(raw)) {
+    const n = Number(raw.length === 10 ? `${raw}000` : raw);
+    const d = new Date(n);
+    if (!Number.isNaN(d.getTime())) return d;
+  }
+
+  const parts = raw.split(/[./-]/).filter(Boolean);
+  if (parts.length === 3 && parts[0].length <= 2 && parts[1].length <= 2 && parts[2].length === 4) {
+    const dd = Number(parts[0]);
+    const mm = Number(parts[1]);
+    const yyyy = Number(parts[2]);
+    const d = new Date(yyyy, mm - 1, dd);
+    if (!Number.isNaN(d.getTime()) && d.getDate() === dd && d.getMonth() === mm - 1 && d.getFullYear() === yyyy) {
+      return d;
+    }
+  }
+
+  const d = new Date(raw);
   return Number.isNaN(d.getTime()) ? null : d;
 };
 
@@ -275,7 +305,7 @@ export default function ServicesListScreen({ navigation }) {
   // Ako u trenutno odabranom periodu nema servisa, automatski prebaci na najnoviji dostupni period
   // Ne preskači korisnički odabir za godišnje preglede (annual)
   useEffect(() => {
-    if (filter === 'annual') return; // ne diraj izbor u GP modu
+    if (filter !== 'serviced') return; // ne diraj korisnički odabir za druge modove
     if (!services.length) return;
     const hasInSelection = services.some((s) => {
       const d = parseDate(s.datum || s.serviceDate);
@@ -310,37 +340,68 @@ export default function ServicesListScreen({ navigation }) {
     if (filter === 'notServiced') {
       const servicedThisMonth = new Set();
       const latestByElevator = new Map();
+      const periodEnd = new Date(selectedYear, selectedMonth + 1, 0, 23, 59, 59, 999);
+
+      const resolveDueDate = (elevator) => {
+        const nextDate = parseDate(elevator?.sljedeciServis);
+        if (nextDate) return nextDate;
+
+        const lastDate = parseDate(elevator?.zadnjiServis);
+        if (lastDate) {
+          const interval = Number(elevator?.intervalServisa || 1);
+          const computed = new Date(lastDate);
+          computed.setMonth(computed.getMonth() + (Number.isFinite(interval) && interval > 0 ? interval : 1));
+          return computed;
+        }
+
+        return null;
+      };
 
       filtered.forEach((s) => {
         const date = parseDate(s.datum || s.serviceDate);
         const elevatorIdRaw = s.elevatorId;
         const elevatorId = normalizeElevatorId(elevatorIdRaw);
         if (!elevatorId) return;
+        const elevatorKey = String(elevatorId);
 
-        const prev = latestByElevator.get(elevatorId);
+        const prev = latestByElevator.get(elevatorKey);
         const prevDate = prev ? parseDate(prev.datum || prev.serviceDate) : null;
         if (!prevDate || (date && prevDate && date > prevDate)) {
-          latestByElevator.set(elevatorId, s);
+          latestByElevator.set(elevatorKey, s);
         }
 
         if (date && date.getMonth() === selectedMonth && date.getFullYear() === selectedYear) {
-          servicedThisMonth.add(elevatorId);
+          servicedThisMonth.add(elevatorKey);
         }
       });
 
       const allElevators = (elevatorDB.getAll?.() || []).filter((e) => e?.status !== 'neaktivan');
-      const notServiced = allElevators
+      const dueElevators = allElevators.filter((e) => {
+        const dueDate = resolveDueDate(e);
+        if (!dueDate) return false;
+        return dueDate <= periodEnd;
+      });
+
+      const notServiced = dueElevators
         .map((e) => {
           const eid = e._id || e.id;
           if (!eid) return null;
-          if (servicedThisMonth.has(eid)) return null;
+          const elevatorKey = String(eid);
+          if (servicedThisMonth.has(elevatorKey)) return null;
 
-          const lastService = latestByElevator.get(eid);
-          if (lastService) return lastService;
+          const lastService = latestByElevator.get(elevatorKey);
+          if (lastService) {
+            return {
+              ...lastService,
+              elevatorId: eid,
+              sljedeciServis: e.sljedeciServis || lastService.sljedeciServis,
+            };
+          }
           return {
             id: `placeholder_${eid}`,
             elevatorId: eid,
             datum: null,
+            sljedeciServis: e.sljedeciServis || null,
             napomene: '',
             synced: 1,
           };
@@ -639,7 +700,9 @@ export default function ServicesListScreen({ navigation }) {
       <Text style={styles.emptySubtext}>
         {filter === 'serviced'
           ? 'Nema servisa za odabrani mjesec'
-          : 'Sva dizala su servisirana u odabranom mjesecu'}
+          : filter === 'notServiced'
+            ? 'Sva dizala koja su trebala servis ovaj mjesec su servisirana'
+            : 'Nema godišnjih pregleda za odabrani mjesec'}
       </Text>
     </View>
   );

@@ -8,9 +8,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import Constants from 'expo-constants';
 
 export default function AboutScreen({ navigation }) {
-  const currentVersion = '16.02.2026';
+  const currentVersion = Constants?.expoConfig?.version || '2.0.4';
+  const currentVersionDate = '28.06.2026';
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -36,6 +38,7 @@ export default function AboutScreen({ navigation }) {
               v{currentVersion}
             </Text>
           </TouchableOpacity>
+          <Text style={styles.versionMetaText}>Datum verzije: {currentVersionDate}</Text>
         </View>
 
         {/* Description */}
@@ -259,6 +262,11 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 12,
     fontWeight: '600',
+  },
+  versionMetaText: {
+    marginTop: 8,
+    fontSize: 12,
+    color: '#6b7280',
   },
   section: {
     backgroundColor: '#fff',

@@ -115,9 +115,57 @@ router.get('/stats/monthly', authenticate, async (req, res) => {
 
     const baseFilter = { companyId: req.companyId, is_deleted: { $ne: true } };
     const total = await Service.countDocuments({ ...baseFilter, datum: { $gte: startDate, $lte: endDate } });
-    const totalElevators = await Elevator.countDocuments({ companyId: req.companyId, is_deleted: { $ne: true } });
-    const servicedElevatorIds = await Service.distinct('elevatorId', { ...baseFilter, datum: { $gte: startDate, $lte: endDate } });
-    const needsService = totalElevators - servicedElevatorIds.length;
+
+    const elevators = await Elevator.find({
+      companyId: req.companyId,
+      is_deleted: { $ne: true },
+      status: { $ne: 'neaktivan' },
+    })
+      .select('_id sljedeciServis zadnjiServis intervalServisa')
+      .lean();
+
+    const resolveDueDate = (elevator) => {
+      const nextDate = elevator?.sljedeciServis ? new Date(elevator.sljedeciServis) : null;
+      if (nextDate && !Number.isNaN(nextDate.getTime())) return nextDate;
+
+      const lastDate = elevator?.zadnjiServis ? new Date(elevator.zadnjiServis) : null;
+      if (lastDate && !Number.isNaN(lastDate.getTime())) {
+        const interval = Number(elevator?.intervalServisa || 1);
+        const computed = new Date(lastDate);
+        computed.setMonth(computed.getMonth() + (Number.isFinite(interval) && interval > 0 ? interval : 1));
+        return computed;
+      }
+
+      return null;
+    };
+
+    const activeElevatorIds = new Set(elevators.map((e) => String(e._id)));
+
+    const dueElevatorIds = new Set(
+      elevators
+        .filter((e) => {
+          const dueDate = resolveDueDate(e);
+          return dueDate && dueDate <= endDate;
+        })
+        .map((e) => String(e._id))
+    );
+
+    const servicedElevatorIds = await Service.distinct('elevatorId', {
+      ...baseFilter,
+      datum: { $gte: startDate, $lte: endDate },
+    });
+
+    const servicedActiveIds = new Set(
+      servicedElevatorIds
+        .map((id) => String(id))
+        .filter((id) => activeElevatorIds.has(id))
+    );
+
+    const requiredThisMonthIds = new Set([...dueElevatorIds, ...servicedActiveIds]);
+
+    const dueThisMonth = requiredThisMonthIds.size;
+    const servicedDueCount = servicedActiveIds.size;
+    const needsService = Math.max(0, dueThisMonth - servicedDueCount);
 
     res.json({
       success: true,
@@ -125,6 +173,8 @@ router.get('/stats/monthly', authenticate, async (req, res) => {
         year: currentYear,
         month: currentMonth,
         completed: total,
+        servicedDueThisMonth: servicedDueCount,
+        dueThisMonth,
         pending: 0,
         total,
         needsService

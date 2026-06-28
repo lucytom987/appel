@@ -248,6 +248,21 @@ export default function RepairsListScreen({ navigation, route }) {
 
     const isTrebalo = Boolean(item.trebaloBi);
     const isResolvedTrebalo = isTrebalo && item.status === 'completed';
+    const completedByLabel = (() => {
+      if (item.status !== 'completed') return '';
+      if (item.completedByName) return safeText(item.completedByName);
+
+      if (item.completedBy && typeof item.completedBy === 'object') {
+        const full = `${safeText(item.completedBy.ime)} ${safeText(item.completedBy.prezime)}`.trim();
+        return full || safeText(item.completedBy.email);
+      }
+
+      if (typeof item.completedBy === 'string' && item.completedBy.trim()) {
+        return item.completedBy;
+      }
+
+      return '';
+    })();
 
     return (
       <TouchableOpacity
@@ -285,6 +300,13 @@ export default function RepairsListScreen({ navigation, route }) {
           <Text style={styles.repairDescription} numberOfLines={3}>
             {opisKvara}
           </Text>
+
+          {completedByLabel ? (
+            <View style={styles.completedByRow}>
+              <Ionicons name="person-circle-outline" size={15} color="#1d4ed8" />
+              <Text style={styles.completedByText}>Odradio: {completedByLabel}</Text>
+            </View>
+          ) : null}
         </View>
       </TouchableOpacity>
     );
@@ -553,6 +575,20 @@ const styles = StyleSheet.create({
     color: '#4b5563',
     lineHeight: 20,
     marginTop: 4,
+  },
+  completedByRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+  },
+  completedByText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1e3a8a',
   },
   emptyState: {
     flex: 1,

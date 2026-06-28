@@ -41,6 +41,47 @@ const getUserId = (entry) => {
   return entry;
 };
 
+const formatHalfHourInput = (value) => {
+  const numeric = Number.parseFloat(String(value));
+  if (!Number.isFinite(numeric) || numeric < 0) return '';
+  const totalMinutes = Math.round(numeric * 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (minutes === 0) return String(hours);
+  if (minutes === 30) return `${hours}.30`;
+  return String((totalMinutes / 60).toFixed(2));
+};
+
+const parseHalfHourInput = (value) => {
+  const raw = String(value || '').trim().toLowerCase().replace('h', '');
+  if (!raw) return null;
+
+  if (raw.includes(':')) {
+    const [hoursStr, minutesStr] = raw.split(':');
+    const hours = Number.parseInt(hoursStr, 10);
+    const minutes = Number.parseInt(minutesStr, 10);
+    if (!Number.isFinite(hours) || !Number.isFinite(minutes) || minutes < 0) return null;
+    return hours + (minutes / 60);
+  }
+
+  const normalized = raw.replace(',', '.');
+  if (normalized.includes('.')) {
+    const [hoursPart, minutesPartRaw] = normalized.split('.');
+    const hours = Number.parseInt(hoursPart || '0', 10);
+    const minutesPart = String(minutesPartRaw || '').trim();
+
+    if (!Number.isFinite(hours)) return null;
+    if (!minutesPart || minutesPart === '0' || minutesPart === '00') return hours;
+    if (minutesPart === '30' || minutesPart === '3' || minutesPart === '5' || minutesPart === '50') return hours + 0.5;
+
+    const fallback = Number.parseFloat(normalized);
+    return Number.isFinite(fallback) && fallback >= 0 ? fallback : null;
+  }
+
+  const parsed = Number.parseFloat(normalized);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+};
+
 export default function RepairDetailsScreen({ route, navigation }) {
   const { repair, returnTo = 'repairs', filter } = route.params || {};
   const [repairData, setRepairData] = useState(repair);
@@ -90,6 +131,40 @@ export default function RepairDetailsScreen({ route, navigation }) {
     : repairData.elevatorId;
   const elevator = elevatorDB.getById(elevatorId) || repairData.elevatorId || {};
 
+  const completedByLabel = (() => {
+    if (repairData?.status !== 'completed' && !repairData?.completedBy && !repairData?.completedByName) {
+      return '';
+    }
+
+    if (repairData?.completedByName) {
+      return repairData.completedByName;
+    }
+
+    if (repairData?.completedBy && typeof repairData.completedBy === 'object') {
+      const full = `${repairData.completedBy?.ime || ''} ${repairData.completedBy?.prezime || ''}`.trim();
+      return full || repairData.completedBy?.email || '';
+    }
+
+    if (typeof repairData?.completedBy === 'string') {
+      const found = userDB.getById(repairData.completedBy);
+      if (found) {
+        const full = `${found?.ime || ''} ${found?.prezime || ''}`.trim();
+        return full || found?.email || '';
+      }
+      return repairData.completedBy;
+    }
+
+    return '';
+  })();
+
+  const completedAtLabel = (() => {
+    const rawDate = repairData?.completedAt || repairData?.datumPopravka;
+    if (!rawDate || repairData?.status !== 'completed') return '';
+    const parsed = new Date(rawDate);
+    if (Number.isNaN(parsed.getTime())) return '';
+    return parsed.toLocaleString('hr-HR');
+  })();
+
   const [opisKvara, setOpisKvara] = useState(repairData.opisKvara || '');
   const [opisPopravka, setOpisPopravka] = useState(repairData.opisPopravka || '');
   const [isTrebaloBi, setIsTrebaloBi] = useState(
@@ -125,16 +200,21 @@ export default function RepairDetailsScreen({ route, navigation }) {
     return ids.map((userId, index) => ({
       userId,
       hours: detailedHours[index] != null
-        ? String(detailedHours[index])
-        : (index === 0 && repairData.radniSati?.kolega != null ? String(repairData.radniSati.kolega) : ''),
+        ? formatHalfHourInput(detailedHours[index])
+        : (index === 0 && repairData.radniSati?.kolega != null ? formatHalfHourInput(repairData.radniSati.kolega) : ''),
     }));
   })();
   const [additionalServicers, setAdditionalServicers] = useState(initialAdditionalServicers);
   const [radniSatiGlavni, setRadniSatiGlavni] = useState(
-    repairData.radniSati?.glavni != null ? String(repairData.radniSati.glavni) : ''
+    repairData.radniSati?.glavni != null ? formatHalfHourInput(repairData.radniSati.glavni) : '1'
   );
   const [utroseniMaterijal, setUtroseniMaterijal] = useState(repairData.utroseniMaterijal || '');
   const [materijalStavke, setMaterijalStavke] = useState([{ naziv: '', kolicina: '', jedinica: '' }]);
+  const [expandedSections, setExpandedSections] = useState({
+    materijal: false,
+    fotografije: false,
+    serviseri: false,
+  });
 
   useEffect(() => {
     const isNewArchitecture = Boolean(global?.nativeFabricUIManager);
@@ -174,15 +254,44 @@ export default function RepairDetailsScreen({ route, navigation }) {
   useEffect(() => {
     const fetchUsers = async () => {
       setLoadingUsers(true);
-      const filterOutCurrent = (arr = []) => (Array.isArray(arr) ? arr : []).filter(
-        (u) => (u._id || u.id) !== (user?._id || user?.id)
-      );
+      const currentUserId = user?._id || user?.id;
+      const routeRepairCompanyId = repairData?.companyId || repair?.companyId || null;
+      const elevatorCompanyId = elevator?.companyId || elevator?._companyId || null;
+      const currentCompanyId = user?.companyId || user?.company?._id || user?.company?.id || routeRepairCompanyId || elevatorCompanyId || null;
+      const normalizeRole = (role) => {
+        const r = String(role || '').toLowerCase();
+        if (r === 'technician') return 'serviser';
+        if (r === 'manager') return 'menadzer';
+        return r;
+      };
+      const filterOutCurrent = (arr = [], enforceKnownCompany = true) => (Array.isArray(arr) ? arr : []).filter((u) => {
+        const userId = u?._id || u?.id;
+        if (!userId || userId === currentUserId) return false;
+
+        const role = normalizeRole(u?.uloga || u?.role);
+        const isTechnician = role === 'serviser';
+        if (!isTechnician) return false;
+
+        const isActive = !(u?.aktivan === false || u?.aktivan === 0 || String(u?.aktivan).toLowerCase() === 'false');
+        if (!isActive) return false;
+
+        if (!currentCompanyId) return !enforceKnownCompany;
+        const userCompanyId = u?.companyId || u?.company?._id || u?.company?.id || null;
+        return Boolean(userCompanyId) && String(userCompanyId) === String(currentCompanyId);
+      });
 
       try {
         if (online) {
           const res = await usersAPI.getLite();
           const data = res.data?.data || res.data || [];
-          const filtered = filterOutCurrent(data);
+          // Online endpoint je tenant-scoped po JWT-u, ne trebamo dodatno filtrirati po companyId.
+          const filtered = (Array.isArray(data) ? data : []).filter((u) => {
+            const userId = u?._id || u?.id;
+            if (!userId || userId === currentUserId) return false;
+            const role = normalizeRole(u?.uloga || u?.role);
+            const isActive = !(u?.aktivan === false || u?.aktivan === 0 || String(u?.aktivan).toLowerCase() === 'false');
+            return (role === 'serviser' || role === 'technician') && isActive;
+          });
           try {
             userDB.bulkInsert(filtered);
           } catch (cacheErr) {
@@ -190,18 +299,19 @@ export default function RepairDetailsScreen({ route, navigation }) {
           }
           setKorisnici(filtered);
         } else {
-          setKorisnici(filterOutCurrent(userDB.getAll()));
+          // Offline: fail-closed. Ako ne znamo firmu, ne prikazuj nikoga.
+          setKorisnici(filterOutCurrent(userDB.getAll(), true));
         }
       } catch (e) {
         console.log('Load users failed', e?.message);
-        setKorisnici(filterOutCurrent(userDB.getAll()));
+        setKorisnici(filterOutCurrent(userDB.getAll(), true));
       } finally {
         setLoadingUsers(false);
       }
     };
 
     fetchUsers();
-  }, [online, user]);
+  }, [online, user, repairData?.companyId, repair?.companyId, elevator?.companyId, elevator?._companyId]);
 
   const toggleKolege = (index) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -234,6 +344,51 @@ export default function RepairDetailsScreen({ route, navigation }) {
       idx === index ? { ...entry, hours } : entry
     )));
   };
+
+  const toggleExpandableSection = (section) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setExpandedSections((prev) => ({ ...prev, [section]: !prev[section] }));
+  };
+
+  const adjustHoursValue = (currentValue, delta, onChange) => {
+    const parsed = parseHalfHourInput(currentValue);
+    const base = Number.isFinite(parsed) ? parsed : 0;
+    const next = Math.max(0, Math.round((base + delta) * 2) / 2);
+    onChange(formatHalfHourInput(next));
+  };
+
+  const renderHoursControl = (value, onChange, placeholder = '0') => (
+    <View style={styles.hoursStepperRow}>
+      <TouchableOpacity
+        style={styles.hoursStepperBtn}
+        onPress={() => adjustHoursValue(value, -0.5, onChange)}
+        activeOpacity={0.8}
+      >
+        <Ionicons name="remove" size={18} color="#334155" />
+      </TouchableOpacity>
+
+      <TextInput
+        style={styles.hoursStepperInput}
+        value={value}
+        onChangeText={onChange}
+        keyboardType="decimal-pad"
+        placeholder={placeholder}
+        placeholderTextColor="#9ca3af"
+      />
+
+      <View style={styles.hoursStepperSuffix}>
+        <Text style={styles.hoursStepperSuffixText}>h</Text>
+      </View>
+
+      <TouchableOpacity
+        style={styles.hoursStepperBtn}
+        onPress={() => adjustHoursValue(value, 0.5, onChange)}
+        activeOpacity={0.8}
+      >
+        <Ionicons name="add" size={18} color="#334155" />
+      </TouchableOpacity>
+    </View>
+  );
 
   const getUserDisplayName = (id) => {
     if (!id) return '';
@@ -468,18 +623,11 @@ export default function RepairDetailsScreen({ route, navigation }) {
     const existsInDB = repairDB.getById(id);
     const isLocalId = String(id || '').startsWith('local_');
 
-    const parseHours = (value) => {
-      const normalized = String(value || '').replace(',', '.').trim();
-      if (!normalized) return null;
-      const parsed = Number.parseFloat(normalized);
-      return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
-    };
-
-    const glavniSati = parseHours(radniSatiGlavni);
+    const glavniSati = parseHalfHourInput(radniSatiGlavni);
     const cleanedAdditionalServicers = additionalServicers
       .map((entry) => ({
         userId: entry.userId,
-        hours: parseHours(entry.hours),
+        hours: parseHalfHourInput(entry.hours),
       }))
       .filter((entry) => entry.userId);
     const materijalLinije = materijalStavke
@@ -494,6 +642,41 @@ export default function RepairDetailsScreen({ route, navigation }) {
       .filter(Boolean);
     const dodatnaNapomenaMaterijala = String(utroseniMaterijal || '').trim();
     const materijalTekst = [...materijalLinije, dodatnaNapomenaMaterijala].filter(Boolean).join('\n');
+    const existingCompletedById = typeof repairData.completedBy === 'object'
+      ? (repairData.completedBy?._id || repairData.completedBy?.id || null)
+      : (repairData.completedBy || null);
+    const existingCompletedByName = (() => {
+      if (repairData.completedByName) return repairData.completedByName;
+      if (repairData.completedBy && typeof repairData.completedBy === 'object') {
+        const full = `${repairData.completedBy?.ime || ''} ${repairData.completedBy?.prezime || ''}`.trim();
+        return full || repairData.completedBy?.email || '';
+      }
+      if (typeof repairData.completedBy === 'string') {
+        const found = userDB.getById(repairData.completedBy);
+        if (found) {
+          const full = `${found?.ime || ''} ${found?.prezime || ''}`.trim();
+          return full || found?.email || '';
+        }
+      }
+      return '';
+    })();
+    const completionTimestamp = status === 'completed'
+      ? (wasCompleted
+        ? (repairData.completedAt || repairData.datumPopravka || new Date().toISOString())
+        : new Date().toISOString())
+      : null;
+    const completionUserId = status === 'completed'
+      ? (wasCompleted
+        ? (existingCompletedById || null)
+        : (user?._id || user?.id || existingCompletedById || null)
+      )
+      : null;
+    const completionName = status === 'completed'
+      ? (wasCompleted
+        ? existingCompletedByName
+        : (`${user?.ime || ''} ${user?.prezime || ''}`.trim() || user?.email || existingCompletedByName || '')
+      )
+      : null;
     
     const payload = {
       id,
@@ -511,6 +694,9 @@ export default function RepairDetailsScreen({ route, navigation }) {
       },
       utroseniMaterijal: materijalTekst,
       photos,
+      completedBy: completionUserId,
+      completedByName: completionName,
+      completedAt: completionTimestamp,
       updated_at: Date.now(),
     };
 
@@ -592,19 +778,6 @@ export default function RepairDetailsScreen({ route, navigation }) {
     }
   };
 
-  const handleOpenElevator = () => {
-    const baseElevator = elevatorId
-      ? (elevatorDB.getById(elevatorId) || { ...elevator, id: elevatorId })
-      : elevator;
-
-    if (baseElevator && (baseElevator._id || baseElevator.id || baseElevator.brojDizala)) {
-      navigation.navigate('ElevatorDetails', { elevator: baseElevator });
-      return;
-    }
-
-    Alert.alert('Greška', 'Nije moguće otvoriti dizalo.');
-  };
-
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -617,7 +790,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
         }}>
           <Ionicons name="arrow-back" size={24} color="#1f2937" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Detalji popravka</Text>
+        <Text style={styles.headerTitle} numberOfLines={1}>{`Popravak "${elevator?.brojDizala || 'Dizalo'}"`}</Text>
         <View style={{ width: 24 }} />
       </View>
 
@@ -627,20 +800,10 @@ export default function RepairDetailsScreen({ route, navigation }) {
         keyboardVerticalOffset={Platform.OS === 'ios' ? ms(90) : ms(2)}
       >
       <ScrollView style={styles.content} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: ms(100) }}>
-        <View style={styles.elevatorHero}>
-          <TouchableOpacity
-            style={[styles.elevatorBadgeLarge, { borderColor: statusColor({ status, trebaloBi: isTrebaloBi }) }]}
-            onPress={handleOpenElevator}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.elevatorBadgeLargeText}>{elevator?.brojDizala || 'Dizalo'}</Text>
-          </TouchableOpacity>
-        </View>
-
         <View style={styles.card}>
           <View style={styles.sectionTitleRow}>
             <Ionicons name="warning-outline" size={18} color="#ef4444" />
-            <Text style={styles.sectionTitle}>Opis kvara</Text>
+            <Text style={styles.sectionTitle}>Kvar</Text>
           </View>
           <TextInput
             style={[styles.input, styles.textArea]}
@@ -668,238 +831,15 @@ export default function RepairDetailsScreen({ route, navigation }) {
         </View>
 
         <View style={styles.card}>
-          <View style={styles.sectionTitleRow}>
-            <Ionicons name="people-outline" size={18} color="#0ea5e9" />
-            <Text style={styles.sectionTitle}>Sudionici i radni sati</Text>
-          </View>
-
-          <Text style={styles.fieldLabel}>Tvoji radni sati</Text>
-          <View style={styles.hoursInputRow}>
-            <TextInput
-              style={[styles.input, styles.hoursInput]}
-              value={radniSatiGlavni}
-              onChangeText={setRadniSatiGlavni}
-              keyboardType="decimal-pad"
-              placeholder="Upiši radne sate"
-              placeholderTextColor="#9ca3af"
-            />
-            <View style={styles.hoursSuffix}>
-              <Text style={styles.hoursSuffixText}>h</Text>
+          <View style={[styles.sectionTitleRow, { justifyContent: 'space-between' }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: ms(8) }}>
+              <Ionicons name="time-outline" size={18} color="#2563eb" />
+              <Text style={styles.sectionTitle}>Radni sati</Text>
+            </View>
+            <View style={{ flex: 1, marginLeft: ms(16) }}>
+              {renderHoursControl(radniSatiGlavni, setRadniSatiGlavni, 'Upiši radne sate')}
             </View>
           </View>
-
-          <View style={styles.additionalHeaderRow}>
-            <Text style={[styles.sectionTitle, { fontSize: ms(15), marginTop: ms(14), marginBottom: ms(8), flex: 1 }]}>Dodatni serviseri</Text>
-            {additionalServicers.length < MAX_ADDITIONAL_SERVICERS && (
-              <TouchableOpacity style={styles.addKolegaButton} onPress={addAdditionalServicer}>
-                <Ionicons name="add-circle-outline" size={18} color="#2563eb" />
-                <Text style={styles.addKolegaButtonText}>Dodaj</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {additionalServicers.length === 0 && (
-            <Text style={styles.emptyAssistantsText}>Ako nema kolege, na radnom nalogu će se prikazati samo glavni serviser.</Text>
-          )}
-
-          {additionalServicers.map((entry, index) => {
-            const label = getUserDisplayName(entry.userId);
-            return (
-              <View key={`additional-servicer-${index}`} style={styles.additionalServicerCard}>
-                <View style={styles.additionalServicerTopRow}>
-                  <Text style={styles.additionalServicerTitle}>{`Serviser ${index + 2}`}</Text>
-                  <TouchableOpacity style={styles.removeKolegaInlineBtn} onPress={() => removeAdditionalServicer(index)}>
-                    <Ionicons name="trash-outline" size={18} color="#ef4444" />
-                  </TouchableOpacity>
-                </View>
-
-                <TouchableOpacity style={styles.kolegaToggle} onPress={() => toggleKolege(index)}>
-                  <Ionicons name={showKolegePickerIndex === index ? 'chevron-up' : 'chevron-down'} size={18} color="#0f172a" />
-                  <Text style={styles.kolegaToggleText}>{label || 'Odaberi servisera'}</Text>
-                </TouchableOpacity>
-
-                {showKolegePickerIndex === index && (
-                  loadingUsers ? (
-                    <View style={styles.userRow}>
-                      <ActivityIndicator size="small" color="#0ea5e9" />
-                      <Text style={styles.userRowText}>Učitavanje...</Text>
-                    </View>
-                  ) : (
-                    <View style={styles.kolegeList}>
-                      <TouchableOpacity
-                        style={[styles.userRow, !entry.userId && styles.userRowSelected]}
-                        onPress={() => selectKolega(index, null)}
-                      >
-                        <Ionicons name={!entry.userId ? 'radio-button-on' : 'radio-button-off'} size={18} color={!entry.userId ? '#0ea5e9' : '#94a3b8'} />
-                        <Text style={styles.userRowText}>Bez servisera</Text>
-                      </TouchableOpacity>
-                      {korisnici
-                        .filter((k) => {
-                          const kid = k._id || k.id;
-                          return !additionalServicers.some((item, itemIndex) => itemIndex !== index && item.userId === kid);
-                        })
-                        .map((k) => {
-                          const kid = k._id || k.id;
-                          const selected = entry.userId === kid;
-                          return (
-                            <TouchableOpacity
-                              key={`${index}-${kid}`}
-                              style={[styles.userRow, selected && styles.userRowSelected]}
-                              onPress={() => selectKolega(index, kid)}
-                            >
-                              <Ionicons name={selected ? 'radio-button-on' : 'radio-button-off'} size={18} color={selected ? '#0ea5e9' : '#94a3b8'} />
-                              <Text style={styles.userRowText}>{`${k.ime || ''} ${k.prezime || ''}`.trim() || k.email}</Text>
-                            </TouchableOpacity>
-                          );
-                        })}
-                    </View>
-                  )
-                )}
-
-                <Text style={[styles.fieldLabel, { marginTop: ms(12) }]}>{`Radni sati (${label || `serviser ${index + 2}`})`}</Text>
-                <View style={styles.hoursInputRow}>
-                  <TextInput
-                    style={[styles.input, styles.hoursInput]}
-                    value={entry.hours}
-                    onChangeText={(text) => updateAdditionalServicerHours(index, text)}
-                    keyboardType="decimal-pad"
-                    placeholder="npr. 1.5"
-                    placeholderTextColor="#9ca3af"
-                  />
-                  <View style={styles.hoursSuffix}>
-                    <Text style={styles.hoursSuffixText}>h</Text>
-                  </View>
-                </View>
-              </View>
-            );
-          })}
-        </View>
-
-        <View style={styles.card}>
-          <View style={styles.sectionTitleRow}>
-            <Ionicons name="cube-outline" size={18} color="#f59e0b" />
-            <Text style={styles.sectionTitle}>Utrošeni materijal</Text>
-          </View>
-          {materijalStavke.map((stavka, index) => (
-            <View key={`mat-${index}`} style={styles.materijalRow}>
-              <TextInput
-                style={[styles.input, styles.materijalNaziv]}
-                value={stavka.naziv}
-                onChangeText={(text) => updateMaterijalStavka(index, 'naziv', text)}
-                placeholder="Naziv"
-                placeholderTextColor="#9ca3af"
-              />
-              <TextInput
-                style={[styles.input, styles.materijalKolicina]}
-                value={stavka.kolicina}
-                onChangeText={(text) => updateMaterijalStavka(index, 'kolicina', text)}
-                placeholder="Kol."
-                placeholderTextColor="#9ca3af"
-                keyboardType="decimal-pad"
-              />
-              <TextInput
-                style={[styles.input, styles.materijalJedinica]}
-                value={stavka.jedinica}
-                onChangeText={(text) => updateMaterijalStavka(index, 'jedinica', text)}
-                placeholder="Jed."
-                placeholderTextColor="#9ca3af"
-              />
-              <TouchableOpacity style={styles.removeMaterijalBtn} onPress={() => removeMaterijalStavka(index)}>
-                <Ionicons name="close-circle" size={22} color="#ef4444" />
-              </TouchableOpacity>
-            </View>
-          ))}
-          <TouchableOpacity style={styles.addMaterijalBtn} onPress={addMaterijalStavka}>
-            <Ionicons name="add-circle-outline" size={18} color="#2563eb" />
-            <Text style={styles.addMaterijalText}>Dodaj stavku materijala</Text>
-          </TouchableOpacity>
-          <Text style={[styles.fieldLabel, { marginTop: ms(12) }]}>Dodatna napomena (opcionalno)</Text>
-          <TextInput
-            style={[styles.input, { minHeight: ms(60), textAlignVertical: 'top' }]}
-            value={utroseniMaterijal}
-            onChangeText={setUtroseniMaterijal}
-            placeholder="Npr. materijal donesen iz skladišta"
-            placeholderTextColor="#9ca3af"
-            multiline
-          />
-        </View>
-
-        <View style={styles.card}>
-          <View style={styles.sectionTitleRow}>
-            <Ionicons name="camera-outline" size={18} color="#8b5cf6" />
-            <Text style={styles.sectionTitle}>Fotografije</Text>
-          </View>
-          {photoError && (
-            <View style={styles.errorBanner}>
-              <Ionicons name="alert-circle" size={18} color="#dc2626" />
-              <Text style={styles.errorText}>{photoError}</Text>
-              <TouchableOpacity onPress={clearError}>
-                <Ionicons name="close" size={18} color="#dc2626" />
-              </TouchableOpacity>
-            </View>
-          )}
-          
-          <View style={styles.photoButtonRow}>
-            <TouchableOpacity
-              style={[styles.photoButton, uploadingPhoto && styles.photoButtonDisabled]}
-              onPress={async () => {
-                const result = await pickAndUploadPhoto();
-                if (result) {
-                  setPhotos((prev) => [...prev, result]);
-                }
-              }}
-              disabled={uploadingPhoto}
-            >
-              {uploadingPhoto ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <Ionicons name="image-outline" size={20} color="#fff" />
-              )}
-              <Text style={styles.photoButtonText}>Odaberi</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={[styles.photoButton, uploadingPhoto && styles.photoButtonDisabled]}
-              onPress={async () => {
-                const result = await takePhotoWithCamera();
-                if (result) {
-                  setPhotos((prev) => [...prev, result]);
-                }
-              }}
-              disabled={uploadingPhoto}
-            >
-              {uploadingPhoto ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <Ionicons name="camera-outline" size={20} color="#fff" />
-              )}
-              <Text style={styles.photoButtonText}>Fotka</Text>
-            </TouchableOpacity>
-          </View>
-
-          {photos.length > 0 && (
-            <View style={styles.photoGallery}>
-              <Text style={styles.photoCountText}>{photos.length} slika</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photoScroll}>
-                {photos.map((photo, idx) => (
-                  <View key={idx} style={styles.photoThumbnailWrapper}>
-                    <TouchableOpacity onPress={() => setActivePhotoUrl(photo.url)}>
-                      <Image
-                        source={{ uri: photo.url }}
-                        style={styles.photoThumbnail}
-                      />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.photoRemoveBtn}
-                      onPress={() => setPhotos(photos.filter((_, i) => i !== idx))}
-                    >
-                      <Ionicons name="close" size={16} color="#fff" />
-                    </TouchableOpacity>
-                  </View>
-                ))}
-              </ScrollView>
-            </View>
-          )}
         </View>
 
         <Modal
@@ -953,6 +893,251 @@ export default function RepairDetailsScreen({ route, navigation }) {
             <Ionicons name={radniNalogPotpisan ? 'checkbox' : 'square-outline'} size={20} color={radniNalogPotpisan ? '#10b981' : '#6b7280'} />
             <Text style={styles.toggleLabel}>Radni nalog potpisan</Text>
           </TouchableOpacity>
+
+          {status === 'completed' && (completedByLabel || completedAtLabel) && (
+            <View style={styles.completionAuditBox}>
+              <Ionicons name="person-circle-outline" size={18} color="#2563eb" />
+              <View style={{ flex: 1 }}>
+                {completedByLabel ? (
+                  <Text style={styles.completionAuditText}>Odradio: {completedByLabel}</Text>
+                ) : null}
+                {completedAtLabel ? (
+                  <Text style={styles.completionAuditSubText}>Vrijeme završetka: {completedAtLabel}</Text>
+                ) : null}
+              </View>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.card}>
+          <TouchableOpacity style={styles.expandableHeader} onPress={() => toggleExpandableSection('materijal')}>
+            <View style={styles.expandableTitleWrap}>
+              <Ionicons name="cube-outline" size={18} color="#f59e0b" />
+              <Text style={styles.sectionTitle}>Materijal</Text>
+            </View>
+            <Ionicons name={expandedSections.materijal ? 'chevron-up' : 'chevron-down'} size={18} color="#475569" />
+          </TouchableOpacity>
+
+          {expandedSections.materijal && (
+            <>
+              {materijalStavke.map((stavka, index) => (
+                <View key={`mat-${index}`} style={styles.materijalRow}>
+                  <TextInput
+                    style={[styles.input, styles.materijalNaziv]}
+                    value={stavka.naziv}
+                    onChangeText={(text) => updateMaterijalStavka(index, 'naziv', text)}
+                    placeholder="Naziv"
+                    placeholderTextColor="#9ca3af"
+                  />
+                  <TextInput
+                    style={[styles.input, styles.materijalKolicina]}
+                    value={stavka.kolicina}
+                    onChangeText={(text) => updateMaterijalStavka(index, 'kolicina', text)}
+                    placeholder="Kol."
+                    placeholderTextColor="#9ca3af"
+                    keyboardType="decimal-pad"
+                  />
+                  <TextInput
+                    style={[styles.input, styles.materijalJedinica]}
+                    value={stavka.jedinica}
+                    onChangeText={(text) => updateMaterijalStavka(index, 'jedinica', text)}
+                    placeholder="Jed."
+                    placeholderTextColor="#9ca3af"
+                  />
+                  <TouchableOpacity style={styles.removeMaterijalBtn} onPress={() => removeMaterijalStavka(index)}>
+                    <Ionicons name="close-circle" size={22} color="#ef4444" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+              <TouchableOpacity style={styles.addMaterijalBtn} onPress={addMaterijalStavka}>
+                <Ionicons name="add-circle-outline" size={18} color="#2563eb" />
+                <Text style={styles.addMaterijalText}>Dodaj stavku materijala</Text>
+              </TouchableOpacity>
+              <Text style={[styles.fieldLabel, { marginTop: ms(12) }]}>Dodatna napomena (opcionalno)</Text>
+              <TextInput
+                style={[styles.input, { minHeight: ms(60), textAlignVertical: 'top' }]}
+                value={utroseniMaterijal}
+                onChangeText={setUtroseniMaterijal}
+                placeholder="Npr. materijal donesen iz skladišta"
+                placeholderTextColor="#9ca3af"
+                multiline
+              />
+            </>
+          )}
+        </View>
+
+        <View style={styles.card}>
+          <TouchableOpacity style={styles.expandableHeader} onPress={() => toggleExpandableSection('serviseri')}>
+            <View style={styles.expandableTitleWrap}>
+              <Ionicons name="people-outline" size={18} color="#2563eb" />
+              <Text style={styles.sectionTitle}>Dodatni serviseri</Text>
+            </View>
+            <Ionicons name={expandedSections.serviseri ? 'chevron-up' : 'chevron-down'} size={18} color="#475569" />
+          </TouchableOpacity>
+
+          {expandedSections.serviseri && (
+            <>
+              <View style={styles.additionalHeaderRow}>
+                <Text style={[styles.fieldLabel, { marginBottom: 0, flex: 1 }]}>Po potrebi dodaj kolege</Text>
+                {additionalServicers.length < MAX_ADDITIONAL_SERVICERS && (
+                  <TouchableOpacity style={styles.addKolegaButton} onPress={addAdditionalServicer}>
+                    <Ionicons name="add-circle-outline" size={18} color="#2563eb" />
+                    <Text style={styles.addKolegaButtonText}>Dodaj</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {additionalServicers.length === 0 && (
+                <Text style={styles.emptyAssistantsText}>Ako nema kolege, na radnom nalogu će se prikazati samo glavni serviser.</Text>
+              )}
+
+              {additionalServicers.map((entry, index) => {
+                const label = getUserDisplayName(entry.userId);
+                return (
+                  <View key={`additional-servicer-${index}`} style={styles.additionalServicerCard}>
+                    <View style={styles.additionalServicerTopRow}>
+                      <Text style={styles.additionalServicerTitle}>{`Serviser ${index + 2}`}</Text>
+                      <TouchableOpacity style={styles.removeKolegaInlineBtn} onPress={() => removeAdditionalServicer(index)}>
+                        <Ionicons name="trash-outline" size={18} color="#ef4444" />
+                      </TouchableOpacity>
+                    </View>
+
+                    <TouchableOpacity style={styles.kolegaToggle} onPress={() => toggleKolege(index)}>
+                      <Ionicons name={showKolegePickerIndex === index ? 'chevron-up' : 'chevron-down'} size={18} color="#0f172a" />
+                      <Text style={styles.kolegaToggleText}>{label || 'Odaberi servisera'}</Text>
+                    </TouchableOpacity>
+
+                    {showKolegePickerIndex === index && (
+                      loadingUsers ? (
+                        <View style={styles.userRow}>
+                          <ActivityIndicator size="small" color="#0ea5e9" />
+                          <Text style={styles.userRowText}>Učitavanje...</Text>
+                        </View>
+                      ) : (
+                        <View style={styles.kolegeList}>
+                          <TouchableOpacity
+                            style={[styles.userRow, !entry.userId && styles.userRowSelected]}
+                            onPress={() => selectKolega(index, null)}
+                          >
+                            <Ionicons name={!entry.userId ? 'radio-button-on' : 'radio-button-off'} size={18} color={!entry.userId ? '#0ea5e9' : '#94a3b8'} />
+                            <Text style={styles.userRowText}>Bez servisera</Text>
+                          </TouchableOpacity>
+                          {korisnici
+                            .filter((k) => {
+                              const kid = k._id || k.id;
+                              return !additionalServicers.some((item, itemIndex) => itemIndex !== index && item.userId === kid);
+                            })
+                            .map((k) => {
+                              const kid = k._id || k.id;
+                              const selected = entry.userId === kid;
+                              return (
+                                <TouchableOpacity
+                                  key={`${index}-${kid}`}
+                                  style={[styles.userRow, selected && styles.userRowSelected]}
+                                  onPress={() => selectKolega(index, kid)}
+                                >
+                                  <Ionicons name={selected ? 'radio-button-on' : 'radio-button-off'} size={18} color={selected ? '#0ea5e9' : '#94a3b8'} />
+                                  <Text style={styles.userRowText}>{`${k.ime || ''} ${k.prezime || ''}`.trim() || k.email}</Text>
+                                </TouchableOpacity>
+                              );
+                            })}
+                        </View>
+                      )
+                    )}
+
+                    <Text style={[styles.fieldLabel, { marginTop: ms(12) }]}>{`Radni sati (${label || `serviser ${index + 2}`})`}</Text>
+                    {renderHoursControl(entry.hours, (text) => updateAdditionalServicerHours(index, text), 'npr. 1.30')}
+                  </View>
+                );
+              })}
+            </>
+          )}
+        </View>
+
+        <View style={styles.card}>
+          <TouchableOpacity style={styles.expandableHeader} onPress={() => toggleExpandableSection('fotografije')}>
+            <View style={styles.expandableTitleWrap}>
+              <Ionicons name="camera-outline" size={18} color="#8b5cf6" />
+              <Text style={styles.sectionTitle}>Fotografije</Text>
+            </View>
+            <Ionicons name={expandedSections.fotografije ? 'chevron-up' : 'chevron-down'} size={18} color="#475569" />
+          </TouchableOpacity>
+
+          {expandedSections.fotografije && (
+            <>
+              {photoError && (
+                <View style={styles.errorBanner}>
+                  <Ionicons name="alert-circle" size={18} color="#dc2626" />
+                  <Text style={styles.errorText}>{photoError}</Text>
+                  <TouchableOpacity onPress={clearError}>
+                    <Ionicons name="close" size={18} color="#dc2626" />
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              <View style={styles.photoButtonRow}>
+                <TouchableOpacity
+                  style={[styles.photoButton, uploadingPhoto && styles.photoButtonDisabled]}
+                  onPress={async () => {
+                    const result = await pickAndUploadPhoto();
+                    if (result) {
+                      setPhotos((prev) => [...prev, result]);
+                    }
+                  }}
+                  disabled={uploadingPhoto}
+                >
+                  {uploadingPhoto ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Ionicons name="image-outline" size={20} color="#fff" />
+                  )}
+                  <Text style={styles.photoButtonText}>Odaberi</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.photoButton, uploadingPhoto && styles.photoButtonDisabled]}
+                  onPress={async () => {
+                    const result = await takePhotoWithCamera();
+                    if (result) {
+                      setPhotos((prev) => [...prev, result]);
+                    }
+                  }}
+                  disabled={uploadingPhoto}
+                >
+                  {uploadingPhoto ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Ionicons name="camera-outline" size={20} color="#fff" />
+                  )}
+                  <Text style={styles.photoButtonText}>Fotka</Text>
+                </TouchableOpacity>
+              </View>
+
+              {photos.length > 0 && (
+                <View style={styles.photoGallery}>
+                  <Text style={styles.photoCountText}>{photos.length} slika</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photoScroll}>
+                    {photos.map((photo, idx) => (
+                      <View key={idx} style={styles.photoThumbnailWrapper}>
+                        <TouchableOpacity onPress={() => setActivePhotoUrl(photo.url)}>
+                          <Image
+                            source={{ uri: photo.url }}
+                            style={styles.photoThumbnail}
+                          />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.photoRemoveBtn}
+                          onPress={() => setPhotos(photos.filter((_, i) => i !== idx))}
+                        >
+                          <Ionicons name="close" size={16} color="#fff" />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
+            </>
+          )}
         </View>
 
         {/* Postojeći radni nalog */}
@@ -1048,14 +1233,6 @@ export default function RepairDetailsScreen({ route, navigation }) {
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.secondaryButton, { marginTop: ms(12) }]}
-          onPress={() => navigation.navigate('EditRepair', { repair: repairData })}
-        >
-          <Ionicons name="information-circle-outline" size={18} color="#2563eb" />
-          <Text style={styles.secondaryText}>Detalji</Text>
-        </TouchableOpacity>
-
         <View style={{ height: 60 }} />
       </ScrollView>
       </KeyboardAvoidingView>
@@ -1075,14 +1252,21 @@ export default function RepairDetailsScreen({ route, navigation }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5' },
   header: { backgroundColor: '#fff', paddingTop: ms(50), paddingBottom: ms(15), paddingHorizontal: ms(20), flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: '#e5e5e5' },
-  headerTitle: { fontSize: ms(19), fontWeight: '700', color: '#1f2937' },
+  headerTitle: { flex: 1, textAlign: 'center', marginHorizontal: ms(10), fontSize: ms(18), fontWeight: '700', color: '#1f2937' },
   content: { flex: 1 },
-  card: { backgroundColor: '#fff', padding: ms(16), marginTop: ms(12), marginHorizontal: ms(12), borderRadius: ms(14), shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },
-  elevatorHero: { alignItems: 'center', marginTop: ms(12) },
-  elevatorBadgeLarge: { paddingHorizontal: ms(16), paddingVertical: ms(10), borderRadius: ms(14), borderWidth: 2, backgroundColor: '#fff', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 2 },
-  elevatorBadgeLargeText: { fontSize: ms(18), fontWeight: '800', color: '#111827' },
+  card: { backgroundColor: '#fff', padding: ms(12), marginTop: ms(12), marginHorizontal: ms(12), borderRadius: ms(14), shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },
   sectionTitle: { fontSize: ms(16), fontWeight: '700', color: '#111827' },
-  sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: ms(8), marginBottom: ms(12) },
+  sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: ms(8), marginBottom: ms(8) },
+  expandableHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  expandableTitleWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: ms(8),
+  },
   actionIconBtn: { paddingHorizontal: ms(6), paddingVertical: ms(4) },
   primaryButton: {
     marginTop: ms(20),
@@ -1192,29 +1376,47 @@ const styles = StyleSheet.create({
     minHeight: ms(80),
     textAlignVertical: 'top',
   },
-  hoursInputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
   hoursInput: {
     flex: 1,
     borderTopRightRadius: 0,
     borderBottomRightRadius: 0,
     borderRightWidth: 0,
   },
-  hoursSuffix: {
-    backgroundColor: '#e2e8f0',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderTopRightRadius: ms(10),
-    borderBottomRightRadius: ms(10),
-    paddingHorizontal: ms(14),
-    paddingVertical: ms(12),
+  hoursStepperRow: {
+    borderWidth: 1.5,
+    borderColor: '#cbd5e1',
+    borderRadius: ms(10),
+    overflow: 'hidden',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f1f5f9',
+    height: ms(42),
+  },
+  hoursStepperBtn: {
+    width: ms(42),
+    height: ms(42),
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f1f5f9',
+  },
+  hoursStepperInput: {
+    flex: 1,
+    textAlign: 'center',
+    paddingVertical: 0,
+    fontSize: ms(15),
+    fontWeight: '700',
+    color: '#1e293b',
+    backgroundColor: 'transparent',
+  },
+  hoursStepperSuffix: {
+    paddingHorizontal: ms(12),
+    height: ms(42),
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: 'transparent',
   },
-  hoursSuffixText: {
-    fontSize: ms(15),
+  hoursStepperSuffixText: {
+    fontSize: ms(16),
     fontWeight: '700',
     color: '#64748b',
   },
@@ -1232,6 +1434,28 @@ const styles = StyleSheet.create({
   toggleLabel: {
     fontSize: ms(15),
     color: '#111827',
+  },
+  completionAuditBox: {
+    marginTop: ms(10),
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: ms(8),
+    paddingVertical: ms(10),
+    paddingHorizontal: ms(12),
+    borderRadius: ms(10),
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+  },
+  completionAuditText: {
+    fontSize: ms(14),
+    fontWeight: '700',
+    color: '#1e3a8a',
+  },
+  completionAuditSubText: {
+    marginTop: ms(2),
+    fontSize: ms(12),
+    color: '#1d4ed8',
   },
   statusChoiceRow: {
     flexDirection: 'row',

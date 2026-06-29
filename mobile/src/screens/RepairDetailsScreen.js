@@ -181,6 +181,15 @@ export default function RepairDetailsScreen({ route, navigation }) {
       return full || repairData.serviserID?.email || '';
     }
     
+     // Ako je serviserID string ID, trebam ga lookupaiti u userDB
+     if (repairData?.serviserID && typeof repairData.serviserID === 'string') {
+       const user = userDB.getById(repairData.serviserID);
+       if (user) {
+         const full = `${user?.ime || ''} ${user?.prezime || ''}`.trim();
+         return full || user?.email || '';
+       }
+     }
+
     return '';
   })();
 

@@ -9,7 +9,7 @@ import {
   BackHandler,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { repairDB, elevatorDB } from '../database/db';
+import { repairDB, elevatorDB, userDB } from '../database/db';
 import { syncAll } from '../services/syncService';
 
 const safeText = (value, fallback = '') => {
@@ -288,6 +288,15 @@ export default function RepairsListScreen({ navigation, route }) {
         return full || safeText(item.serviserID.email);
       }
       
+       // Ako je serviserID string ID, trebam ga lookupaiti u userDB
+       if (item.serviserID && typeof item.serviserID === 'string') {
+         const user = userDB.getById(item.serviserID);
+         if (user) {
+           const full = `${safeText(user.ime)} ${safeText(user.prezime)}`.trim();
+           return full || safeText(user.email);
+         }
+       }
+
       return '';
     })();
 

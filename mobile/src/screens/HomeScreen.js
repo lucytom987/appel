@@ -11,6 +11,7 @@ import {
   ImageBackground,
   Platform,
   BackHandler,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -27,11 +28,14 @@ const GAUGE_SIZE = 140;
 const GAUGE_RADIUS = GAUGE_SIZE / 2;
 const GAUGE_MASK_HEIGHT = GAUGE_RADIUS;
 const GAUGE_BG_IMAGE = { uri: 'https://images.unsplash.com/photo-1517244871184-6ac0400d035b?auto=format&fit=crop&w=400&q=60' };
+const DIZALA_CARD_IMAGE = require('../../assets/dizala_card.png');
+const MAP_CARD_IMAGE = require('../../assets/map_card.png');
 const GAUGE_NEEDLE_COLOR = '#22c55e';
 const GAUGE_NEEDLE_WIDTH = 4;
 const GAUGE_NEEDLE_HEIGHT = GAUGE_RADIUS - 6;
 
 export default function HomeScreen({ navigation }) {
+  const { width: screenWidth } = useWindowDimensions();
   const { user, isOnline, serverAwake, logout } = useAuth();
   const [offlineDemo, setOfflineDemo] = useState(false);
   const serviceGauge = useRef(new Animated.Value(0));
@@ -54,6 +58,14 @@ export default function HomeScreen({ navigation }) {
      repairsUrgent: 0,
    });
   const [refreshing, setRefreshing] = useState(false);
+
+  const isSmallScreen = screenWidth < 390;
+  const isTinyScreen = screenWidth < 360;
+  const gridGap = isTinyScreen ? 8 : 10;
+  const gridPadding = isTinyScreen ? 12 : 15;
+  const cardWidth = (screenWidth - (gridPadding * 2) - gridGap) / 2;
+  const topCardHeight = isTinyScreen ? 194 : (isSmallScreen ? 202 : 212);
+  const bottomCardHeight = isTinyScreen ? 248 : (isSmallScreen ? 258 : 268);
 
   // Konvertiraj isOnline u boolean eksplicitno
   const online = Boolean(isOnline);
@@ -435,74 +447,139 @@ export default function HomeScreen({ navigation }) {
           </View>
         )}
         {/* Stats Cards */}
-        <View style={styles.statsGrid}>
+        <View style={[styles.statsGrid, { padding: gridPadding, gap: gridGap }]}>
           <TouchableOpacity 
-            style={[styles.statCard, styles.statCardElevators]}
+            style={[
+              styles.statCard,
+              styles.statCardTopSquare,
+              styles.statCardElevators,
+              { width: cardWidth, height: topCardHeight },
+            ]}
             onPress={() => navigation.navigate('Elevators')}
           >
-            <Text style={[styles.statLabel, styles.statLabelBold, styles.sectionTitleUpper]}>DIZALA</Text>
-            <Ionicons name="business" size={32} color="#2563eb" />
-            <Text style={styles.statNumber}>{stats.totalElevators}</Text>
+            <View style={styles.topCardBody}>
+              <ImageBackground
+                source={DIZALA_CARD_IMAGE}
+                style={[
+                  styles.dizalaCardImage,
+                  {
+                    height: isTinyScreen ? 82 : (isSmallScreen ? 90 : 100),
+                    marginBottom: isTinyScreen ? 4 : 6,
+                  },
+                ]}
+                imageStyle={styles.dizalaCardImageInner}
+                resizeMode="cover"
+              />
+              <Text style={[styles.statNumberTop, isSmallScreen && styles.statNumberTopSmall, isTinyScreen && styles.statNumberTopTiny]}>
+                {stats.totalElevators}
+              </Text>
+            </View>
+            <View style={styles.topCardFooter}>
+              <View style={[styles.cardBottomDivider, styles.cardBottomDividerTop]} />
+              <Text style={styles.cardBottomTitle}>DIZALA</Text>
+            </View>
           </TouchableOpacity>
 
           <TouchableOpacity 
-            style={styles.statCard}
+            style={[
+              styles.statCard,
+              styles.statCardTopSquare,
+              styles.mapCard,
+              { width: cardWidth, height: topCardHeight },
+            ]}
             onPress={() => navigation.navigate('Map')}
           >
-            <Text style={[styles.statLabel, styles.statLabelBold, styles.sectionTitleUpper]}>KARTA</Text>
-            <Text style={[styles.statNumber, { marginTop: 4, fontSize: 44 }]}>🌍</Text>
+            <View style={styles.topCardBody}>
+              <ImageBackground
+                source={MAP_CARD_IMAGE}
+                style={[
+                  styles.mapCardImage,
+                  { height: isTinyScreen ? 104 : (isSmallScreen ? 112 : 122) },
+                ]}
+                imageStyle={styles.mapCardImageInner}
+                resizeMode="cover"
+              />
+            </View>
+            <View style={styles.topCardFooter}>
+              <View style={[styles.cardBottomDivider, styles.cardBottomDividerTop]} />
+              <Text style={styles.cardBottomTitle}>KARTA</Text>
+            </View>
           </TouchableOpacity>
 
           <TouchableOpacity 
-            style={[styles.statCard, styles.statCardServices]}
+            style={[
+              styles.statCard,
+              styles.statCardBottom,
+              styles.statCardServices,
+              { width: cardWidth, minHeight: bottomCardHeight },
+            ]}
             onPress={() => navigation.navigate('Services')}
           >
-            <Text style={[styles.statLabel, styles.statLabelBold, styles.sectionTitleUpper]}>SERVISI</Text>
-            <View style={styles.gaugeWrapper}>
-              <ImageBackground
-                source={GAUGE_BG_IMAGE}
-                style={styles.gaugeBg}
-                imageStyle={styles.gaugeBgImage}
+            <View style={styles.servicesCardBody}>
+              <View style={styles.gaugeWrapper}>
+                <ImageBackground
+                  source={GAUGE_BG_IMAGE}
+                  style={styles.gaugeBg}
+                  imageStyle={styles.gaugeBgImage}
+                >
+                  <View style={styles.gaugeMask}>
+                    <View style={styles.gaugeArc} />
+                    <Animated.View
+                      style={[
+                        styles.gaugeNeedle,
+                        {
+                          transform: [
+                            { translateY: GAUGE_NEEDLE_HEIGHT / 2 },
+                            {
+                              rotateZ: serviceGauge.current.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: ['-90deg', '90deg'],
+                                extrapolate: 'clamp',
+                              }),
+                            },
+                            { translateY: -GAUGE_NEEDLE_HEIGHT / 2 },
+                          ],
+                        },
+                      ]}
+                    >
+                      <View style={styles.gaugeNeedleBody} />
+                      <View style={styles.gaugeNeedleHighlight} />
+                    </Animated.View>
+                    <View style={styles.gaugeNeedleHub} />
+                  </View>
+                </ImageBackground>
+              </View>
+              <Text
+                style={[
+                  styles.statNumber,
+                  styles.statNumberServices,
+                  isSmallScreen && styles.statNumberServicesSmall,
+                  isTinyScreen && styles.statNumberServicesTiny,
+                ]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.75}
               >
-                <View style={styles.gaugeMask}>
-                  <View style={styles.gaugeArc} />
-                  <Animated.View
-                    style={[
-                      styles.gaugeNeedle,
-                      {
-                        transform: [
-                          { translateY: GAUGE_NEEDLE_HEIGHT / 2 },
-                          {
-                            rotateZ: serviceGauge.current.interpolate({
-                              inputRange: [0, 1],
-                              outputRange: ['-90deg', '90deg'],
-                              extrapolate: 'clamp',
-                            }),
-                          },
-                          { translateY: -GAUGE_NEEDLE_HEIGHT / 2 },
-                        ],
-                      },
-                    ]}
-                  >
-                    <View style={styles.gaugeNeedleBody} />
-                    <View style={styles.gaugeNeedleHighlight} />
-                  </Animated.View>
-                  <View style={styles.gaugeNeedleHub} />
-                </View>
-              </ImageBackground>
+                {stats.servicedElevatorsThisMonth}/{stats.elevatorsRequiringServiceThisMonth}
+              </Text>
+              <Text style={styles.statLabel}>Servisirano ovaj mjesec</Text>
             </View>
-            <Text style={styles.statNumber}>
-              {stats.servicedElevatorsThisMonth}/{stats.elevatorsRequiringServiceThisMonth}
-            </Text>
-            <Text style={styles.statLabel}>Servisirano / trebalo servisirati</Text>
+            <View style={styles.cardBottomDivider} />
+            <Text style={styles.cardBottomTitle}>SERVISI</Text>
           </TouchableOpacity>
 
           <TouchableOpacity 
-            style={[styles.statCard, styles.statCardRepairs]}
+            style={[
+              styles.statCard,
+              styles.statCardBottom,
+              styles.statCardRepairs,
+              { width: cardWidth, minHeight: bottomCardHeight },
+            ]}
             onPress={() => navigation.navigate('Repairs')}
           >
-            <Text style={[styles.statLabel, styles.statLabelBold, styles.sectionTitleUpper]}>POPRAVCI</Text>
-            <Ionicons name="construct" size={32} color="#f59e0b" style={{ marginTop: 4 }} />
+            <View style={[styles.cardIconBubble, styles.cardIconBubbleRepairs]}>
+              <Ionicons name="construct" size={30} color="#f59e0b" />
+            </View>
             <View style={styles.repairsCounters}>
               <Text style={styles.repairsSubLabel}>
                 ČEKANJE: <Text style={styles.repairsPending}>{stats.repairsPending}</Text>
@@ -514,6 +591,8 @@ export default function HomeScreen({ navigation }) {
                 NEPOTPISANO: <Text style={styles.repairsUnsigned}>{stats.repairsUnsigned}</Text>
               </Text>
             </View>
+            <View style={styles.cardBottomDivider} />
+            <Text style={styles.cardBottomTitle}>POPRAVCI</Text>
           </TouchableOpacity>
         </View>
 
@@ -619,41 +698,165 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     padding: 15,
-    gap: 15,
+    gap: 10,
   },
   statCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 20,
+    backgroundColor: '#f3f6fb',
+    borderRadius: 20,
+    padding: 16,
     width: '47%',
+    minHeight: 246,
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOpacity: 0.07,
+    shadowRadius: 10,
     elevation: 3,
+    borderWidth: 1,
+    borderColor: '#dfe7f2',
   },
   statCardElevators: {
-    backgroundColor: '#eff6ff', // blago plava
-    borderColor: '#bfdbfe',
+    backgroundColor: '#eef4ff',
+    borderColor: '#dfe8f7',
+  },
+  statCardTopSquare: {
+    minHeight: 212,
+    justifyContent: 'flex-start',
+    paddingTop: 12,
+    paddingBottom: 10,
+    overflow: 'hidden',
+  },
+  topCardBody: {
+    flex: 1,
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  topCardFooter: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    paddingBottom: 2,
+  },
+  statCardBottom: {
+    minHeight: 262,
+  },
+  dizalaCardImage: {
+    width: '100%',
+    height: 114,
+    borderRadius: 16,
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  dizalaCardImageInner: {
+    borderRadius: 16,
   },
   statCardServices: {
-    backgroundColor: '#ecfdf3', // blago zelena
-    borderColor: '#bbf7d0',
+    backgroundColor: '#f3f7fb',
+    borderColor: '#dfe7f1',
+  },
+  servicesCardBody: {
+    flex: 1,
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 6,
+    paddingBottom: 4,
   },
   statCardRepairs: {
-    backgroundColor: '#fef2f2', // blago crvena
-    borderColor: '#fecaca',
+    backgroundColor: '#f3f7fb',
+    borderColor: '#dfe7f1',
+  },
+  mapCard: {
+    paddingTop: 10,
+    paddingHorizontal: 10,
+    paddingBottom: 12,
+    overflow: 'hidden',
+    borderColor: '#dfe7f1',
+    justifyContent: 'space-between',
+  },
+  mapCardImage: {
+    width: '100%',
+    height: 192,
+    borderRadius: 16,
+  },
+  mapCardImageInner: {
+    borderRadius: 16,
+  },
+  cardIconBubble: {
+    width: 78,
+    height: 78,
+    borderRadius: 39,
+    backgroundColor: '#f2f6fd',
+    borderWidth: 1,
+    borderColor: '#dbe5f4',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+    marginTop: 8,
+  },
+  cardIconBubbleTop: {
+    marginTop: 12,
+  },
+  cardIconBubbleRepairs: {
+    marginTop: 2,
+    marginBottom: 10,
+  },
+  statNumberTop: {
+    fontSize: rf(38, 28, 50),
+    fontWeight: '800',
+    color: '#0f172a',
+    marginTop: 4,
+    marginBottom: 2,
+  },
+  statNumberTopSmall: {
+    fontSize: rf(34, 25, 44),
+  },
+  statNumberTopTiny: {
+    fontSize: rf(30, 22, 38),
+    marginTop: 2,
+    marginBottom: 4,
+  },
+  cardBottomDivider: {
+    width: '92%',
+    height: 1,
+    backgroundColor: '#d8dee8',
+    marginTop: 'auto',
+    marginBottom: 8,
+  },
+  cardBottomDividerTop: {
+    marginTop: 0,
+  },
+  cardBottomTitle: {
+    fontSize: rf(16, 13, 22),
+    fontWeight: '800',
+    color: '#1f2937',
+    letterSpacing: 0.5,
+    marginBottom: 2,
   },
   statCardUrgent: {
     borderWidth: 2,
     borderColor: '#ef4444',
   },
   statNumber: {
-    fontSize: rf(30, 24, 46),
+    fontSize: rf(44, 32, 58),
     fontWeight: 'bold',
-    color: '#1f2937',
-    marginTop: 10,
+    color: '#0f172a',
+    marginTop: 4,
+  },
+  statNumberServices: {
+    fontSize: rf(32, 24, 44),
+    lineHeight: rf(38, 28, 50),
+    marginTop: 2,
+    letterSpacing: 0.3,
+  },
+  statNumberServicesSmall: {
+    fontSize: rf(28, 22, 38),
+    lineHeight: rf(34, 26, 44),
+  },
+  statNumberServicesTiny: {
+    fontSize: rf(24, 20, 34),
+    lineHeight: rf(30, 24, 38),
   },
   statLabel: {
     fontSize: rf(13, 11.5, 20),
@@ -674,24 +877,27 @@ const styles = StyleSheet.create({
   sectionTitleUpper: {
     letterSpacing: 0.8,
     fontSize: rf(18, 15, 28),
-    marginBottom: 6,
+    marginBottom: 0,
     fontFamily: Platform.select({ ios: 'HelveticaNeue-Medium', android: 'sans-serif-medium', default: 'sans-serif' }),
   },
   repairsCounters: {
     marginTop: 6,
     width: '100%',
     flexDirection: 'column',
-    alignItems: 'flex-end',
+    alignItems: 'stretch',
     justifyContent: 'flex-start',
-    gap: 2,
+    gap: 4,
   },
   repairsSubLabel: {
-    fontSize: rf(15, 11, 38),
-    color: '#111827',
+    fontSize: rf(14, 11, 30),
+    color: '#1f2937',
     fontWeight: '800',
-    textAlign: 'right',
+    textAlign: 'left',
     flexShrink: 1,
     letterSpacing: 0.2,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+    paddingBottom: 6,
   },
   repairsPending: {
     color: '#ef4444',
@@ -730,8 +936,8 @@ const styles = StyleSheet.create({
     height: GAUGE_SIZE,
     borderRadius: GAUGE_RADIUS,
     borderWidth: 2,
-    borderColor: '#d1d5db',
-    backgroundColor: '#f9fafb',
+    borderColor: '#93c5fd',
+    backgroundColor: '#eff6ff',
     position: 'absolute',
     bottom: -GAUGE_RADIUS,
   },

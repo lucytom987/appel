@@ -11,8 +11,8 @@ import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 
 export default function AboutScreen({ navigation }) {
-  const currentVersion = Constants?.expoConfig?.version || '2.0.4';
-  const currentVersionDate = '28.06.2026';
+  const currentVersion = Constants?.expoConfig?.version || '2.0.5';
+  const currentVersionDate = '29.06.2026';
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>

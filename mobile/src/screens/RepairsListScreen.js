@@ -274,7 +274,20 @@ export default function RepairsListScreen({ navigation, route }) {
 
     const reporterLabel = (() => {
       if (item.status !== 'pending') return '';
+      
+      // Prvo provjeravamo "Pozivatelja" ako je ekspicitno upisao
+      if (item.Pozivatelj) return safeText(item.Pozivatelj);
+      if (item.pozivatelj) return safeText(item.pozivatelj);
+      
+      // Ako nema Pozivatelja, koristimo onoga koji je upisao popravak
       if (item.prijavio) return safeText(item.prijavio);
+      
+      // Fallback: ako je serviserID objekt s imenom
+      if (item.serviserID && typeof item.serviserID === 'object') {
+        const full = `${safeText(item.serviserID.ime)} ${safeText(item.serviserID.prezime)}`.trim();
+        return full || safeText(item.serviserID.email);
+      }
+      
       return '';
     })();
 
@@ -398,8 +411,8 @@ export default function RepairsListScreen({ navigation, route }) {
           onPress={() => {
             setActiveList('repairs');
             setFilter((prev) => {
-              if (prev === 'completed') return 'pending';
-              if (prev === 'pending') return 'nepotpisani';
+              if (prev === 'pending') return 'completed';
+              if (prev === 'completed') return 'nepotpisani';
               return 'pending';
             });
           }}

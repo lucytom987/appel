@@ -167,7 +167,20 @@ export default function RepairDetailsScreen({ route, navigation }) {
 
   const reporterLabel = (() => {
     if (repairData?.status !== 'pending' && !repairData?.trebaloBi) return '';
+    
+    // Prvo provjeravamo "Pozivatelja" ako je ekspicitno upisao
+    if (repairData?.Pozivatelj) return repairData.Pozivatelj;
+    if (repairData?.pozivatelj) return repairData.pozivatelj;
+    
+    // Ako nema Pozivatelja, koristimo onoga koji je upisao popravak
     if (repairData?.prijavio) return repairData.prijavio;
+    
+    // Fallback: ako je serviserID objekt s imenom
+    if (repairData?.serviserID && typeof repairData.serviserID === 'object') {
+      const full = `${repairData.serviserID?.ime || ''} ${repairData.serviserID?.prezime || ''}`.trim();
+      return full || repairData.serviserID?.email || '';
+    }
+    
     return '';
   })();
 

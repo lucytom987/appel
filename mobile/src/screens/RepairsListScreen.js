@@ -45,6 +45,7 @@ export default function RepairsListScreen({ navigation, route }) {
     const now = new Date();
     return { month: now.getMonth(), year: now.getFullYear() };
   });
+  const [periodFilter, setPeriodFilter] = useState('current'); // 'current' | 'all'
   const [userMap] = useState({}); // placeholder, više se ne koristi u prikazu
 
   const monthNames = [
@@ -69,7 +70,7 @@ export default function RepairsListScreen({ navigation, route }) {
     });
   };
 
-  const periodLabel = `${monthNames[period.month]} ${period.year}`;
+  const periodLabel = periodFilter === 'all' ? 'SVE' : `${monthNames[period.month]} ${period.year}`;
 
   const loadRepairs = useCallback(() => {
     try {
@@ -158,27 +159,34 @@ export default function RepairsListScreen({ navigation, route }) {
   }, [navigation]);
 
   const isInSelectedPeriod = useCallback((repair) => {
+    if (periodFilter === 'all') return true;
+
     const datum = repair?.datumPrijave || repair?.datumKvara;
     if (!datum) return true; // prikaži ako nemamo datum
     const parsed = new Date(datum);
     if (Number.isNaN(parsed.getTime())) return true; // fallback ako je loš format
     return parsed.getMonth() === period.month && parsed.getFullYear() === period.year;
-  }, [period]);
+  }, [period, periodFilter]);
 
   const applyFilter = useCallback(() => {
     const periodFiltered = repairs.filter((r) => isInSelectedPeriod(r));
 
     const repairsOnly = periodFiltered.filter((r) => !r.trebaloBi);
     const trebalo = periodFiltered.filter((r) => r.trebaloBi);
+    const nepotpisani = periodFiltered.filter((r) => !r.trebaloBi && !r.radniNalogPotpisan);
 
     let filtered = repairsOnly;
-    if (['pending', 'completed'].includes(filter)) {
-      filtered = repairsOnly.filter((r) => r.status === filter);
+    if (filter === 'pending') {
+      filtered = repairsOnly.filter((r) => r.status === 'pending');
+    } else if (filter === 'completed') {
+      filtered = repairsOnly.filter((r) => r.status === 'completed');
+    } else if (filter === 'nepotpisani') {
+      filtered = nepotpisani;
     }
 
     setFilteredRepairs(filtered);
     setTrebaloBiList(trebalo);
-  }, [repairs, filter, isInSelectedPeriod]);
+  }, [repairs, filter, isInSelectedPeriod, periodFilter]);
 
   useEffect(() => {
     applyFilter();
@@ -264,6 +272,21 @@ export default function RepairsListScreen({ navigation, route }) {
       return '';
     })();
 
+    const reporterLabel = (() => {
+      if (item.status !== 'pending') return '';
+      if (item.prijavio) return safeText(item.prijavio);
+      return '';
+    })();
+
+    const reportedDateLabel = (() => {
+      if (item.status !== 'pending') return '';
+      const datum = item.datumPrijave || item.datumKvara;
+      if (!datum) return '';
+      const parsed = new Date(datum);
+      if (Number.isNaN(parsed.getTime())) return '';
+      return parsed.toLocaleDateString('hr-HR');
+    })();
+
     return (
       <TouchableOpacity
         style={[styles.repairCard, { borderColor: getStatusColor(item) }]}
@@ -301,6 +324,13 @@ export default function RepairsListScreen({ navigation, route }) {
             {opisKvara}
           </Text>
 
+          {reporterLabel && reportedDateLabel ? (
+            <View style={styles.reporterRow}>
+              <Ionicons name="person-add-outline" size={15} color="#dc2626" />
+              <Text style={styles.reporterText}>{reporterLabel} • {reportedDateLabel}</Text>
+            </View>
+          ) : null}
+
           {completedByLabel ? (
             <View style={styles.completedByRow}>
               <Ionicons name="person-circle-outline" size={15} color="#1d4ed8" />
@@ -330,12 +360,20 @@ export default function RepairsListScreen({ navigation, route }) {
 
   return (
     <View style={styles.container}>
-      {/* Header s odabirom mjeseca/godine */}
+      {/* Header s odabirom mjeseca/godine i SVE opcije */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.navigate('Home')}>
           <Ionicons name="arrow-back" size={24} color="#1f2937" />
         </TouchableOpacity>
         <View style={styles.monthPicker}>
+          <TouchableOpacity 
+            style={[styles.chevronButton, periodFilter === 'all' && styles.periodAllButton]}
+            onPress={() => setPeriodFilter(periodFilter === 'all' ? 'current' : 'all')}
+          >
+            <Text style={[styles.periodText, periodFilter === 'all' && styles.periodTextActive]}>
+              {periodFilter === 'all' ? 'SVE' : '📅'}
+            </Text>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.chevronButton} onPress={() => changeMonth(-1)}>
             <Ionicons name="chevron-back" size={20} color="#1f2937" />
           </TouchableOpacity>
@@ -347,18 +385,23 @@ export default function RepairsListScreen({ navigation, route }) {
         <View style={{ width: 24 }} />
       </View>
 
-      {/* Filteri: popravci ili "trebalo bi" (ekskluzivno) */}
+      {/* Filteri: popravci (pending/completed/nepotpisani) ili "trebalo bi" (ekskluzivno) */}
       <View style={styles.filterContainer}>
         <TouchableOpacity
           style={[
             styles.filterToggle,
             activeList === 'repairs' && filter === 'pending' && styles.filterToggleRed,
             activeList === 'repairs' && filter === 'completed' && styles.filterToggleGreen,
+            activeList === 'repairs' && filter === 'nepotpisani' && styles.filterTogglePurple,
             activeList !== 'repairs' && styles.filterToggleMuted,
           ]}
           onPress={() => {
             setActiveList('repairs');
-            setFilter((prev) => (prev === 'completed' ? 'pending' : 'completed'));
+            setFilter((prev) => {
+              if (prev === 'completed') return 'pending';
+              if (prev === 'pending') return 'nepotpisani';
+              return 'pending';
+            });
           }}
           activeOpacity={0.85}
         >
@@ -367,10 +410,11 @@ export default function RepairsListScreen({ navigation, route }) {
               styles.filterToggleText,
               activeList === 'repairs' && filter === 'pending' && styles.filterToggleTextRed,
               activeList === 'repairs' && filter === 'completed' && styles.filterToggleTextGreen,
+              activeList === 'repairs' && filter === 'nepotpisani' && styles.filterToggleTextPurple,
               activeList !== 'repairs' && styles.filterToggleTextMuted,
             ]}
           >
-            {filter === 'completed' ? 'Završeni' : 'Prijavljeni'}
+            {filter === 'nepotpisani' ? 'Nepotpisani' : (filter === 'completed' ? 'Završeni' : 'Prijavljeni')}
           </Text>
         </TouchableOpacity>
 
@@ -485,8 +529,27 @@ const styles = StyleSheet.create({
   filterToggleTextGreen: {
     color: '#065f46',
   },
+  filterTogglePurple: {
+    backgroundColor: '#f3e8ff',
+    borderColor: '#a855f7',
+  },
+  filterToggleTextPurple: {
+    color: '#6b21a8',
+  },
   filterToggleTextMuted: {
     color: '#9ca3af',
+  },
+  periodAllButton: {
+    backgroundColor: '#dbeafe',
+    borderColor: '#3b82f6',
+  },
+  periodText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1f2937',
+  },
+  periodTextActive: {
+    color: '#1d4ed8',
   },
   filterPill: {
     paddingVertical: 10,
@@ -576,7 +639,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginTop: 4,
   },
-  completedByRow: {
+  reporterRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
@@ -584,6 +647,17 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     borderTopWidth: 1,
     borderTopColor: '#e5e7eb',
+  },
+  reporterText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#991b1b',
+  },
+  completedByRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 6,
   },
   completedByText: {
     fontSize: 13,

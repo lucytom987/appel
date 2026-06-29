@@ -165,6 +165,21 @@ export default function RepairDetailsScreen({ route, navigation }) {
     return parsed.toLocaleString('hr-HR');
   })();
 
+  const reporterLabel = (() => {
+    if (repairData?.status !== 'pending' && !repairData?.trebaloBi) return '';
+    if (repairData?.prijavio) return repairData.prijavio;
+    return '';
+  })();
+
+  const reportedAtLabel = (() => {
+    if (repairData?.status !== 'pending' && !repairData?.trebaloBi) return '';
+    const rawDate = repairData?.datumPrijave || repairData?.datumKvara;
+    if (!rawDate) return '';
+    const parsed = new Date(rawDate);
+    if (Number.isNaN(parsed.getTime())) return '';
+    return parsed.toLocaleString('hr-HR');
+  })();
+
   const [opisKvara, setOpisKvara] = useState(repairData.opisKvara || '');
   const [opisPopravka, setOpisPopravka] = useState(repairData.opisPopravka || '');
   const [isTrebaloBi, setIsTrebaloBi] = useState(
@@ -894,6 +909,20 @@ export default function RepairDetailsScreen({ route, navigation }) {
             <Text style={styles.toggleLabel}>Radni nalog potpisan</Text>
           </TouchableOpacity>
 
+          {status === 'pending' && (reporterLabel || reportedAtLabel) && (
+            <View style={styles.reporterAuditBox}>
+              <Ionicons name="person-add-outline" size={18} color="#dc2626" />
+              <View style={{ flex: 1 }}>
+                {reporterLabel ? (
+                  <Text style={styles.reporterAuditText}>Prijavio: {reporterLabel}</Text>
+                ) : null}
+                {reportedAtLabel ? (
+                  <Text style={styles.reporterAuditSubText}>Vrijeme prijave: {reportedAtLabel}</Text>
+                ) : null}
+              </View>
+            </View>
+          )}
+
           {status === 'completed' && (completedByLabel || completedAtLabel) && (
             <View style={styles.completionAuditBox}>
               <Ionicons name="person-circle-outline" size={18} color="#2563eb" />
@@ -1434,6 +1463,28 @@ const styles = StyleSheet.create({
   toggleLabel: {
     fontSize: ms(15),
     color: '#111827',
+  },
+  reporterAuditBox: {
+    marginTop: ms(10),
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: ms(8),
+    paddingVertical: ms(10),
+    paddingHorizontal: ms(12),
+    borderRadius: ms(10),
+    backgroundColor: '#fef2f2',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+  },
+  reporterAuditText: {
+    fontSize: ms(14),
+    fontWeight: '700',
+    color: '#991b1b',
+  },
+  reporterAuditSubText: {
+    marginTop: ms(2),
+    fontSize: ms(12),
+    color: '#dc2626',
   },
   completionAuditBox: {
     marginTop: ms(10),

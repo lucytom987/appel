@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { TouchableOpacity, View, Text, StyleSheet } from 'react-native';
+import { Alert, Linking, Platform, TouchableOpacity, View, Text, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ScreenOrientation from 'expo-screen-orientation';
+import Constants from 'expo-constants';
 import { AuthProvider } from './src/context/AuthContext';
 import Navigation from './src/navigation/Navigation';
 import { initDatabase, cleanupOrphans } from './src/database/db';
+import { appAPI } from './src/services/api';
 
 const STARTUP_TIPS = [
   'Druže, disciplina danas – ponos sutra.',
@@ -162,6 +164,101 @@ export default function App() {
     setShowTip(true);
     const timer = setTimeout(() => setShowTip(false), 10000);
     return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    const toVersionParts = (value) => String(value || '')
+      .split('.')
+      .map((part) => Number.parseInt(part, 10) || 0);
+
+    const compareVersion = (left, right) => {
+      const a = toVersionParts(left);
+      const b = toVersionParts(right);
+      const len = Math.max(a.length, b.length);
+      for (let i = 0; i < len; i += 1) {
+        const av = a[i] || 0;
+        const bv = b[i] || 0;
+        if (av > bv) return 1;
+        if (av < bv) return -1;
+      }
+      return 0;
+    };
+
+    const openStore = async (storeUrl, packageName) => {
+      const pkg = packageName || Constants?.expoConfig?.android?.package || 'hr.appel.elevators';
+      const marketUrl = `market://details?id=${pkg}`;
+      const webUrl = storeUrl || `https://play.google.com/store/apps/details?id=${pkg}`;
+
+      try {
+        if (Platform.OS === 'android') {
+          const canOpenMarket = await Linking.canOpenURL(marketUrl);
+          if (canOpenMarket) {
+            await Linking.openURL(marketUrl);
+            return;
+          }
+        }
+        await Linking.openURL(webUrl);
+      } catch (err) {
+        Alert.alert('Greška', 'Ne mogu otvoriti Google Play stranicu.');
+      }
+    };
+
+    const checkForUpdate = async () => {
+      try {
+        const response = await appAPI.getVersion();
+        const info = response?.data || {};
+
+        const latestVersion = info.latestVersion;
+        const minSupportedVersion = info.minSupportedVersion;
+        const latestVersionCode = Number(info.latestVersionCode || 0);
+        const minSupportedVersionCode = Number(info.minSupportedVersionCode || 0);
+        const storeUrl = info.playStoreUrl;
+        const packageName = info.packageName;
+
+        const currentVersion = Constants?.expoConfig?.version || '0.0.0';
+        const currentVersionCode = Number(
+          Constants?.expoConfig?.android?.versionCode
+          || Constants?.manifest2?.extra?.expoClient?.android?.versionCode
+          || 0
+        );
+
+        const hasNewVersion = latestVersion
+          ? compareVersion(currentVersion, latestVersion) < 0
+          : (latestVersionCode > 0 && currentVersionCode > 0 && currentVersionCode < latestVersionCode);
+
+        const requiresHardUpdate = minSupportedVersion
+          ? compareVersion(currentVersion, minSupportedVersion) < 0
+          : (minSupportedVersionCode > 0 && currentVersionCode > 0 && currentVersionCode < minSupportedVersionCode);
+
+        if (!hasNewVersion && !requiresHardUpdate) return;
+
+        const message = requiresHardUpdate
+          ? 'Potrebno je ažurirati aplikaciju za nastavak korištenja.'
+          : 'Dostupna je nova verzija aplikacije. Želite li ažurirati sada?';
+
+        if (requiresHardUpdate) {
+          Alert.alert('Obavezno ažuriranje', message, [
+            {
+              text: 'Ažuriraj',
+              onPress: () => openStore(storeUrl, packageName),
+            },
+          ], { cancelable: false });
+          return;
+        }
+
+        Alert.alert('Nova verzija dostupna', message, [
+          { text: 'Kasnije', style: 'cancel' },
+          {
+            text: 'Ažuriraj',
+            onPress: () => openStore(storeUrl, packageName),
+          },
+        ]);
+      } catch (err) {
+        console.log('ℹ️ Update check preskočen:', err?.message || 'n/a');
+      }
+    };
+
+    checkForUpdate();
   }, []);
 
   const handleDismissTip = () => setShowTip(false);

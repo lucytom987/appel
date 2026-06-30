@@ -84,6 +84,7 @@ app.use('/api/services', require('./routes/services'));
 app.use('/api/repairs', require('./routes/repairs'));
 app.use('/api/work-orders', require('./routes/workOrders'));
 app.use('/api/events', require('./routes/events'));
+app.use('/api/app', require('./routes/app'));
 app.use('/api/chatrooms', require('./routes/chatrooms'));
 app.use('/api/messages', require('./routes/messages'));
 app.use('/api/simcards', require('./routes/simcards'));

@@ -173,6 +173,10 @@ export const authAPI = {
   getMe: () => api.get('/auth/me'),
 };
 
+export const appAPI = {
+  getVersion: () => api.get('/app/version'),
+};
+
 // Elevators API
 export const elevatorsAPI = {
   getAll: (params) => api.get('/elevators', { params }),
@@ -267,7 +271,9 @@ export const repairsAPI = {
     }),
   update: (id, data) =>
     api.put(`/repairs/${id}`, {
+      elevatorId: data.elevatorId || data.elevator,
       status: data.status,
+      datumPrijave: data.datumPrijave || data.reportedDate,
       opisKvara: data.opisKvara || data.faultDescription,
       opisPopravka: data.opisPopravka || data.repairDescription,
       datumPopravka: data.datumPopravka || data.repairedDate,

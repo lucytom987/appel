@@ -26,6 +26,16 @@ function formatName(person) {
   return full || person.email || '';
 }
 
+function normalize(value) {
+  if (!value) return '';
+  return String(value)
+    .toLowerCase()
+    .replace(/č|ć/g, 'c')
+    .replace(/š/g, 's')
+    .replace(/ž/g, 'z')
+    .replace(/đ/g, 'd');
+}
+
 const confirmDelete = (baseRepair, navigation, setSaving, online, canDelete) => {
   if (!canDelete) {
     Alert.alert('Nedovoljno prava', 'Samo administratori ili menadžeri mogu brisati popravke.');
@@ -94,7 +104,7 @@ export default function EditRepairScreen({ route, navigation }) {
           navigation.goBack();
           return true;
         }
-        navigation.navigate('RepairDetails', { repair });
+        navigation.navigate('Repairs');
         return true;
       };
       const sub = BackHandler.addEventListener('hardwareBackPress', onBack);
@@ -118,10 +128,16 @@ export default function EditRepairScreen({ route, navigation }) {
   const elevatorId = (typeof baseRepair.elevatorId === 'object' && baseRepair.elevatorId !== null)
     ? (baseRepair.elevatorId._id || baseRepair.elevatorId.id)
     : baseRepair.elevatorId;
-  const elevator = elevatorDB.getById(elevatorId);
+  const initialElevator = elevatorDB.getById(elevatorId);
+  const availableElevators = useMemo(
+    () => (elevatorDB.getAll() || []).filter((e) => e && !e.is_deleted),
+    []
+  );
 
   const [showDateReported, setShowDateReported] = useState(false);
   const [showDateRepaired, setShowDateRepaired] = useState(false);
+  const [showElevatorPicker, setShowElevatorPicker] = useState(false);
+  const [elevatorSearchQuery, setElevatorSearchQuery] = useState('');
   const [saving, setSaving] = useState(false);
   const online = Boolean(isOnline && serverAwake);
 
@@ -132,12 +148,37 @@ export default function EditRepairScreen({ route, navigation }) {
   };
 
   const [form, setForm] = useState(() => ({
+    elevatorId: elevatorId || '',
     datumPrijave: parseDate(baseRepair.datumPrijave) || new Date(),
     datumPopravka: parseDate(baseRepair.datumPopravka),
     prijavio: baseRepair.prijavio || '',
     kontaktTelefon: baseRepair.kontaktTelefon || '',
     primioPoziv: baseRepair.primioPoziv || formatName(user) || '',
   }));
+
+  const selectedElevator = useMemo(() => {
+    if (!form.elevatorId) return initialElevator || null;
+    return elevatorDB.getById(form.elevatorId)
+      || availableElevators.find((e) => String(e.id || e._id) === String(form.elevatorId))
+      || initialElevator
+      || null;
+  }, [form.elevatorId, availableElevators, initialElevator]);
+
+  const filteredElevators = useMemo(() => {
+    const q = normalize(elevatorSearchQuery.trim());
+    if (!q) return availableElevators;
+
+    return availableElevators.filter((item) => {
+      const fields = [
+        item.nazivStranke,
+        item.ulica,
+        item.mjesto,
+        item.brojDizala,
+        item.brojUgovora,
+      ];
+      return fields.some((f) => normalize(f).includes(q));
+    });
+  }, [availableElevators, elevatorSearchQuery]);
 
   const [showingSaveHint, setShowingSaveHint] = useState(false);
 
@@ -152,9 +193,9 @@ export default function EditRepairScreen({ route, navigation }) {
   const formatDate = (date) => date ? date.toLocaleString('hr-HR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'Nije postavljeno';
 
     const handleSave = async () => {
-    setSaving(true);
     const id = baseRepair._id || baseRepair.id;
     const payload = {
+      elevatorId: form.elevatorId || elevatorId,
       datumPrijave: form.datumPrijave ? form.datumPrijave.toISOString() : null,
       datumPopravka: form.datumPopravka ? form.datumPopravka.toISOString() : null,
       status: baseRepair.status,
@@ -167,6 +208,13 @@ export default function EditRepairScreen({ route, navigation }) {
       radniNalogPotpisan: baseRepair.radniNalogPotpisan,
       popravkaUPotpunosti: baseRepair.popravkaUPotpunosti,
     };
+
+    if (!payload.elevatorId) {
+      Alert.alert('Greška', 'Odaberite dizalo prije spremanja.');
+      return;
+    }
+
+    setSaving(true);
 
     const merged = { ...baseRepair, ...payload, synced: 0, sync_status: 'dirty', updated_at: Date.now() };
 
@@ -195,7 +243,15 @@ export default function EditRepairScreen({ route, navigation }) {
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.navigate('RepairDetails', { repair })}>
+        <TouchableOpacity
+          onPress={() => {
+            if (navigation.canGoBack()) {
+              navigation.goBack();
+            } else {
+              navigation.navigate('Repairs');
+            }
+          }}
+        >
           <Ionicons name="arrow-back" size={24} color="#1f2937" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Uredi popravak</Text>
@@ -212,12 +268,71 @@ export default function EditRepairScreen({ route, navigation }) {
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ paddingBottom: 24 }}
         >
-          {elevator && (
+          {selectedElevator && (
             <View style={styles.card}>
               <Text style={styles.sectionTitle}>Dizalo</Text>
-              <Text style={styles.elevatorTitle}>{elevator.nazivStranke || ''}</Text>
-              <Text style={styles.elevatorDetail}>{elevator.ulica}, {elevator.mjesto}</Text>
-              <Text style={styles.elevatorCode}>Dizalo: {elevator.brojDizala}</Text>
+              <Text style={styles.elevatorTitle}>{selectedElevator.nazivStranke || ''}</Text>
+              <Text style={styles.elevatorDetail}>{selectedElevator.ulica}, {selectedElevator.mjesto}</Text>
+              <Text style={styles.elevatorCode}>Dizalo: {selectedElevator.brojDizala}</Text>
+
+              <TouchableOpacity style={styles.selectorButton} onPress={() => setShowElevatorPicker((v) => !v)}>
+                <Ionicons name={showElevatorPicker ? 'chevron-up' : 'chevron-down'} size={18} color="#1d4ed8" />
+                <Text style={styles.selectorButtonText}>Promijeni dizalo</Text>
+              </TouchableOpacity>
+
+              {showElevatorPicker && (
+                <View style={styles.elevatorPickerList}>
+                  <View style={styles.elevatorSearchWrap}>
+                    <Ionicons name="search-outline" size={18} color="#64748b" />
+                    <TextInput
+                      style={styles.elevatorSearchInput}
+                      value={elevatorSearchQuery}
+                      onChangeText={setElevatorSearchQuery}
+                      placeholder="Pretraži po adresi, mjestu, broju dizala..."
+                      placeholderTextColor="#94a3b8"
+                    />
+                    {elevatorSearchQuery ? (
+                      <TouchableOpacity onPress={() => setElevatorSearchQuery('')}>
+                        <Ionicons name="close-circle" size={18} color="#94a3b8" />
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
+
+                  <Text style={styles.elevatorPickerCount}>Pronađeno: {filteredElevators.length}</Text>
+
+                  <ScrollView style={styles.elevatorPickerScroll} nestedScrollEnabled>
+                    {filteredElevators.length === 0 ? (
+                      <Text style={styles.elevatorEmptyText}>Nema rezultata za pretragu.</Text>
+                    ) : filteredElevators.map((item) => {
+                      const id = item.id || item._id;
+                      const isSelected = String(form.elevatorId || '') === String(id || '');
+                      return (
+                        <TouchableOpacity
+                          key={String(id)}
+                          style={[styles.elevatorOption, isSelected && styles.elevatorOptionSelected]}
+                          onPress={() => {
+                            setForm((prev) => ({ ...prev, elevatorId: id }));
+                            setShowElevatorPicker(false);
+                          }}
+                        >
+                          <Ionicons
+                            name={isSelected ? 'radio-button-on' : 'radio-button-off'}
+                            size={18}
+                            color={isSelected ? '#2563eb' : '#9ca3af'}
+                          />
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.elevatorOptionTitle}>{item.nazivStranke || 'Bez naziva'}</Text>
+                            <Text style={styles.elevatorOptionSub}>
+                              {item.ulica || ''}{item.mjesto ? `, ${item.mjesto}` : ''}
+                              {item.brojDizala ? ` • Dizalo: ${item.brojDizala}` : ''}
+                            </Text>
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+              )}
             </View>
           )}
 
@@ -315,6 +430,74 @@ const styles = StyleSheet.create({
   elevatorTitle: { fontSize: ms(16), fontWeight: '700', color: '#111827' },
   elevatorDetail: { fontSize: ms(14), color: '#6b7280', marginTop: ms(2) },
   elevatorCode: { fontSize: ms(14), color: '#374151', marginTop: ms(4), fontWeight: '600' },
+  selectorButton: {
+    marginTop: ms(12),
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    backgroundColor: '#eff6ff',
+    borderRadius: ms(8),
+    paddingVertical: ms(10),
+    paddingHorizontal: ms(12),
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: ms(8),
+  },
+  selectorButtonText: { fontSize: ms(14), fontWeight: '700', color: '#1d4ed8' },
+  elevatorPickerList: {
+    marginTop: ms(10),
+    borderWidth: 1,
+    borderColor: '#dbeafe',
+    borderRadius: ms(10),
+    overflow: 'hidden',
+    backgroundColor: '#fff',
+  },
+  elevatorSearchWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: ms(8),
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+    paddingHorizontal: ms(10),
+    paddingVertical: ms(8),
+    backgroundColor: '#f8fafc',
+  },
+  elevatorSearchInput: {
+    flex: 1,
+    fontSize: ms(14),
+    color: '#0f172a',
+    paddingVertical: ms(4),
+  },
+  elevatorPickerCount: {
+    fontSize: ms(12),
+    color: '#64748b',
+    paddingHorizontal: ms(12),
+    paddingTop: ms(8),
+    paddingBottom: ms(4),
+    fontWeight: '600',
+  },
+  elevatorPickerScroll: {
+    maxHeight: ms(260),
+  },
+  elevatorOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: ms(10),
+    paddingVertical: ms(10),
+    paddingHorizontal: ms(12),
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  elevatorOptionSelected: {
+    backgroundColor: '#eff6ff',
+  },
+  elevatorOptionTitle: { fontSize: ms(14), fontWeight: '700', color: '#111827' },
+  elevatorOptionSub: { fontSize: ms(12), color: '#64748b', marginTop: ms(2) },
+  elevatorEmptyText: {
+    fontSize: ms(13),
+    color: '#64748b',
+    paddingHorizontal: ms(12),
+    paddingVertical: ms(14),
+  },
   label: { fontSize: ms(14), fontWeight: '600', color: '#1f2937', marginBottom: ms(8) },
   dateButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: ms(8), padding: ms(12), gap: ms(10) },
   dateText: { fontSize: ms(16), color: '#1f2937' },

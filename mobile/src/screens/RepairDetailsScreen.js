@@ -828,7 +828,9 @@ export default function RepairDetailsScreen({ route, navigation }) {
           <Ionicons name="arrow-back" size={24} color="#1f2937" />
         </TouchableOpacity>
         <Text style={styles.headerTitle} numberOfLines={1}>{`Popravak "${elevator?.brojDizala || 'Dizalo'}"`}</Text>
-        <View style={{ width: 24 }} />
+        <TouchableOpacity onPress={() => navigation.navigate('EditRepair', { repair: repairData })}>
+          <Ionicons name="create-outline" size={22} color="#1f2937" />
+        </TouchableOpacity>
       </View>
 
       <KeyboardAvoidingView

@@ -3,6 +3,7 @@ import React, {
   useEffect,
   useMemo,
   useCallback,
+  useRef,
 } from 'react';
 import {
   View,
@@ -15,7 +16,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Print from 'expo-print';
 import { serviceDB, elevatorDB, userDB } from '../database/db';
 import { syncAll } from '../services/syncService';
@@ -75,6 +76,72 @@ const parseDate = (value) => {
 };
 
 const formatDateLabel = (date) => (date ? date.toLocaleDateString('hr-HR') : '-');
+
+const getServiceStatus = (daysLeft) => {
+  if (typeof daysLeft !== 'number' || Number.isNaN(daysLeft)) {
+    return {
+      label: 'OK',
+      backgroundColor: '#f0fdf4',
+      borderColor: '#16a34a',
+      badgeBackground: '#dcfce7',
+      badgeTextColor: '#166534',
+      textColor: '#166534',
+    };
+  }
+
+  if (daysLeft < 0) {
+    return {
+      label: 'KASNI',
+      backgroundColor: '#fff1f2',
+      borderColor: '#dc2626',
+      badgeBackground: '#ffe4e6',
+      badgeTextColor: '#b91c1c',
+      textColor: '#b91c1c',
+    };
+  }
+
+  if (daysLeft <= 2) {
+    return {
+      label: 'HITNO',
+      backgroundColor: '#fff7ed',
+      borderColor: '#ea580c',
+      badgeBackground: '#ffedd5',
+      badgeTextColor: '#c2410c',
+      textColor: '#c2410c',
+    };
+  }
+
+  if (daysLeft <= 7) {
+    return {
+      label: 'USKORO',
+      backgroundColor: '#fffbeb',
+      borderColor: '#d97706',
+      badgeBackground: '#fef3c7',
+      badgeTextColor: '#b45309',
+      textColor: '#b45309',
+    };
+  }
+
+  if (daysLeft <= 15) {
+    return {
+      label: 'PLANIRANO',
+      backgroundColor: '#eff6ff',
+      borderColor: '#2563eb',
+      badgeBackground: '#dbeafe',
+      badgeTextColor: '#1d4ed8',
+      textColor: '#1d4ed8',
+    };
+  }
+
+  return {
+    label: 'OK',
+    backgroundColor: '#f0fdf4',
+    borderColor: '#16a34a',
+    badgeBackground: '#dcfce7',
+    badgeTextColor: '#166534',
+    textColor: '#166534',
+  };
+};
 
 const normalizeElevatorId = (raw) => {
   if (typeof raw === 'object' && raw !== null) return raw._id || raw.id;
@@ -165,12 +232,14 @@ export default function ServicesListScreen({ navigation }) {
   const [filteredServices, setFilteredServices] = useState([]);
   const [annualOccurrences, setAnnualOccurrences] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
-  const [filter, setFilter] = useState('serviced');
+  const [filter, setFilter] = useState('notServiced');
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [periodPickerOpen, setPeriodPickerOpen] = useState(false);
   const [tempMonth, setTempMonth] = useState(selectedMonth);
   const [tempYear, setTempYear] = useState(selectedYear);
+  const [statusToast, setStatusToast] = useState(null);
+  const toastTimeout = useRef(null);
 
   const monthsByYear = useMemo(() => {
     const map = new Map();
@@ -531,6 +600,67 @@ export default function ServicesListScreen({ navigation }) {
     }
   }, [loadServices, refreshAnnualOccurrences]);
 
+  const FILTER_META = {
+    notServiced: { label: 'NESERVISIRANI', color: '#dc2626', bg: '#fef2f2', border: '#fecaca' },
+    serviced: { label: 'SERVISIRANI', color: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0' },
+    annual: { label: 'GODIŠNJI PREGLED', color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe' },
+  };
+  const FILTER_ORDER = ['notServiced', 'serviced', 'annual'];
+  const activeFilterMeta = FILTER_META[filter] || FILTER_META.notServiced;
+
+  const showStatusToast = useCallback((label) => {
+    setStatusToast(label);
+    if (toastTimeout.current) clearTimeout(toastTimeout.current);
+    toastTimeout.current = setTimeout(() => {
+      setStatusToast(null);
+    }, 5000);
+  }, []);
+
+  const clearStatusToast = useCallback(() => {
+    if (toastTimeout.current) clearTimeout(toastTimeout.current);
+    setStatusToast(null);
+  }, []);
+
+  useEffect(() => () => {
+    if (toastTimeout.current) clearTimeout(toastTimeout.current);
+  }, []);
+
+  useEffect(() => {
+    showStatusToast(FILTER_META[filter].label);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const cycleFilter = useCallback(() => {
+    setFilter((prev) => {
+      const idx = FILTER_ORDER.indexOf(prev);
+      const next = FILTER_ORDER[(idx + 1) % FILTER_ORDER.length];
+      showStatusToast(FILTER_META[next].label);
+      return next;
+    });
+  }, [showStatusToast]);
+
+  const goPrevMonth = useCallback(() => {
+    clearStatusToast();
+    setSelectedMonth((m) => {
+      if (m === 0) {
+        setSelectedYear((y) => y - 1);
+        return 11;
+      }
+      return m - 1;
+    });
+  }, [clearStatusToast]);
+
+  const goNextMonth = useCallback(() => {
+    clearStatusToast();
+    setSelectedMonth((m) => {
+      if (m === 11) {
+        setSelectedYear((y) => y + 1);
+        return 0;
+      }
+      return m + 1;
+    });
+  }, [clearStatusToast]);
+
   const handlePrintNotServiced = useCallback(async () => {
     try {
       const rows = dedupedServices.map((item) => {
@@ -625,6 +755,7 @@ export default function ServicesListScreen({ navigation }) {
     const dateLabel = formatDateLabel(serviceDate);
 
     const showNextBadge = daysUntilNext !== null;
+    const status = getServiceStatus(daysUntilNext);
     const nextLabel =
       daysUntilNext === null
         ? ''
@@ -649,36 +780,50 @@ export default function ServicesListScreen({ navigation }) {
     };
 
     return (
-      <View style={styles.serviceCard}>
+      <View
+        style={[
+          styles.serviceCard,
+          {
+            backgroundColor: status.backgroundColor,
+            borderColor: status.borderColor,
+          },
+        ]}
+      >
+        <View style={[styles.statusStrip, { backgroundColor: status.borderColor }]} />
         <TouchableOpacity
           onPress={handlePress}
           style={styles.serviceContent}
         >
           <View style={styles.serviceHeader}>
-            <View style={styles.serviceInfo}>
-              <Text style={styles.elevatorName} numberOfLines={1}>{display.title}</Text>
-              <Text style={styles.serviserLabel} numberOfLines={1}>Serviser: {serviserLabel}</Text>
+            <View style={styles.serviceInfoRow}>
+              <View style={[styles.serviceIconWrap, { backgroundColor: status.badgeBackground }]}>
+                <Ionicons name="business-outline" size={16} color={status.textColor} />
+              </View>
+              <View style={styles.serviceInfo}>
+                <Text style={styles.elevatorName} numberOfLines={1}>{display.title}</Text>
+                <Text style={styles.serviserLabel} numberOfLines={1}>Serviser: {serviserLabel}</Text>
+              </View>
             </View>
 
             <View style={styles.serviceMeta}>
-              <Text style={styles.serviceMetaDate}>{String(dateLabel)}</Text>
-              <Ionicons
-                name={item.synced ? 'cloud-done-outline' : 'cloud-offline-outline'}
-                size={16}
-                color={item.synced ? '#10b981' : '#ef4444'}
-                style={styles.syncIcon}
-              />
-              {showNextBadge ? (
-                <View
-                  style={[
-                    styles.nextServiceBadge,
-                    daysUntilNext < 7 && styles.nextServiceBadgeUrgent,
-                    daysUntilNext < 0 && styles.nextServiceBadgeOverdue,
-                  ]}
-                >
-                  <Text style={styles.nextServiceText}>{String(nextLabel)}</Text>
-                </View>
-              ) : null}
+              <View style={styles.serviceMetaTopRow}>
+                <Text style={[styles.serviceMetaDate, { color: status.textColor }]}>{String(dateLabel)}</Text>
+                <Ionicons
+                  name={item.synced ? 'cloud-done-outline' : 'cloud-offline-outline'}
+                  size={16}
+                  color={item.synced ? '#10b981' : '#ef4444'}
+                  style={styles.syncIcon}
+                />
+                {showNextBadge ? (
+                  <View style={[styles.nextServiceBadge, { backgroundColor: status.badgeBackground }]}>
+                    <Text style={[styles.nextServiceText, { color: status.badgeTextColor }]}>{String(nextLabel)}</Text>
+                  </View>
+                ) : null}
+              </View>
+              <View style={styles.serviceStatusRow}>
+                <View style={[styles.statusDot, { backgroundColor: status.textColor }]} />
+                <Text style={[styles.serviceStatusText, { color: status.textColor }]}>{status.label}</Text>
+              </View>
             </View>
           </View>
 
@@ -710,7 +855,7 @@ export default function ServicesListScreen({ navigation }) {
   const keyExtractor = (item, index) => item?._id || item?.id || String(index);
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       <View
         style={[
           styles.header,
@@ -721,63 +866,46 @@ export default function ServicesListScreen({ navigation }) {
           },
         ]}
       >
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBack}>
           <Ionicons name="arrow-back" size={24} color="#1f2937" />
         </TouchableOpacity>
-        <View style={styles.headerCenter}>
+
+        <View style={styles.monthNav}>
+          <TouchableOpacity onPress={goPrevMonth} style={styles.monthArrow} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="chevron-back" size={22} color="#475569" />
+          </TouchableOpacity>
+
           <TouchableOpacity
             style={[
-              styles.headerToggle,
-              filter === 'serviced' && styles.headerToggleGreen,
-              filter === 'notServiced' && styles.headerToggleRed,
+              styles.monthButton,
+              { backgroundColor: activeFilterMeta.bg, borderColor: activeFilterMeta.border },
             ]}
-            onPress={() => setFilter((prev) => (prev === 'serviced' ? 'notServiced' : 'serviced'))}
-          >
-            <Text
-              style={[
-                styles.headerToggleText,
-                filter === 'serviced' && styles.headerToggleTextGreen,
-                filter === 'notServiced' && styles.headerToggleTextRed,
-              ]}
-            >
-              {filter === 'notServiced' ? 'Neservisirani' : 'Servisirani'}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.headerAnnualPill, filter === 'annual' && styles.headerAnnualPillActive]}
-            onPress={() => setFilter('annual')}
-          >
-            <Text style={[styles.headerAnnualText, filter === 'annual' && styles.headerAnnualTextActive]}>
-              Godišnji pregled
-            </Text>
-          </TouchableOpacity>
-        </View>
-        <View style={{ width: 24 }} />
-      </View>
-
-      <View style={[styles.summaryBar, styles.summaryBarColumn]}>
-        <View style={styles.summaryRow}>
-          <TouchableOpacity
-            style={[styles.summaryPill, styles.summaryPillPressable]}
-            onPress={() => {
+            onPress={cycleFilter}
+            onLongPress={() => {
+              clearStatusToast();
               setTempMonth(selectedMonth);
               setTempYear(selectedYear);
               setPeriodPickerOpen(true);
             }}
+            activeOpacity={0.85}
           >
-            <Ionicons name="calendar-outline" size={18} color="#0f172a" />
-            <Text style={styles.summaryDateText}>{MONTHS[selectedMonth]} {selectedYear}</Text>
+            <Text style={[styles.monthButtonText, { color: activeFilterMeta.color }]} numberOfLines={1}>
+              {statusToast ? statusToast : `${MONTHS[selectedMonth]} ${selectedYear}`}
+            </Text>
           </TouchableOpacity>
-          {filter === 'notServiced' && dedupedServices.length > 0 && (
-            <TouchableOpacity
-              style={styles.printButton}
-              onPress={handlePrintNotServiced}
-            >
-              <Ionicons name="print-outline" size={20} color="#fff" />
-              <Text style={styles.printButtonText}>Printaj</Text>
-            </TouchableOpacity>
-          )}
+
+          <TouchableOpacity onPress={goNextMonth} style={styles.monthArrow} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="chevron-forward" size={22} color="#475569" />
+          </TouchableOpacity>
         </View>
+
+        {filter === 'notServiced' && dedupedServices.length > 0 ? (
+          <TouchableOpacity onPress={handlePrintNotServiced} style={styles.headerPrint}>
+            <Ionicons name="print-outline" size={22} color="#0ea5e9" />
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.headerBack} />
+        )}
       </View>
 
       <FlatList
@@ -786,7 +914,7 @@ export default function ServicesListScreen({ navigation }) {
         keyExtractor={keyExtractor}
         contentContainerStyle={[
           styles.listContent,
-          { paddingBottom: (insets.bottom || 0) + 16 },
+          { paddingBottom: 16 },
         ]}
         refreshControl={(
           <RefreshControl
@@ -872,7 +1000,7 @@ export default function ServicesListScreen({ navigation }) {
           </View>
         </View>
       </Modal>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -889,57 +1017,42 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     backgroundColor: '#f9fafb',
   },
-  headerCenter: {
+  headerBack: {
+    width: 40,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+  },
+  headerPrint: {
+    width: 40,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+  },
+  monthNav: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  monthArrow: {
+    padding: 6,
+    borderRadius: 999,
+  },
+  monthButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-  },
-  headerToggle: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    backgroundColor: '#fff',
-  },
-  headerToggleGreen: {
-    borderColor: '#15803d',
-    backgroundColor: '#dcfce7',
-  },
-  headerToggleRed: {
-    borderColor: '#dc2626',
-    backgroundColor: '#fecdd3',
-  },
-  headerToggleText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#1f2937',
-  },
-  headerToggleTextGreen: {
-    color: '#065f46',
-  },
-  headerToggleTextRed: {
-    color: '#7f1d1d',
-  },
-  headerAnnualPill: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
     borderRadius: 999,
-    borderWidth: 1,
-    borderColor: '#c7d2fe',
-    backgroundColor: '#fff',
+    borderWidth: 1.5,
+    minWidth: 210,
+    justifyContent: 'center',
   },
-  headerAnnualPillActive: {
-    borderColor: '#1d4ed8',
-    backgroundColor: '#dbeafe',
-  },
-  headerAnnualText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#1f2937',
-  },
-  headerAnnualTextActive: {
-    color: '#1d4ed8',
+  monthButtonText: {
+    fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: 0.2,
   },
   pickerOverlay: {
     flex: 1,
@@ -982,97 +1095,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#111827',
-  },
-  summaryBar: {
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    backgroundColor: '#f9fafb',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-    gap: 10,
-  },
-  summaryBarColumn: {
-    gap: 10,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    width: '100%',
-  },
-  summaryPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    justifyContent: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    minHeight: 44,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-  },
-  summaryPillPressable: {
-    flex: 0,
-    width: 'auto',
-    alignSelf: 'center',
-  },
-  printButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: '#0ea5e9',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 12,
-    minHeight: 44,
-  },
-  printButtonText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 14,
-  },
-  summaryPillGreen: {
-    backgroundColor: '#dcfce7',
-    borderColor: '#bbf7d0',
-  },
-  summaryPillOrange: {
-    backgroundColor: '#ffedd5',
-    borderColor: '#fed7aa',
-  },
-  summaryPillBlue: {
-    backgroundColor: '#e0e7ff',
-    borderColor: '#c7d2fe',
-  },
-  summaryText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#0f172a',
-  },
-  summaryTextEmphasis: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#0f172a',
-  },
-  summaryDateText: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#0f172a',
-    textAlign: 'center',
-  },
-  summaryTextGreen: {
-    color: '#065f46',
-  },
-  summaryTextOrange: {
-    color: '#b45309',
-  },
-  summaryTextBlue: {
-    color: '#1d4ed8',
   },
   periodCard: {
     backgroundColor: '#fff',
@@ -1121,11 +1143,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 12,
     marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.08,
     shadowRadius: 6,
     elevation: 3,
+    overflow: 'hidden',
+  },
+  statusStrip: {
+    width: 4,
   },
   serviceContent: {
     flex: 1,
@@ -1137,6 +1165,19 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 6,
     marginBottom: 8,
+  },
+  serviceInfoRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  serviceIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   serviceInfo: {
     flex: 1,
@@ -1159,12 +1200,17 @@ const styles = StyleSheet.create({
     color: '#4b5563',
   },
   serviceMeta: {
+    alignItems: 'flex-end',
+    gap: 5,
+  },
+  serviceMetaTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
   serviceMetaDate: {
-    fontSize: 13,
+    fontSize: 12.5,
+    fontWeight: '700',
     color: '#374151',
   },
   syncIcon: {
@@ -1173,19 +1219,28 @@ const styles = StyleSheet.create({
   nextServiceBadge: {
     backgroundColor: '#dbeafe',
     paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 5,
-  },
-  nextServiceBadgeUrgent: {
-    backgroundColor: '#fef3c7',
-  },
-  nextServiceBadgeOverdue: {
-    backgroundColor: '#fee2e2',
+    paddingVertical: 3,
+    borderRadius: 7,
   },
   nextServiceText: {
     fontSize: 10.5,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#1f2937',
+  },
+  serviceStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  serviceStatusText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
   serviceDescription: {
     fontSize: 13.5,

@@ -13,6 +13,7 @@ import {
   Image,
   KeyboardAvoidingView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { companyAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -160,7 +161,7 @@ const CompanySettingsScreen = ({ navigation }) => {
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       <StatusBar barStyle="dark-content" backgroundColor="#F5F5F5" />
       
       <View style={styles.pageHeader}>
@@ -357,7 +358,7 @@ const CompanySettingsScreen = ({ navigation }) => {
         )}
       </View>
       </KeyboardAvoidingView>
-    </View>
+    </SafeAreaView>
   );
 };
 

@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, BackHandler, Image, Modal, ActivityIndicator, Alert } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { elevatorDB, userDB, serviceDB } from '../database/db';
@@ -211,7 +212,7 @@ export default function ServiceDetailsScreen({ route, navigation }) {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => {
           if (navigation.canGoBack()) {
@@ -384,7 +385,7 @@ export default function ServiceDetailsScreen({ route, navigation }) {
 
         <View style={{ height: 60 }} />
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 

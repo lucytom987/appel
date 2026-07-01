@@ -11,6 +11,7 @@ import {
   Alert,
   ScrollView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import ms from '../utils/scale';
 
@@ -53,11 +54,12 @@ export default function RegisterScreen({ navigation }) {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior="padding"
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : ms(2)}
-    >
+    <SafeAreaView style={styles.container} edges={['bottom']}>
+      <KeyboardAvoidingView
+        style={styles.keyboardWrap}
+        behavior="padding"
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : ms(2)}
+      >
       <ScrollView
         ref={scrollRef}
         contentContainerStyle={styles.scrollContent}
@@ -166,7 +168,8 @@ export default function RegisterScreen({ navigation }) {
           </View>
         </View>
       </ScrollView>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
@@ -174,6 +177,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#1976D2',
+  },
+  keyboardWrap: {
+    flex: 1,
   },
   scrollContent: {
     flexGrow: 1,

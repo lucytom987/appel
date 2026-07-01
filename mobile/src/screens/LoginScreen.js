@@ -11,6 +11,7 @@ import {
   Platform,
   Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import * as SecureStore from 'expo-secure-store';
 import ms from '../utils/scale';
@@ -37,11 +38,12 @@ export default function LoginScreen({ navigation }) {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior="padding"
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : ms(2)}
-    >
+    <SafeAreaView style={styles.container} edges={['bottom']}>
+      <KeyboardAvoidingView
+        style={styles.keyboardWrap}
+        behavior="padding"
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : ms(2)}
+      >
       <View style={styles.formContainer}>
         {/* Logo/Header */}
         <View style={styles.header}>
@@ -114,7 +116,8 @@ export default function LoginScreen({ navigation }) {
           APPEL v{APP_VERSION} • Offline-first
         </Text>
       </View>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
@@ -122,6 +125,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#1976D2',
+  },
+  keyboardWrap: {
+    flex: 1,
   },
   formContainer: {
     flex: 1,

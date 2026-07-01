@@ -9,6 +9,7 @@ import {
   RefreshControl,
   Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { elevatorDB } from '../database/db';
 import { syncAll, primeFullSync } from '../services/syncService';
@@ -316,7 +317,7 @@ export default function ElevatorsListScreen({ navigation }) {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.navigate('Home')} style={styles.backButton}>
@@ -380,7 +381,7 @@ export default function ElevatorsListScreen({ navigation }) {
           <Ionicons name="add" size={28} color="#fff" />
         </TouchableOpacity>
       )}
-    </View>
+    </SafeAreaView>
   );
 }
 

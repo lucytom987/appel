@@ -8,6 +8,7 @@ import {
   RefreshControl,
   BackHandler,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { repairDB, elevatorDB, userDB } from '../database/db';
 import { syncAll } from '../services/syncService';
@@ -381,7 +382,7 @@ export default function RepairsListScreen({ navigation, route }) {
   );
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Header s odabirom mjeseca/godine i SVE opcije */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.navigate('Home')}>
@@ -475,7 +476,7 @@ export default function RepairsListScreen({ navigation, route }) {
         stickySectionHeadersEnabled={false}
         contentContainerStyle={styles.listContent}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 

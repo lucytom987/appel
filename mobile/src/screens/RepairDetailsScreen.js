@@ -1,5 +1,6 @@
 ﻿import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, BackHandler, Image, ActivityIndicator, Modal, Linking, KeyboardAvoidingView, Platform, LayoutAnimation, UIManager } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
 import { elevatorDB, repairDB, userDB } from '../database/db';
@@ -816,7 +817,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => {
           if (navigation.canGoBack()) {
@@ -1298,7 +1299,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
         onCancel={() => { setShowSignatureModal(false); setPendingSignWorkOrderId(null); }}
         loading={signingLoading}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 

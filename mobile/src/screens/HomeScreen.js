@@ -30,6 +30,7 @@ const GAUGE_MASK_HEIGHT = GAUGE_RADIUS;
 const GAUGE_BG_IMAGE = { uri: 'https://images.unsplash.com/photo-1517244871184-6ac0400d035b?auto=format&fit=crop&w=400&q=60' };
 const DIZALA_CARD_IMAGE = require('../../assets/dizala_card.png');
 const MAP_CARD_IMAGE = require('../../assets/map_card.png');
+const REPAIRS_CARD_IMAGE = require('../../assets/popravci.png');
 const GAUGE_NEEDLE_COLOR = '#22c55e';
 const GAUGE_NEEDLE_WIDTH = 4;
 const GAUGE_NEEDLE_HEIGHT = GAUGE_RADIUS - 6;
@@ -65,7 +66,7 @@ export default function HomeScreen({ navigation }) {
   const gridPadding = isTinyScreen ? 12 : 15;
   const cardWidth = (screenWidth - (gridPadding * 2) - gridGap) / 2;
   const topCardHeight = isTinyScreen ? 194 : (isSmallScreen ? 202 : 212);
-  const bottomCardHeight = isTinyScreen ? 248 : (isSmallScreen ? 258 : 268);
+  const bottomCardHeight = topCardHeight;
 
   // Konvertiraj isOnline u boolean eksplicitno
   const online = Boolean(isOnline);
@@ -511,7 +512,7 @@ export default function HomeScreen({ navigation }) {
               styles.statCard,
               styles.statCardBottom,
               styles.statCardServices,
-              { width: cardWidth, minHeight: bottomCardHeight },
+              { width: cardWidth, height: bottomCardHeight },
             ]}
             onPress={() => navigation.navigate('Services')}
           >
@@ -573,26 +574,33 @@ export default function HomeScreen({ navigation }) {
               styles.statCard,
               styles.statCardBottom,
               styles.statCardRepairs,
-              { width: cardWidth, minHeight: bottomCardHeight },
+              { width: cardWidth, height: bottomCardHeight },
             ]}
             onPress={() => navigation.navigate('Repairs')}
           >
-            <View style={[styles.cardIconBubble, styles.cardIconBubbleRepairs]}>
-              <Ionicons name="construct" size={30} color="#f59e0b" />
+            <View style={styles.repairsTopArea}>
+              <View style={styles.repairsList}>
+                <View style={styles.repairsRow}>
+                  <View style={[styles.repairsRowDot, { backgroundColor: '#ef4444' }]} />
+                  <Text style={styles.repairsRowLabel}>ČEKANJE</Text>
+                  <Text style={[styles.repairsRowNumber, { color: '#ef4444' }]}>{stats.repairsPending}</Text>
+                </View>
+                <View style={styles.repairsRow}>
+                  <View style={[styles.repairsRowDot, { backgroundColor: '#f59e0b' }]} />
+                  <Text style={styles.repairsRowLabel}>TREBALO BI</Text>
+                  <Text style={[styles.repairsRowNumber, { color: '#f59e0b' }]}>{stats.repairsTrebaloBi}</Text>
+                </View>
+                <View style={styles.repairsRow}>
+                  <View style={[styles.repairsRowDot, { backgroundColor: '#2563eb' }]} />
+                  <Text style={styles.repairsRowLabel}>NEPOTPISANO</Text>
+                  <Text style={[styles.repairsRowNumber, { color: '#2563eb' }]}>{stats.repairsUnsigned}</Text>
+                </View>
+              </View>
             </View>
-            <View style={styles.repairsCounters}>
-              <Text style={styles.repairsSubLabel}>
-                ČEKANJE: <Text style={styles.repairsPending}>{stats.repairsPending}</Text>
-              </Text>
-              <Text style={styles.repairsSubLabel}>
-                TREBALO BI: <Text style={styles.repairsTrebaloBi}>{stats.repairsTrebaloBi}</Text>
-              </Text>
-              <Text style={styles.repairsSubLabel}>
-                NEPOTPISANO: <Text style={styles.repairsUnsigned}>{stats.repairsUnsigned}</Text>
-              </Text>
+            <View style={styles.repairsCardFooter}>
+              <View style={styles.cardBottomDivider} />
+              <Text style={styles.cardBottomTitle}>POPRAVCI</Text>
             </View>
-            <View style={styles.cardBottomDivider} />
-            <Text style={styles.cardBottomTitle}>POPRAVCI</Text>
           </TouchableOpacity>
         </View>
 
@@ -739,7 +747,7 @@ const styles = StyleSheet.create({
     paddingBottom: 2,
   },
   statCardBottom: {
-    minHeight: 262,
+    minHeight: 212,
   },
   dizalaCardImage: {
     width: '100%',
@@ -766,6 +774,8 @@ const styles = StyleSheet.create({
   statCardRepairs: {
     backgroundColor: '#f3f7fb',
     borderColor: '#dfe7f1',
+    padding: 0,
+    overflow: 'hidden',
   },
   mapCard: {
     paddingTop: 10,
@@ -801,6 +811,79 @@ const styles = StyleSheet.create({
   cardIconBubbleRepairs: {
     marginTop: 2,
     marginBottom: 10,
+  },
+  repairsList: {
+    flex: 1,
+    width: '100%',
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  repairsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
+  },
+  repairsRowDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 8,
+  },
+  repairsRowLabel: {
+    flex: 1,
+    fontSize: rf(12, 10, 18),
+    fontWeight: '700',
+    color: '#334155',
+    letterSpacing: 0.4,
+  },
+  repairsRowNumber: {
+    fontSize: rf(20, 16, 28),
+    fontWeight: '800',
+    minWidth: 28,
+    textAlign: 'right',
+  },
+  repairsCardBackground: {
+    flex: 1,
+    width: '100%',
+  },
+  repairsCardBackgroundImage: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+  },
+  repairsCardBlend: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(15, 23, 42, 0.16)',
+  },
+  repairsTopArea: {
+    flex: 1,
+    width: '100%',
+    overflow: 'hidden',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+  },
+  repairsCardFooter: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    paddingTop: 6,
+    paddingBottom: 16,
+    backgroundColor: '#f3f7fb',
   },
   statNumberTop: {
     fontSize: rf(38, 28, 50),
@@ -881,23 +964,30 @@ const styles = StyleSheet.create({
     fontFamily: Platform.select({ ios: 'HelveticaNeue-Medium', android: 'sans-serif-medium', default: 'sans-serif' }),
   },
   repairsCounters: {
-    marginTop: 6,
+    flex: 1,
     width: '100%',
     flexDirection: 'column',
-    alignItems: 'stretch',
-    justifyContent: 'flex-start',
-    gap: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   repairsSubLabel: {
-    fontSize: rf(14, 11, 30),
-    color: '#1f2937',
+    fontSize: rf(13, 10.5, 20),
+    color: '#f8fafc',
     fontWeight: '800',
-    textAlign: 'left',
+    textAlign: 'center',
     flexShrink: 1,
     letterSpacing: 0.2,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-    paddingBottom: 6,
+    width: '86%',
+    backgroundColor: 'rgba(15, 23, 42, 0.24)',
+    borderRadius: 10,
+    paddingVertical: 5,
+    paddingHorizontal: 8,
+    textShadowColor: 'rgba(15, 23, 42, 0.65)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   repairsPending: {
     color: '#ef4444',

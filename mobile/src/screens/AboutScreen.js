@@ -11,8 +11,8 @@ import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 
 export default function AboutScreen({ navigation }) {
-  const currentVersion = Constants?.expoConfig?.version || '2.0.7';
-  const currentVersionDate = '01.07.2026';
+  const currentVersion = Constants?.expoConfig?.version || '2.0.8';
+  const currentVersionDate = '03.07.2026';
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -186,7 +186,7 @@ export default function AboutScreen({ navigation }) {
             © 2026 APPEL • Elevator Management
           </Text>
           <Text style={styles.footerSubtext}>
-            01.07.2026 • Android
+            03.07.2026 • Android
           </Text>
         </View>
 

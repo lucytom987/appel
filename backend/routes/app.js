@@ -3,15 +3,15 @@ const express = require('express');
 const router = express.Router();
 
 router.get('/version', (req, res) => {
-  const latestVersion = process.env.LATEST_APP_VERSION || '2.0.6';
-  const minSupportedVersion = process.env.MIN_SUPPORTED_APP_VERSION || '2.0.6';
+  const latestVersion = process.env.LATEST_APP_VERSION || '2.0.7';
+  const minSupportedVersion = process.env.MIN_SUPPORTED_APP_VERSION || '2.0.7';
 
   const latestVersionCodeRaw = process.env.LATEST_APP_VERSION_CODE;
   const minSupportedVersionCodeRaw = process.env.MIN_SUPPORTED_APP_VERSION_CODE;
 
   const latestVersionCode = Number.isFinite(Number(latestVersionCodeRaw))
     ? Number(latestVersionCodeRaw)
-    : 10;
+    : 11;
 
   const minSupportedVersionCode = Number.isFinite(Number(minSupportedVersionCodeRaw))
     ? Number(minSupportedVersionCodeRaw)
@@ -28,6 +28,7 @@ router.get('/version', (req, res) => {
     minSupportedVersionCode,
     playStoreUrl,
     packageName,
+    source: 'env',
     checkedAt: new Date().toISOString(),
   });
 });

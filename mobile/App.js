@@ -216,7 +216,8 @@ export default function App() {
         const packageName = info.packageName;
 
         const currentVersion = Constants?.expoConfig?.version || '0.0.0';
-        const currentVersionCode = Number(
+        const currentNativeBuildVersion = Number.parseInt(Constants?.nativeBuildVersion || '0', 10) || 0;
+        const currentVersionCode = currentNativeBuildVersion || Number(
           Constants?.expoConfig?.android?.versionCode
           || Constants?.manifest2?.extra?.expoClient?.android?.versionCode
           || 0
@@ -246,7 +247,7 @@ export default function App() {
           return;
         }
 
-        Alert.alert('Nova verzija dostupna', message, [
+        Alert.alert('Dostupna nova verzija', message, [
           { text: 'Kasnije', style: 'cancel' },
           {
             text: 'Ažuriraj',

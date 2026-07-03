@@ -18,6 +18,18 @@ services:
         generateValue: true
       - key: CORS_ORIGIN
         value: "*"
+      - key: ANDROID_PACKAGE_NAME
+        value: hr.appel.elevators
+      - key: PLAY_STORE_URL
+        value: https://play.google.com/store/apps/details?id=hr.appel.elevators
+      - key: LATEST_APP_VERSION
+        value: 2.0.7
+      - key: LATEST_APP_VERSION_CODE
+        value: 11
+      - key: MIN_SUPPORTED_APP_VERSION
+        value: 2.0.7
+      - key: MIN_SUPPORTED_APP_VERSION_CODE
+        value: 11
 
   - type: web
     name: appel-backend-staging
@@ -38,3 +50,15 @@ services:
         generateValue: true
       - key: CORS_ORIGIN
         value: "*"
+      - key: ANDROID_PACKAGE_NAME
+        value: hr.appel.elevators.staging
+      - key: PLAY_STORE_URL
+        value: https://play.google.com/store/apps/details?id=hr.appel.elevators
+      - key: LATEST_APP_VERSION
+        value: 2.0.7
+      - key: LATEST_APP_VERSION_CODE
+        value: 11
+      - key: MIN_SUPPORTED_APP_VERSION
+        value: 2.0.7
+      - key: MIN_SUPPORTED_APP_VERSION_CODE
+        value: 11

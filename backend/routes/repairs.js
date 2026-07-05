@@ -1,7 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
+const fs = require('fs');
 const Repair = require('../models/Repair');
+const WorkOrder = require('../models/WorkOrder');
 const Elevator = require('../models/Elevator');
 const User = require('../models/User');
 const { authenticate, checkRole } = require('../middleware/auth');
@@ -264,6 +266,19 @@ router.put('/:id', authenticate, async (req, res) => {
       return res.status(404).json({ success: false, message: 'Popravak je obrisan' });
     }
 
+    const sentWorkOrder = await WorkOrder.findOne({
+      repairId: existing._id,
+      companyId: req.companyId,
+      status: 'sent',
+    }).select('_id workOrderNumber').lean();
+
+    if (sentWorkOrder) {
+      return res.status(409).json({
+        success: false,
+        message: `Popravak je zaključan jer je radni nalog ${sentWorkOrder.workOrderNumber || ''} već potpisan i poslan.`,
+      });
+    }
+
     // Legacy cleanup: ukloni polje "flag" ako dolazi iz starog klijenta
     if (Object.prototype.hasOwnProperty.call(req.body, 'flag')) {
       delete req.body.flag;
@@ -347,6 +362,21 @@ router.delete('/:id', authenticate, checkRole(['menadzer', 'admin']), async (req
       return res.status(404).json({ success: false, message: 'Popravak nije pronađen ili ne pripada vašoj firmi' });
     }
 
+    const relatedWorkOrder = await WorkOrder.findOne({ repairId: repair._id, companyId: req.companyId });
+    if (relatedWorkOrder) {
+      if (relatedWorkOrder.pdfPath) {
+        try {
+          if (fs.existsSync(relatedWorkOrder.pdfPath)) {
+            await fs.promises.unlink(relatedWorkOrder.pdfPath);
+          }
+        } catch (unlinkErr) {
+          console.error('Greška pri brisanju PDF datoteke povezanog radnog naloga:', unlinkErr.message || unlinkErr);
+        }
+      }
+
+      await WorkOrder.deleteOne({ _id: relatedWorkOrder._id, companyId: req.companyId });
+    }
+
     const now = new Date();
     repair.is_deleted = true;
     repair.deleted_at = now;
@@ -365,6 +395,18 @@ router.delete('/:id', authenticate, checkRole(['menadzer', 'admin']), async (req
       ipAdresa: req.ip,
       opis: 'Obrisan popravak'
     });
+
+    if (relatedWorkOrder) {
+      await logAction({
+        korisnikId: req.user._id,
+        akcija: 'DELETE',
+        entitet: 'WorkOrder',
+        entitetId: relatedWorkOrder._id,
+        entitetNaziv: relatedWorkOrder.workOrderNumber,
+        ipAdresa: req.ip,
+        opis: 'Automatski obrisan radni nalog zbog brisanja popravka',
+      });
+    }
 
     res.json({ success: true, message: 'Popravak obrisan', data: repair });
   } catch (error) {

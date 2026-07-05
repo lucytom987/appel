@@ -226,6 +226,9 @@ export default function RepairDetailsScreen({ route, navigation }) {
   const [signingLoading, setSigningLoading] = useState(false);
   const [creatingWorkOrder, setCreatingWorkOrder] = useState(false);
   const [creatingWorkOrderSeconds, setCreatingWorkOrderSeconds] = useState(0);
+  const [deletingWorkOrder, setDeletingWorkOrder] = useState(false);
+  const [deletingRepair, setDeletingRepair] = useState(false);
+  const [showWorkOrderMenu, setShowWorkOrderMenu] = useState(false);
   const [korisnici, setKorisnici] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [showKolegePickerIndex, setShowKolegePickerIndex] = useState(null);
@@ -255,6 +258,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
     fotografije: false,
     serviseri: false,
   });
+  const isRepairLocked = workOrder?.status === 'sent';
 
   useEffect(() => {
     const isNewArchitecture = Boolean(global?.nativeFabricUIManager);
@@ -380,6 +384,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
   };
 
   const addAdditionalServicer = () => {
+    if (isRepairLocked) return;
     if (additionalServicers.length >= MAX_ADDITIONAL_SERVICERS) return;
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setAdditionalServicers((prev) => [...prev, { userId: null, hours: '' }]);
@@ -387,12 +392,14 @@ export default function RepairDetailsScreen({ route, navigation }) {
   };
 
   const removeAdditionalServicer = (index) => {
+    if (isRepairLocked) return;
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setAdditionalServicers((prev) => prev.filter((_, idx) => idx !== index));
     setShowKolegePickerIndex((prev) => (prev === index ? null : prev != null && prev > index ? prev - 1 : prev));
   };
 
   const updateAdditionalServicerHours = (index, hours) => {
+    if (isRepairLocked) return;
     setAdditionalServicers((prev) => prev.map((entry, idx) => (
       idx === index ? { ...entry, hours } : entry
     )));
@@ -404,6 +411,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
   };
 
   const adjustHoursValue = (currentValue, delta, onChange) => {
+    if (isRepairLocked) return;
     const parsed = parseHalfHourInput(currentValue);
     const base = Number.isFinite(parsed) ? parsed : 0;
     const next = Math.max(0, Math.round((base + delta) * 2) / 2);
@@ -413,8 +421,9 @@ export default function RepairDetailsScreen({ route, navigation }) {
   const renderHoursControl = (value, onChange, placeholder = '0') => (
     <View style={styles.hoursStepperRow}>
       <TouchableOpacity
-        style={styles.hoursStepperBtn}
+        style={[styles.hoursStepperBtn, isRepairLocked && styles.disabledAction]}
         onPress={() => adjustHoursValue(value, -0.5, onChange)}
+        disabled={isRepairLocked}
         activeOpacity={0.8}
       >
         <Ionicons name="remove" size={18} color="#334155" />
@@ -424,6 +433,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
         style={styles.hoursStepperInput}
         value={value}
         onChangeText={onChange}
+        editable={!isRepairLocked}
         keyboardType="decimal-pad"
         placeholder={placeholder}
         placeholderTextColor="#9ca3af"
@@ -434,8 +444,9 @@ export default function RepairDetailsScreen({ route, navigation }) {
       </View>
 
       <TouchableOpacity
-        style={styles.hoursStepperBtn}
+        style={[styles.hoursStepperBtn, isRepairLocked && styles.disabledAction]}
         onPress={() => adjustHoursValue(value, 0.5, onChange)}
+        disabled={isRepairLocked}
         activeOpacity={0.8}
       >
         <Ionicons name="add" size={18} color="#334155" />
@@ -611,6 +622,84 @@ export default function RepairDetailsScreen({ route, navigation }) {
     );
   };
 
+  const handleDeleteWorkOrder = () => {
+    const woId = workOrder?._id || workOrder?.id;
+    if (!woId) return;
+
+    Alert.alert(
+      'Obriši radni nalog',
+      `Sigurno želiš obrisati radni nalog ${workOrder?.workOrderNumber || ''}?`,
+      [
+        { text: 'Odustani', style: 'cancel' },
+        {
+          text: 'Obriši',
+          style: 'destructive',
+          onPress: async () => {
+            setDeletingWorkOrder(true);
+            try {
+              await workOrdersAPI.delete(woId);
+              setWorkOrder(null);
+              setRadniNalogPotpisan(false);
+              setRepairData((prev) => ({ ...prev, radniNalogPotpisan: false }));
+              Alert.alert('Obrisano', 'Radni nalog je obrisan. Popravak je ponovno otključan za uređivanje.');
+            } catch (err) {
+              Alert.alert('Greška', err?.response?.data?.message || err?.message || 'Brisanje radnog naloga nije uspjelo');
+            } finally {
+              setDeletingWorkOrder(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleDeleteRepair = () => {
+    const id = repairData._id || repairData.id;
+    if (!id) return;
+
+    Alert.alert(
+      'Obriši popravak',
+      'Sigurno želiš obrisati ovaj popravak?',
+      [
+        { text: 'Odustani', style: 'cancel' },
+        {
+          text: 'Obriši',
+          style: 'destructive',
+          onPress: async () => {
+            setDeletingRepair(true);
+            try {
+              if (online && !String(id).startsWith('local_')) {
+                await repairsAPI.delete(id);
+              }
+              repairDB.delete(id);
+              Alert.alert('Obrisano', 'Popravak je obrisan.', [
+                {
+                  text: 'OK',
+                  onPress: () => {
+                    if (navigation.canGoBack()) {
+                      navigation.goBack();
+                    } else {
+                      navigation.navigate('Repairs', { activeList: returnTo, filter });
+                    }
+                  },
+                },
+              ]);
+            } catch (err) {
+              Alert.alert('Greška', err?.response?.data?.message || err?.message || 'Brisanje popravka nije uspjelo');
+            } finally {
+              setDeletingRepair(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const openWorkOrderMenu = () => {
+    if (!workOrder) return;
+    setShowWorkOrderMenu(true);
+  };
+
   const promptWorkOrderFlow = (repairId) => {
     Alert.alert(
       'Kreiranje radnog naloga',
@@ -663,6 +752,11 @@ export default function RepairDetailsScreen({ route, navigation }) {
   }, [repairData.trebaloBi, repairData.status, repairData.radniNalogPotpisan, repairData.category, repairData.type]);
 
   const handleSave = async () => {
+    if (isRepairLocked) {
+      Alert.alert('Zaključano', 'Popravak se više ne može uređivati jer je radni nalog potpisan i poslan.');
+      return;
+    }
+
     const id = repairData._id || repairData.id;
     const wasCompleted = repairData.status === 'completed';
     const existsInDB = repairDB.getById(id);
@@ -836,7 +930,11 @@ export default function RepairDetailsScreen({ route, navigation }) {
           <Ionicons name="arrow-back" size={24} color="#1f2937" />
         </TouchableOpacity>
         <Text style={styles.headerTitle} numberOfLines={1}>{`Popravak "${elevator?.brojDizala || 'Dizalo'}"`}</Text>
-        <TouchableOpacity onPress={() => navigation.navigate('EditRepair', { repair: repairData })}>
+        <TouchableOpacity
+          onPress={() => navigation.navigate('EditRepair', { repair: repairData })}
+          disabled={isRepairLocked}
+          style={isRepairLocked && styles.disabledAction}
+        >
           <Ionicons name="create-outline" size={22} color="#1f2937" />
         </TouchableOpacity>
       </View>
@@ -847,6 +945,15 @@ export default function RepairDetailsScreen({ route, navigation }) {
         keyboardVerticalOffset={Platform.OS === 'ios' ? ms(90) : ms(2)}
       >
       <ScrollView style={styles.content} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: ms(100) }}>
+        {isRepairLocked && (
+          <View style={[styles.card, styles.lockedBannerCard]}>
+            <Ionicons name="lock-closed" size={18} color="#b45309" />
+            <Text style={styles.lockedBannerText}>
+              Ovaj popravak je zaključan jer je radni nalog potpisan i poslan.
+            </Text>
+          </View>
+        )}
+
         <View style={styles.card}>
           <View style={styles.sectionTitleRow}>
             <Ionicons name="warning-outline" size={18} color="#ef4444" />
@@ -856,6 +963,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
             style={[styles.input, styles.textArea]}
             value={opisKvara}
             onChangeText={setOpisKvara}
+            editable={!isRepairLocked}
             placeholder="Detaljno opišite kvar dizala..."
             placeholderTextColor="#9ca3af"
             multiline
@@ -871,6 +979,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
             style={[styles.input, styles.textArea]}
             value={opisPopravka}
             onChangeText={setOpisPopravka}
+            editable={!isRepairLocked}
             placeholder="Opišite izvršeni popravak..."
             placeholderTextColor="#9ca3af"
             multiline
@@ -925,7 +1034,8 @@ export default function RepairDetailsScreen({ route, navigation }) {
                 <TouchableOpacity
                   key={opt.value}
                   style={[styles.statusChip, active && styles.statusChipActive, active && { borderColor: opt.color }]}
-                  onPress={() => setStatus(opt.value)}
+                  onPress={() => !isRepairLocked && setStatus(opt.value)}
+                  disabled={isRepairLocked}
                 >
                   <Text style={[styles.statusChipText, active && { color: opt.color }]}>{opt.label}</Text>
                 </TouchableOpacity>
@@ -935,7 +1045,8 @@ export default function RepairDetailsScreen({ route, navigation }) {
 
           <TouchableOpacity
             style={[styles.toggleRow, radniNalogPotpisan && styles.toggleRowActive]}
-            onPress={() => setRadniNalogPotpisan((p) => !p)}
+            onPress={() => !isRepairLocked && setRadniNalogPotpisan((p) => !p)}
+            disabled={isRepairLocked}
           >
             <Ionicons name={radniNalogPotpisan ? 'checkbox' : 'square-outline'} size={20} color={radniNalogPotpisan ? '#10b981' : '#6b7280'} />
             <Text style={styles.toggleLabel}>Radni nalog potpisan</Text>
@@ -987,6 +1098,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
                     style={[styles.input, styles.materijalNaziv]}
                     value={stavka.naziv}
                     onChangeText={(text) => updateMaterijalStavka(index, 'naziv', text)}
+                    editable={!isRepairLocked}
                     placeholder="Naziv"
                     placeholderTextColor="#9ca3af"
                   />
@@ -994,6 +1106,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
                     style={[styles.input, styles.materijalKolicina]}
                     value={stavka.kolicina}
                     onChangeText={(text) => updateMaterijalStavka(index, 'kolicina', text)}
+                    editable={!isRepairLocked}
                     placeholder="Kol."
                     placeholderTextColor="#9ca3af"
                     keyboardType="decimal-pad"
@@ -1002,15 +1115,16 @@ export default function RepairDetailsScreen({ route, navigation }) {
                     style={[styles.input, styles.materijalJedinica]}
                     value={stavka.jedinica}
                     onChangeText={(text) => updateMaterijalStavka(index, 'jedinica', text)}
+                    editable={!isRepairLocked}
                     placeholder="Jed."
                     placeholderTextColor="#9ca3af"
                   />
-                  <TouchableOpacity style={styles.removeMaterijalBtn} onPress={() => removeMaterijalStavka(index)}>
+                  <TouchableOpacity style={[styles.removeMaterijalBtn, isRepairLocked && styles.disabledAction]} onPress={() => !isRepairLocked && removeMaterijalStavka(index)} disabled={isRepairLocked}>
                     <Ionicons name="close-circle" size={22} color="#ef4444" />
                   </TouchableOpacity>
                 </View>
               ))}
-              <TouchableOpacity style={styles.addMaterijalBtn} onPress={addMaterijalStavka}>
+              <TouchableOpacity style={[styles.addMaterijalBtn, isRepairLocked && styles.disabledAction]} onPress={() => !isRepairLocked && addMaterijalStavka()} disabled={isRepairLocked}>
                 <Ionicons name="add-circle-outline" size={18} color="#2563eb" />
                 <Text style={styles.addMaterijalText}>Dodaj stavku materijala</Text>
               </TouchableOpacity>
@@ -1019,6 +1133,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
                 style={[styles.input, { minHeight: ms(60), textAlignVertical: 'top' }]}
                 value={utroseniMaterijal}
                 onChangeText={setUtroseniMaterijal}
+                editable={!isRepairLocked}
                 placeholder="Npr. materijal donesen iz skladišta"
                 placeholderTextColor="#9ca3af"
                 multiline
@@ -1041,7 +1156,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
               <View style={styles.additionalHeaderRow}>
                 <Text style={[styles.fieldLabel, { marginBottom: 0, flex: 1 }]}>Po potrebi dodaj kolege</Text>
                 {additionalServicers.length < MAX_ADDITIONAL_SERVICERS && (
-                  <TouchableOpacity style={styles.addKolegaButton} onPress={addAdditionalServicer}>
+                  <TouchableOpacity style={[styles.addKolegaButton, isRepairLocked && styles.disabledAction]} onPress={addAdditionalServicer} disabled={isRepairLocked}>
                     <Ionicons name="add-circle-outline" size={18} color="#2563eb" />
                     <Text style={styles.addKolegaButtonText}>Dodaj</Text>
                   </TouchableOpacity>
@@ -1058,12 +1173,12 @@ export default function RepairDetailsScreen({ route, navigation }) {
                   <View key={`additional-servicer-${index}`} style={styles.additionalServicerCard}>
                     <View style={styles.additionalServicerTopRow}>
                       <Text style={styles.additionalServicerTitle}>{`Serviser ${index + 2}`}</Text>
-                      <TouchableOpacity style={styles.removeKolegaInlineBtn} onPress={() => removeAdditionalServicer(index)}>
+                      <TouchableOpacity style={[styles.removeKolegaInlineBtn, isRepairLocked && styles.disabledAction]} onPress={() => removeAdditionalServicer(index)} disabled={isRepairLocked}>
                         <Ionicons name="trash-outline" size={18} color="#ef4444" />
                       </TouchableOpacity>
                     </View>
 
-                    <TouchableOpacity style={styles.kolegaToggle} onPress={() => toggleKolege(index)}>
+                    <TouchableOpacity style={[styles.kolegaToggle, isRepairLocked && styles.disabledAction]} onPress={() => !isRepairLocked && toggleKolege(index)} disabled={isRepairLocked}>
                       <Ionicons name={showKolegePickerIndex === index ? 'chevron-up' : 'chevron-down'} size={18} color="#0f172a" />
                       <Text style={styles.kolegaToggleText}>{label || 'Odaberi servisera'}</Text>
                     </TouchableOpacity>
@@ -1095,7 +1210,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
                                 <TouchableOpacity
                                   key={`${index}-${kid}`}
                                   style={[styles.userRow, selected && styles.userRowSelected]}
-                                  onPress={() => selectKolega(index, kid)}
+                                  onPress={() => !isRepairLocked && selectKolega(index, kid)}
                                 >
                                   <Ionicons name={selected ? 'radio-button-on' : 'radio-button-off'} size={18} color={selected ? '#0ea5e9' : '#94a3b8'} />
                                   <Text style={styles.userRowText}>{`${k.ime || ''} ${k.prezime || ''}`.trim() || k.email}</Text>
@@ -1140,12 +1255,13 @@ export default function RepairDetailsScreen({ route, navigation }) {
                 <TouchableOpacity
                   style={[styles.photoButton, uploadingPhoto && styles.photoButtonDisabled]}
                   onPress={async () => {
+                    if (isRepairLocked) return;
                     const result = await pickAndUploadPhoto();
                     if (result) {
                       setPhotos((prev) => [...prev, result]);
                     }
                   }}
-                  disabled={uploadingPhoto}
+                  disabled={uploadingPhoto || isRepairLocked}
                 >
                   {uploadingPhoto ? (
                     <ActivityIndicator size="small" color="#fff" />
@@ -1158,12 +1274,13 @@ export default function RepairDetailsScreen({ route, navigation }) {
                 <TouchableOpacity
                   style={[styles.photoButton, uploadingPhoto && styles.photoButtonDisabled]}
                   onPress={async () => {
+                    if (isRepairLocked) return;
                     const result = await takePhotoWithCamera();
                     if (result) {
                       setPhotos((prev) => [...prev, result]);
                     }
                   }}
-                  disabled={uploadingPhoto}
+                  disabled={uploadingPhoto || isRepairLocked}
                 >
                   {uploadingPhoto ? (
                     <ActivityIndicator size="small" color="#fff" />
@@ -1188,7 +1305,8 @@ export default function RepairDetailsScreen({ route, navigation }) {
                         </TouchableOpacity>
                         <TouchableOpacity
                           style={styles.photoRemoveBtn}
-                          onPress={() => setPhotos(photos.filter((_, i) => i !== idx))}
+                          onPress={() => !isRepairLocked && setPhotos(photos.filter((_, i) => i !== idx))}
+                          disabled={isRepairLocked}
                         >
                           <Ionicons name="close" size={16} color="#fff" />
                         </TouchableOpacity>
@@ -1228,32 +1346,21 @@ export default function RepairDetailsScreen({ route, navigation }) {
                   {workOrderStatusLabel(workOrder.status)}
                 </Text>
               </View>
+              <TouchableOpacity
+                style={[styles.workOrderMenuBtn, (deletingWorkOrder || deletingRepair) && styles.disabledAction]}
+                onPress={openWorkOrderMenu}
+                disabled={deletingWorkOrder || deletingRepair}
+              >
+                <Ionicons name="ellipsis-horizontal" size={18} color="#334155" />
+              </TouchableOpacity>
             </View>
             
             <Text style={{ fontSize: ms(13), color: '#374151', marginBottom: ms(4) }}>
               <Text style={{ fontWeight: '700' }}>Broj:</Text> {workOrder.workOrderNumber}
             </Text>
-            <Text style={{ fontSize: ms(13), color: '#374151', marginBottom: ms(12) }}>
+            <Text style={{ fontSize: ms(13), color: '#374151', marginBottom: ms(8) }}>
               <Text style={{ fontWeight: '700' }}>Kreiran:</Text> {new Date(workOrder.created_at).toLocaleString('hr-HR')}
             </Text>
-
-            <View style={{ flexDirection: 'row', gap: ms(8) }}>
-              <TouchableOpacity
-                style={[styles.secondaryButton, { flex: 1, marginTop: 0 }]}
-                onPress={() => openWorkOrderPreview(workOrder.viewUrl)}
-              >
-                <Ionicons name="eye-outline" size={18} color="#2563eb" />
-                <Text style={styles.secondaryText}>Pregled</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.secondaryButton, { flex: 1, marginTop: 0 }]}
-                onPress={() => openWorkOrderDownload(workOrder.downloadUrl)}
-              >
-                <Ionicons name="download-outline" size={18} color="#2563eb" />
-                <Text style={styles.secondaryText}>Preuzmi PDF</Text>
-              </TouchableOpacity>
-            </View>
 
             {workOrder.status === 'draft' && (
               <TouchableOpacity
@@ -1267,31 +1374,44 @@ export default function RepairDetailsScreen({ route, navigation }) {
           </View>
         )}
 
-        <TouchableOpacity style={styles.primaryButton} onPress={handleSave} disabled={saving}>
+        <TouchableOpacity style={[styles.primaryButton, isRepairLocked && styles.workOrderButtonDisabled]} onPress={handleSave} disabled={saving || isRepairLocked}>
           <Ionicons name="save-outline" size={18} color="#fff" />
-          <Text style={styles.primaryButtonText}>{saving ? 'Spremam...' : 'Spremi'}</Text>
+          <Text style={styles.primaryButtonText}>{isRepairLocked ? 'Zaključano' : (saving ? 'Spremam...' : 'Spremi')}</Text>
         </TouchableOpacity>
 
-        {/* Tipka za kreiranje radnog naloga */}
+        {/* Tipka za kreiranje/pregled radnog naloga */}
         <TouchableOpacity
           style={[
-            styles.workOrderButton, 
+            styles.workOrderButton,
             (!online || String(repairData._id || repairData.id).startsWith('local_')) && styles.workOrderButtonDisabled
           ]}
           onPress={handleCreateWorkOrder}
           disabled={!online || loadingWorkOrder || String(repairData._id || repairData.id).startsWith('local_')}
         >
-          <Ionicons 
-            name="document-text-outline" 
-            size={18} 
-            color={(online && !String(repairData._id || repairData.id).startsWith('local_')) ? "#fff" : "#9ca3af"} 
+          <Ionicons
+            name="document-text-outline"
+            size={18}
+            color={(online && !String(repairData._id || repairData.id).startsWith('local_')) ? '#fff' : '#9ca3af'}
           />
           <Text style={[
-            styles.workOrderButtonText, 
+            styles.workOrderButtonText,
             (!online || String(repairData._id || repairData.id).startsWith('local_')) && { color: '#9ca3af' }
           ]}>
             {loadingWorkOrder ? 'Učitavam...' : workOrder ? 'Pregled radnog naloga' : 'Kreiraj radni nalog'}
           </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.secondaryButton, styles.dangerButtonSoft, { marginTop: ms(12) }, (deletingRepair || deletingWorkOrder) && styles.disabledAction]}
+          onPress={handleDeleteRepair}
+          disabled={deletingRepair || deletingWorkOrder}
+        >
+          {deletingRepair ? (
+            <ActivityIndicator size="small" color="#9f1239" />
+          ) : (
+            <Ionicons name="trash-outline" size={18} color="#9f1239" />
+          )}
+          <Text style={[styles.secondaryText, styles.dangerButtonSoftText]}>Obriši popravak</Text>
         </TouchableOpacity>
 
         <View style={{ height: 60 }} />
@@ -1314,6 +1434,52 @@ export default function RepairDetailsScreen({ route, navigation }) {
             <Text style={styles.loadingTitle}>Kreiram radni nalog...</Text>
             <Text style={styles.loadingSubtitle}>Pričekaj malo, obrada traje duže na sporijoj mreži.</Text>
             <Text style={styles.loadingTimer}>Trajanje: {creatingWorkOrderSeconds}s</Text>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={showWorkOrderMenu} transparent animationType="fade" onRequestClose={() => setShowWorkOrderMenu(false)}>
+        <View style={styles.workOrderMenuOverlay}>
+          <View style={styles.workOrderMenuCard}>
+            <View style={styles.workOrderMenuHeader}>
+              <Text style={styles.workOrderMenuTitle}>Radni nalog {workOrder?.workOrderNumber || ''}</Text>
+              <TouchableOpacity onPress={() => setShowWorkOrderMenu(false)} style={styles.workOrderMenuCloseBtn}>
+                <Ionicons name="close" size={20} color="#334155" />
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              style={styles.workOrderMenuActionBtn}
+              onPress={() => {
+                setShowWorkOrderMenu(false);
+                if (workOrder?.viewUrl) openWorkOrderPreview(workOrder.viewUrl);
+              }}
+            >
+              <Ionicons name="eye-outline" size={18} color="#1d4ed8" />
+              <Text style={styles.workOrderMenuActionText}>Pregled</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.workOrderMenuActionBtn}
+              onPress={() => {
+                setShowWorkOrderMenu(false);
+                if (workOrder?.downloadUrl) openWorkOrderDownload(workOrder.downloadUrl);
+              }}
+            >
+              <Ionicons name="download-outline" size={18} color="#1d4ed8" />
+              <Text style={styles.workOrderMenuActionText}>Preuzmi PDF</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.workOrderMenuActionBtn, styles.workOrderMenuDangerBtn]}
+              onPress={() => {
+                setShowWorkOrderMenu(false);
+                handleDeleteWorkOrder();
+              }}
+            >
+              <Ionicons name="trash-outline" size={18} color="#b91c1c" />
+              <Text style={styles.workOrderMenuDangerText}>Obriši radni nalog</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -1400,6 +1566,84 @@ const styles = StyleSheet.create({
     color: '#2563eb',
     fontWeight: '700',
     fontSize: ms(14),
+  },
+  dangerButtonSoft: {
+    backgroundColor: '#ffe4e6',
+    borderColor: '#fda4af',
+  },
+  dangerButtonSoftText: {
+    color: '#be123c',
+  },
+  workOrderMenuBtn: {
+    marginLeft: ms(8),
+    width: ms(30),
+    height: ms(30),
+    borderRadius: ms(15),
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#f8fafc',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  workOrderMenuOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.35)',
+    justifyContent: 'center',
+    paddingHorizontal: ms(22),
+  },
+  workOrderMenuCard: {
+    backgroundColor: '#fff',
+    borderRadius: ms(18),
+    padding: ms(14),
+  },
+  workOrderMenuHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: ms(8),
+  },
+  workOrderMenuTitle: {
+    flex: 1,
+    textAlign: 'center',
+    marginLeft: ms(24),
+    fontSize: ms(20),
+    fontWeight: '800',
+    color: '#0f172a',
+  },
+  workOrderMenuCloseBtn: {
+    width: ms(28),
+    height: ms(28),
+    borderRadius: ms(14),
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f1f5f9',
+  },
+  workOrderMenuActionBtn: {
+    marginTop: ms(10),
+    borderWidth: 1,
+    borderColor: '#dbeafe',
+    backgroundColor: '#eff6ff',
+    borderRadius: ms(12),
+    paddingVertical: ms(12),
+    paddingHorizontal: ms(12),
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: ms(8),
+  },
+  workOrderMenuActionText: {
+    fontSize: ms(15),
+    fontWeight: '700',
+    color: '#1d4ed8',
+  },
+  workOrderMenuDangerBtn: {
+    borderColor: '#fecaca',
+    backgroundColor: '#fef2f2',
+  },
+  workOrderMenuDangerText: {
+    fontSize: ms(15),
+    fontWeight: '700',
+    color: '#b91c1c',
   },
   modalOverlay: {
     flex: 1,
@@ -1853,6 +2097,23 @@ const styles = StyleSheet.create({
     marginTop: ms(10),
     fontSize: ms(12),
     color: '#64748b',
+    fontWeight: '600',
+  },
+  disabledAction: {
+    opacity: 0.45,
+  },
+  lockedBannerCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: ms(8),
+    borderWidth: 1,
+    borderColor: '#fcd34d',
+    backgroundColor: '#fffbeb',
+  },
+  lockedBannerText: {
+    flex: 1,
+    fontSize: ms(13),
+    color: '#92400e',
     fontWeight: '600',
   },
 });

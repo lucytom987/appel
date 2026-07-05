@@ -203,6 +203,7 @@ export const workOrdersAPI = {
   getOne: (id) => api.get(`/work-orders/${id}`),
   getByRepair: (repairId) => api.get(`/work-orders/by-repair/${repairId}`),
   sign: (id, data) => api.post(`/work-orders/${id}/sign`, data),
+  delete: (id) => api.delete(`/work-orders/${id}`),
 };
 
 // Company API - Company Settings

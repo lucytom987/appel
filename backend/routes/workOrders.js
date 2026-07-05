@@ -10,7 +10,7 @@ let chromium;
 try { chromium = require('@sparticuz/chromium'); } catch (e) { chromium = null; }
 
 const router = express.Router();
-const { authenticate } = require('../middleware/auth');
+const { authenticate, checkRole } = require('../middleware/auth');
 const { logAction } = require('../services/auditService');
 const { sendWorkOrderEmail } = require('../services/emailService');
 // const { generatePdfFromHtml, generateQRCode } = require('../services/workOrderPdfService'); // PRIVREMENO ISKLJUČENO
@@ -563,6 +563,54 @@ router.get('/by-repair/:repairId', authenticate, async (req, res) => {
   } catch (error) {
     console.error('Greška pri dohvaćanju radnog naloga:', error);
     return res.status(500).json({ message: 'Greška poslužitelja' });
+  }
+});
+
+// Delete work order (manager/admin) and unlock linked repair
+router.delete('/:id', authenticate, checkRole(['menadzer', 'admin']), async (req, res) => {
+  try {
+    const workOrder = await WorkOrder.findOne({ _id: req.params.id, companyId: req.companyId });
+    if (!workOrder) {
+      return res.status(404).json({ success: false, message: 'Radni nalog nije pronađen ili ne pripada vašoj firmi' });
+    }
+
+    if (workOrder.pdfPath) {
+      try {
+        if (fs.existsSync(workOrder.pdfPath)) {
+          await fs.promises.unlink(workOrder.pdfPath);
+        }
+      } catch (unlinkErr) {
+        console.error('Greška pri brisanju PDF datoteke radnog naloga:', unlinkErr.message || unlinkErr);
+      }
+    }
+
+    await Repair.findOneAndUpdate(
+      { _id: workOrder.repairId, companyId: req.companyId },
+      {
+        $set: {
+          radniNalogPotpisan: false,
+          updated_at: new Date(),
+          updated_by: req.user._id,
+        },
+      }
+    );
+
+    await WorkOrder.deleteOne({ _id: workOrder._id, companyId: req.companyId });
+
+    await logAction({
+      korisnikId: req.user._id,
+      akcija: 'DELETE',
+      entitet: 'WorkOrder',
+      entitetId: workOrder._id,
+      entitetNaziv: workOrder.workOrderNumber,
+      ipAdresa: req.ip,
+      opis: 'Obrisan radni nalog',
+    });
+
+    return res.json({ success: true, message: 'Radni nalog obrisan' });
+  } catch (error) {
+    console.error('Greška pri brisanju radnog naloga:', error);
+    return res.status(500).json({ success: false, message: 'Greška pri brisanju radnog naloga' });
   }
 });
 

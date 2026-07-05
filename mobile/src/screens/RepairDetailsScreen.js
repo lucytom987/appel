@@ -224,6 +224,8 @@ export default function RepairDetailsScreen({ route, navigation }) {
   const [showSignatureModal, setShowSignatureModal] = useState(false);
   const [pendingSignWorkOrderId, setPendingSignWorkOrderId] = useState(null);
   const [signingLoading, setSigningLoading] = useState(false);
+  const [creatingWorkOrder, setCreatingWorkOrder] = useState(false);
+  const [creatingWorkOrderSeconds, setCreatingWorkOrderSeconds] = useState(0);
   const [korisnici, setKorisnici] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [showKolegePickerIndex, setShowKolegePickerIndex] = useState(null);
@@ -260,6 +262,19 @@ export default function RepairDetailsScreen({ route, navigation }) {
       UIManager.setLayoutAnimationEnabledExperimental(true);
     }
   }, []);
+
+  useEffect(() => {
+    if (!creatingWorkOrder) {
+      setCreatingWorkOrderSeconds(0);
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setCreatingWorkOrderSeconds((prev) => prev + 1);
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [creatingWorkOrder]);
 
   // Učitaj postojeći radni nalog (ako postoji)
   useEffect(() => {
@@ -568,6 +583,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
         {
           text: 'Kreiraj',
           onPress: async () => {
+            setCreatingWorkOrder(true);
             try {
               const draftRes = await workOrdersAPI.createFromRepair(id);
               const newWorkOrder = draftRes?.data?.data;
@@ -575,15 +591,8 @@ export default function RepairDetailsScreen({ route, navigation }) {
 
               Alert.alert(
                 'Radni nalog kreiran',
-                `Broj: ${newWorkOrder?.workOrderNumber || ''}\nStatus: ${workOrderStatusLabel(newWorkOrder?.status || 'draft')}\n\nLink za pregled:\n${newWorkOrder?.viewUrl || '-'}\n\nŽeliš li odmah potpisati i označiti kao poslano?`,
+                `Broj: ${newWorkOrder?.workOrderNumber || ''}\nStatus: ${workOrderStatusLabel(newWorkOrder?.status || 'draft')}\n\nŽeliš li odmah potpisati i označiti kao poslano?`,
                 [
-                  {
-                    text: 'Otvori pregled',
-                    onPress: async () => {
-                      if (!newWorkOrder?.viewUrl) return;
-                      await openWorkOrderPreview(newWorkOrder.viewUrl);
-                    }
-                  },
                   { text: 'Kasnije', style: 'cancel' },
                   {
                     text: 'Potpiši i pošalji',
@@ -593,6 +602,8 @@ export default function RepairDetailsScreen({ route, navigation }) {
               );
             } catch (err) {
               Alert.alert('Greška', err?.response?.data?.message || err?.message || 'Kreiranje radnog naloga nije uspjelo');
+            } finally {
+              setCreatingWorkOrder(false);
             }
           },
         },
@@ -609,6 +620,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
         {
           text: 'Kreiraj',
           onPress: async () => {
+            setCreatingWorkOrder(true);
             try {
               const draftRes = await workOrdersAPI.createFromRepair(repairId);
               const newWorkOrder = draftRes?.data?.data;
@@ -616,16 +628,9 @@ export default function RepairDetailsScreen({ route, navigation }) {
 
               Alert.alert(
                 'Nacrt kreiran',
-                `Radni nalog ${newWorkOrder?.workOrderNumber || ''} je kreiran.\n\nLink za pregled:\n${newWorkOrder?.viewUrl || '-'}\n\nŽeliš li odmah potpisati i označiti kao poslano?`,
+                `Radni nalog ${newWorkOrder?.workOrderNumber || ''} je kreiran.\n\nŽeliš li odmah potpisati i označiti kao poslano?`,
                 [
-                  {
-                    text: 'Otvori pregled',
-                    onPress: async () => {
-                      if (!newWorkOrder?.viewUrl) return;
-                      await openWorkOrderPreview(newWorkOrder.viewUrl);
-                    }
-                  },
-                  { text: 'Samo pregled', style: 'cancel' },
+                  { text: 'Kasnije', style: 'cancel' },
                   {
                     text: 'Potpiši',
                     onPress: () => openSignatureFlow(newWorkOrder.id || newWorkOrder._id),
@@ -634,6 +639,8 @@ export default function RepairDetailsScreen({ route, navigation }) {
               );
             } catch (err) {
               Alert.alert('Greška', err?.response?.data?.message || err?.message || 'Kreiranje radnog naloga nije uspjelo');
+            } finally {
+              setCreatingWorkOrder(false);
             }
           },
         },
@@ -1299,6 +1306,17 @@ export default function RepairDetailsScreen({ route, navigation }) {
         onCancel={() => { setShowSignatureModal(false); setPendingSignWorkOrderId(null); }}
         loading={signingLoading}
       />
+
+      <Modal visible={creatingWorkOrder} transparent animationType="fade" onRequestClose={() => {}}>
+        <View style={styles.loadingOverlay}>
+          <View style={styles.loadingCard}>
+            <ActivityIndicator size="large" color="#2563eb" />
+            <Text style={styles.loadingTitle}>Kreiram radni nalog...</Text>
+            <Text style={styles.loadingSubtitle}>Pričekaj malo, obrada traje duže na sporijoj mreži.</Text>
+            <Text style={styles.loadingTimer}>Trajanje: {creatingWorkOrderSeconds}s</Text>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1801,6 +1819,41 @@ const styles = StyleSheet.create({
     fontSize: ms(13),
     color: '#dc2626',
     fontWeight: '500',
+  },
+  loadingOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: ms(20),
+  },
+  loadingCard: {
+    width: '100%',
+    maxWidth: ms(320),
+    backgroundColor: '#fff',
+    borderRadius: ms(14),
+    paddingVertical: ms(20),
+    paddingHorizontal: ms(16),
+    alignItems: 'center',
+  },
+  loadingTitle: {
+    marginTop: ms(12),
+    fontSize: ms(16),
+    fontWeight: '700',
+    color: '#0f172a',
+    textAlign: 'center',
+  },
+  loadingSubtitle: {
+    marginTop: ms(8),
+    fontSize: ms(13),
+    color: '#475569',
+    textAlign: 'center',
+  },
+  loadingTimer: {
+    marginTop: ms(10),
+    fontSize: ms(12),
+    color: '#64748b',
+    fontWeight: '600',
   },
 });
 

@@ -329,34 +329,8 @@ router.post('/from-repair/:repairId', authenticate, async (req, res) => {
       workOrder.updated_at = new Date();
     }
 
-    // Generate and save PDF on server for draft (optional)
+    // Draft se vraća odmah; PDF se generira kasnije pri potpisu/preuzimanju.
     await workOrder.save();
-    try {
-      const html = await renderWorkOrderHtml(workOrder.toObject(), req, workOrder.viewToken);
-      let pdfBuffer = null;
-      try {
-        pdfBuffer = await generatePdfBufferFromHtml(html);
-      } catch (pdfErr) {
-        console.error('Greška pri generiranju PDF-a za draft radni nalog:', pdfErr.message);
-      }
-
-      if (pdfBuffer) {
-        ensureDir();
-        const fileName = `${workOrder.workOrderNumber || workOrder._id}.pdf`;
-        const filePath = path.join(OUTPUT_DIR, fileName);
-        try {
-          await fs.promises.writeFile(filePath, pdfBuffer);
-          workOrder.pdfFileName = fileName;
-          workOrder.pdfPath = filePath;
-          workOrder.lastGeneratedAt = new Date();
-          await workOrder.save();
-        } catch (writeErr) {
-          console.error('Greška pri spremanju PDF-a na disk:', writeErr.message);
-        }
-      }
-    } catch (err) {
-      console.error('Neuspjela generacija ili spremanje PDF za draft:', err.message || err);
-    }
 
     await logAction({
       korisnikId: req.user._id,

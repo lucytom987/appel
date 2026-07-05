@@ -14,6 +14,7 @@ import {
   RefreshControl,
   Modal,
   ScrollView,
+  useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -226,6 +227,8 @@ const resolveElevatorForService = (service) => {
 };
 
 export default function ServicesListScreen({ navigation }) {
+  const { width } = useWindowDimensions();
+  const isSmallScreen = width < 390;
   const insets = useSafeAreaInsets();
   const { isOnline, serverAwake } = useAuth();
   const [services, setServices] = useState([]);
@@ -760,8 +763,8 @@ export default function ServicesListScreen({ navigation }) {
       daysUntilNext === null
         ? ''
         : daysUntilNext < 0
-          ? 'Prekoračeno'
-          : `${daysUntilNext}d`;
+          ? `${Math.abs(daysUntilNext)}d prošlo`
+          : `za ${daysUntilNext}d`;
 
     let napomeneText = item.napomene ? String(item.napomene) : '';
     if (filter === 'annual' && napomeneText.toLowerCase() === 'godišnji pregled') {
@@ -794,37 +797,29 @@ export default function ServicesListScreen({ navigation }) {
           onPress={handlePress}
           style={styles.serviceContent}
         >
-          <View style={styles.serviceHeader}>
-            <View style={styles.serviceInfoRow}>
-              <View style={[styles.serviceIconWrap, { backgroundColor: status.badgeBackground }]}>
-                <Ionicons name="business-outline" size={16} color={status.textColor} />
-              </View>
-              <View style={styles.serviceInfo}>
-                <Text style={styles.elevatorName} numberOfLines={1}>{display.title}</Text>
-                <Text style={styles.serviserLabel} numberOfLines={1}>Serviser: {serviserLabel}</Text>
-              </View>
+          <View style={[styles.serviceTopRow, isSmallScreen && styles.serviceTopRowCompact]}>
+            <View style={styles.serviceTitleWrap}>
+              <Text style={[styles.elevatorName, isSmallScreen && styles.elevatorNameCompact]} numberOfLines={1}>{display.title}</Text>
             </View>
 
-            <View style={styles.serviceMeta}>
-              <View style={styles.serviceMetaTopRow}>
-                <Text style={[styles.serviceMetaDate, { color: status.textColor }]}>{String(dateLabel)}</Text>
-                <Ionicons
-                  name={item.synced ? 'cloud-done-outline' : 'cloud-offline-outline'}
-                  size={16}
-                  color={item.synced ? '#10b981' : '#ef4444'}
-                  style={styles.syncIcon}
-                />
-                {showNextBadge ? (
-                  <View style={[styles.nextServiceBadge, { backgroundColor: status.badgeBackground }]}>
-                    <Text style={[styles.nextServiceText, { color: status.badgeTextColor }]}>{String(nextLabel)}</Text>
-                  </View>
-                ) : null}
-              </View>
-              <View style={styles.serviceStatusRow}>
-                <View style={[styles.statusDot, { backgroundColor: status.textColor }]} />
-                <Text style={[styles.serviceStatusText, { color: status.textColor }]}>{status.label}</Text>
-              </View>
+            <View style={styles.serviceDateWrap}>
+              <Text style={[styles.serviceMetaDate, isSmallScreen && styles.serviceMetaDateCompact, { color: status.textColor }]} numberOfLines={1}>{String(dateLabel)}</Text>
+              <Ionicons
+                name={item.synced ? 'cloud-done-outline' : 'cloud-offline-outline'}
+                size={isSmallScreen ? 15 : 16}
+                color={item.synced ? '#10b981' : '#ef4444'}
+                style={styles.syncIcon}
+              />
             </View>
+          </View>
+
+          <View style={styles.serviceBottomRow}>
+            <Text style={[styles.serviserLabel, isSmallScreen && styles.serviserLabelCompact]} numberOfLines={1}>Serviser: {serviserLabel}</Text>
+            {showNextBadge ? (
+              <View style={[styles.nextServiceBadge, { backgroundColor: status.badgeBackground }]}>
+                <Text style={[styles.nextServiceText, isSmallScreen && styles.nextServiceTextCompact, { color: status.badgeTextColor }]}>{String(nextLabel)}</Text>
+              </View>
+            ) : null}
           </View>
 
           {napomeneText ? (
@@ -914,6 +909,7 @@ export default function ServicesListScreen({ navigation }) {
         keyExtractor={keyExtractor}
         contentContainerStyle={[
           styles.listContent,
+          isSmallScreen && styles.listContentCompact,
           { paddingBottom: 16 },
         ]}
         refreshControl={(
@@ -1138,6 +1134,10 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingTop: 20,
   },
+  listContentCompact: {
+    paddingHorizontal: 8,
+    paddingTop: 12,
+  },
   serviceCard: {
     flexDirection: 'row',
     backgroundColor: '#fff',
@@ -1159,88 +1159,77 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 12,
   },
-  serviceHeader: {
+  serviceTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 6,
-    marginBottom: 8,
+    gap: 10,
+    marginBottom: 6,
   },
-  serviceInfoRow: {
+  serviceTopRowCompact: {
+    gap: 6,
+  },
+  serviceTitleWrap: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-  },
-  serviceIconWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: 999,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  serviceInfo: {
-    flex: 1,
-    justifyContent: 'center',
+    gap: 0,
   },
   elevatorName: {
     fontSize: 16,
     fontWeight: '600',
     color: '#1f2937',
-    marginBottom: 2,
+    flex: 1,
   },
-  elevatorSub: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#6b7280',
+  elevatorNameCompact: {
+    fontSize: 12,
   },
   serviserLabel: {
     fontSize: 13,
     fontWeight: '500',
     color: '#4b5563',
   },
-  serviceMeta: {
-    alignItems: 'flex-end',
-    gap: 5,
+  serviserLabelCompact: {
+    fontSize: 11,
   },
-  serviceMetaTopRow: {
+  serviceDateWrap: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'flex-end',
     gap: 6,
+    flexShrink: 0,
   },
   serviceMetaDate: {
     fontSize: 12.5,
     fontWeight: '700',
     color: '#374151',
   },
+  serviceMetaDateCompact: {
+    fontSize: 10,
+  },
   syncIcon: {
     marginTop: 0,
+  },
+  serviceBottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
   },
   nextServiceBadge: {
     backgroundColor: '#dbeafe',
     paddingHorizontal: 7,
     paddingVertical: 3,
     borderRadius: 7,
+    flexShrink: 0,
   },
   nextServiceText: {
     fontSize: 10.5,
     fontWeight: '700',
     color: '#1f2937',
   },
-  serviceStatusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-  },
-  statusDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  serviceStatusText: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.2,
+  nextServiceTextCompact: {
+    fontSize: 10,
   },
   serviceDescription: {
     fontSize: 13.5,

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,8 +6,6 @@ import {
   ScrollView,
   TouchableOpacity,
   RefreshControl,
-  Animated,
-  Easing,
   ImageBackground,
   Platform,
   BackHandler,
@@ -23,23 +21,14 @@ import { syncAll, primeFullSync } from '../services/syncService';
 import { messagesAPI } from '../services/api';
 import ms, { rf } from '../utils/scale';
 
-// Gauge geometry (semicircle)
-const GAUGE_SIZE = 140;
-const GAUGE_RADIUS = GAUGE_SIZE / 2;
-const GAUGE_MASK_HEIGHT = GAUGE_RADIUS;
-const GAUGE_BG_IMAGE = { uri: 'https://images.unsplash.com/photo-1517244871184-6ac0400d035b?auto=format&fit=crop&w=400&q=60' };
 const DIZALA_CARD_IMAGE = require('../../assets/dizala_card.png');
 const MAP_CARD_IMAGE = require('../../assets/map_card.png');
 const REPAIRS_CARD_IMAGE = require('../../assets/popravci.png');
-const GAUGE_NEEDLE_COLOR = '#22c55e';
-const GAUGE_NEEDLE_WIDTH = 4;
-const GAUGE_NEEDLE_HEIGHT = GAUGE_RADIUS - 6;
 
 export default function HomeScreen({ navigation }) {
-  const { width: screenWidth } = useWindowDimensions();
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const { user, isOnline, serverAwake, logout } = useAuth();
   const [offlineDemo, setOfflineDemo] = useState(false);
-  const serviceGauge = useRef(new Animated.Value(0));
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
@@ -62,10 +51,11 @@ export default function HomeScreen({ navigation }) {
 
   const isSmallScreen = screenWidth < 390;
   const isTinyScreen = screenWidth < 360;
-  const gridGap = isTinyScreen ? 8 : 10;
-  const gridPadding = isTinyScreen ? 12 : 15;
+  const isCompactScreen = isTinyScreen || (isSmallScreen && screenHeight < 780);
+  const gridGap = isTinyScreen ? 7 : (isCompactScreen ? 8 : 10);
+  const gridPadding = isTinyScreen ? 10 : (isCompactScreen ? 12 : 15);
   const cardWidth = (screenWidth - (gridPadding * 2) - gridGap) / 2;
-  const topCardHeight = isTinyScreen ? 194 : (isSmallScreen ? 202 : 212);
+  const topCardHeight = isTinyScreen ? 186 : (isCompactScreen ? 194 : (isSmallScreen ? 202 : 212));
   const bottomCardHeight = topCardHeight;
 
   // Konvertiraj isOnline u boolean eksplicitno
@@ -115,15 +105,6 @@ export default function HomeScreen({ navigation }) {
      : 0;
 
   // Semicircle only (no labels/dashes)
-
-  useEffect(() => {
-    Animated.timing(serviceGauge.current, {
-      toValue: serviceProgress,
-      duration: 1200,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: false,
-    }).start();
-  }, [serviceProgress]);
 
   function loadStats() {
     try {
@@ -378,12 +359,12 @@ export default function HomeScreen({ navigation }) {
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, isCompactScreen && styles.headerCompact]}>
         <View>
-          <Text style={styles.greeting}>Pozdrav, {user?.prezime}!</Text>
+          <Text style={[styles.greeting, isCompactScreen && styles.greetingCompact]}>Pozdrav, {user?.prezime}!</Text>
           <View style={styles.statusContainer}>
             <View style={[styles.statusDot, { backgroundColor: online ? '#10b981' : '#ef4444' }]} />
-            <Text style={styles.statusText}>
+            <Text style={[styles.statusText, isCompactScreen && styles.statusTextCompact]}>
               {online ? 'Online' : 'Offline'}
             </Text>
           </View>
@@ -394,7 +375,7 @@ export default function HomeScreen({ navigation }) {
                 { backgroundColor: serverReady ? '#10b981' : (serverReady === null ? '#f59e0b' : '#ef4444') },
               ]}
             />
-            <Text style={styles.statusText}>
+            <Text style={[styles.statusText, isCompactScreen && styles.statusTextCompact]}>
               {serverReady
                 ? 'Server ON'
                 : serverReady === null
@@ -403,12 +384,12 @@ export default function HomeScreen({ navigation }) {
             </Text>
           </View>
         </View>
-        <View style={styles.headerButtons}>
+        <View style={[styles.headerButtons, isCompactScreen && styles.headerButtonsCompact]}>
           <TouchableOpacity 
             onPress={() => navigation.navigate('About')}
             style={styles.headerButton}
           >
-            <Ionicons name="information-circle-outline" size={28} color="#666" />
+            <Ionicons name="information-circle-outline" size={isCompactScreen ? 24 : 28} color="#666" />
           </TouchableOpacity>
           <TouchableOpacity 
             onPress={() => navigation.navigate('ChatRooms')}
@@ -417,7 +398,7 @@ export default function HomeScreen({ navigation }) {
             <View>
               <Ionicons
                 name="chatbubbles-outline"
-                size={26}
+                size={isCompactScreen ? 22 : 26}
                 color={unreadCount > 0 ? '#ef4444' : '#666'}
               />
               {unreadCount > 0 && (
@@ -428,13 +409,14 @@ export default function HomeScreen({ navigation }) {
             </View>
           </TouchableOpacity>
           <TouchableOpacity onPress={logout}>
-            <Ionicons name="log-out-outline" size={28} color="#666" />
+            <Ionicons name="log-out-outline" size={isCompactScreen ? 24 : 28} color="#666" />
           </TouchableOpacity>
         </View>
       </View>
 
       <ScrollView
         style={styles.content}
+        contentContainerStyle={styles.contentContainer}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
@@ -518,52 +500,33 @@ export default function HomeScreen({ navigation }) {
           >
             <View style={styles.servicesCardBody}>
               <View style={styles.gaugeWrapper}>
-                <ImageBackground
-                  source={GAUGE_BG_IMAGE}
-                  style={styles.gaugeBg}
-                  imageStyle={styles.gaugeBgImage}
-                >
-                  <View style={styles.gaugeMask}>
-                    <View style={styles.gaugeArc} />
-                    <Animated.View
+                <View style={styles.servicesKpiWrap}>
+                  <Text style={[styles.servicesKpiRatio, isCompactScreen && styles.servicesKpiRatioCompact]}>
+                    {stats.servicedElevatorsThisMonth}/{stats.elevatorsRequiringServiceThisMonth}
+                  </Text>
+                  <View style={styles.servicesProgressTrack}>
+                    <View
                       style={[
-                        styles.gaugeNeedle,
-                        {
-                          transform: [
-                            { translateY: GAUGE_NEEDLE_HEIGHT / 2 },
-                            {
-                              rotateZ: serviceGauge.current.interpolate({
-                                inputRange: [0, 1],
-                                outputRange: ['-90deg', '90deg'],
-                                extrapolate: 'clamp',
-                              }),
-                            },
-                            { translateY: -GAUGE_NEEDLE_HEIGHT / 2 },
-                          ],
-                        },
+                        styles.servicesProgressFill,
+                        { width: `${Math.max(6, Math.round(serviceProgress * 100))}%` },
                       ]}
-                    >
-                      <View style={styles.gaugeNeedleBody} />
-                      <View style={styles.gaugeNeedleHighlight} />
-                    </Animated.View>
-                    <View style={styles.gaugeNeedleHub} />
+                    />
                   </View>
-                </ImageBackground>
+                  <View style={styles.servicesProgressScale}>
+                    <Text style={styles.servicesProgressScaleText}>0%</Text>
+                    <Text style={styles.servicesProgressScaleText}>{Math.round(serviceProgress * 100)}%</Text>
+                    <Text style={styles.servicesProgressScaleText}>100%</Text>
+                  </View>
+                </View>
               </View>
               <Text
-                style={[
-                  styles.statNumber,
-                  styles.statNumberServices,
-                  isSmallScreen && styles.statNumberServicesSmall,
-                  isTinyScreen && styles.statNumberServicesTiny,
-                ]}
+                style={[styles.statLabel, styles.servicesStatLabel, isCompactScreen && styles.servicesStatLabelCompact]}
                 numberOfLines={1}
                 adjustsFontSizeToFit
-                minimumFontScale={0.75}
+                minimumFontScale={0.82}
               >
-                {stats.servicedElevatorsThisMonth}/{stats.elevatorsRequiringServiceThisMonth}
+                Servisirano ovaj mjesec
               </Text>
-              <Text style={styles.statLabel}>Servisirano ovaj mjesec</Text>
             </View>
             <View style={styles.cardBottomDivider} />
             <Text style={styles.cardBottomTitle}>SERVISI</Text>
@@ -579,21 +542,21 @@ export default function HomeScreen({ navigation }) {
             onPress={() => navigation.navigate('Repairs')}
           >
             <View style={styles.repairsTopArea}>
-              <View style={styles.repairsList}>
-                <View style={styles.repairsRow}>
+              <View style={[styles.repairsList, isCompactScreen && styles.repairsListCompact]}>
+                <View style={[styles.repairsRow, isCompactScreen && styles.repairsRowCompact]}>
                   <View style={[styles.repairsRowDot, { backgroundColor: '#ef4444' }]} />
-                  <Text style={styles.repairsRowLabel}>ČEKANJE</Text>
-                  <Text style={[styles.repairsRowNumber, { color: '#ef4444' }]}>{stats.repairsPending}</Text>
+                  <Text style={[styles.repairsRowLabel, isCompactScreen && styles.repairsRowLabelCompact]}>ČEKANJE</Text>
+                  <Text style={[styles.repairsRowNumber, isCompactScreen && styles.repairsRowNumberCompact, { color: '#ef4444' }]}>{stats.repairsPending}</Text>
                 </View>
-                <View style={styles.repairsRow}>
+                <View style={[styles.repairsRow, isCompactScreen && styles.repairsRowCompact]}>
                   <View style={[styles.repairsRowDot, { backgroundColor: '#f59e0b' }]} />
-                  <Text style={styles.repairsRowLabel}>TREBALO BI</Text>
-                  <Text style={[styles.repairsRowNumber, { color: '#f59e0b' }]}>{stats.repairsTrebaloBi}</Text>
+                  <Text style={[styles.repairsRowLabel, isCompactScreen && styles.repairsRowLabelCompact]}>TREBALO BI</Text>
+                  <Text style={[styles.repairsRowNumber, isCompactScreen && styles.repairsRowNumberCompact, { color: '#f59e0b' }]}>{stats.repairsTrebaloBi}</Text>
                 </View>
-                <View style={styles.repairsRow}>
+                <View style={[styles.repairsRow, isCompactScreen && styles.repairsRowCompact]}>
                   <View style={[styles.repairsRowDot, { backgroundColor: '#2563eb' }]} />
-                  <Text style={styles.repairsRowLabel}>NEPOTPISANO</Text>
-                  <Text style={[styles.repairsRowNumber, { color: '#2563eb' }]}>{stats.repairsUnsigned}</Text>
+                  <Text style={[styles.repairsRowLabel, isCompactScreen && styles.repairsRowLabelCompact]}>NEPOTPISANO</Text>
+                  <Text style={[styles.repairsRowNumber, isCompactScreen && styles.repairsRowNumberCompact, { color: '#2563eb' }]}>{stats.repairsUnsigned}</Text>
                 </View>
               </View>
             </View>
@@ -676,6 +639,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 16,
   },
+  headerButtonsCompact: {
+    gap: 10,
+  },
   headerButton: {
     padding: 4,
   },
@@ -684,6 +650,10 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#1f2937',
     marginBottom: 5,
+  },
+  greetingCompact: {
+    fontSize: rf(19, 16, 30),
+    marginBottom: 3,
   },
   statusContainer: {
     flexDirection: 'row',
@@ -699,8 +669,19 @@ const styles = StyleSheet.create({
     fontSize: rf(13, 11.5, 20),
     color: '#666',
   },
+  statusTextCompact: {
+    fontSize: rf(12, 10.5, 18),
+  },
+  headerCompact: {
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    paddingTop: 40,
+  },
   content: {
     flex: 1,
+  },
+  contentContainer: {
+    paddingBottom: 22,
   },
   statsGrid: {
     flexDirection: 'row',
@@ -768,8 +749,8 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: 6,
-    paddingBottom: 4,
+    paddingTop: 4,
+    paddingBottom: 2,
   },
   statCardRepairs: {
     backgroundColor: '#f3f7fb',
@@ -822,6 +803,11 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     gap: 8,
   },
+  repairsListCompact: {
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    gap: 6,
+  },
   repairsRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -837,6 +823,11 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     elevation: 1,
   },
+  repairsRowCompact: {
+    paddingVertical: 6,
+    paddingHorizontal: 9,
+    borderRadius: 10,
+  },
   repairsRowDot: {
     width: 8,
     height: 8,
@@ -850,11 +841,19 @@ const styles = StyleSheet.create({
     color: '#334155',
     letterSpacing: 0.4,
   },
+  repairsRowLabelCompact: {
+    fontSize: rf(11, 9.5, 16),
+    letterSpacing: 0.2,
+  },
   repairsRowNumber: {
     fontSize: rf(20, 16, 28),
     fontWeight: '800',
     minWidth: 28,
     textAlign: 'right',
+  },
+  repairsRowNumberCompact: {
+    fontSize: rf(16, 14, 22),
+    minWidth: 22,
   },
   repairsCardBackground: {
     flex: 1,
@@ -884,6 +883,48 @@ const styles = StyleSheet.create({
     paddingTop: 6,
     paddingBottom: 16,
     backgroundColor: '#f3f7fb',
+  },
+  servicesKpiWrap: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 2,
+  },
+  servicesKpiRatio: {
+    fontSize: rf(29, 21, 40),
+    fontWeight: '800',
+    color: '#0f172a',
+    letterSpacing: 0.2,
+    marginBottom: 8,
+  },
+  servicesKpiRatioCompact: {
+    fontSize: rf(24, 18, 34),
+    marginBottom: 6,
+  },
+  servicesProgressTrack: {
+    width: '88%',
+    height: 11,
+    backgroundColor: '#dbe7fb',
+    borderRadius: 999,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#c7d7f3',
+  },
+  servicesProgressFill: {
+    height: '100%',
+    borderRadius: 999,
+    backgroundColor: '#2563eb',
+  },
+  servicesProgressScale: {
+    width: '88%',
+    marginTop: 6,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  servicesProgressScaleText: {
+    fontSize: rf(10.5, 9, 13),
+    fontWeight: '700',
+    color: '#64748b',
   },
   statNumberTop: {
     fontSize: rf(38, 28, 50),
@@ -927,25 +968,19 @@ const styles = StyleSheet.create({
     color: '#0f172a',
     marginTop: 4,
   },
-  statNumberServices: {
-    fontSize: rf(32, 24, 44),
-    lineHeight: rf(38, 28, 50),
-    marginTop: 2,
-    letterSpacing: 0.3,
-  },
-  statNumberServicesSmall: {
-    fontSize: rf(28, 22, 38),
-    lineHeight: rf(34, 26, 44),
-  },
-  statNumberServicesTiny: {
-    fontSize: rf(24, 20, 34),
-    lineHeight: rf(30, 24, 38),
-  },
   statLabel: {
     fontSize: rf(13, 11.5, 20),
     color: '#666',
     textAlign: 'center',
     marginTop: 5,
+  },
+  servicesStatLabel: {
+    fontSize: rf(12, 10.5, 18),
+    marginTop: 3,
+  },
+  servicesStatLabelCompact: {
+    fontSize: rf(10.5, 9.5, 14),
+    marginTop: 2,
   },
   statSubLabel: {
     fontSize: rf(12, 11, 19),
@@ -999,100 +1034,10 @@ const styles = StyleSheet.create({
     color: '#2563eb',
   },
   gaugeWrapper: {
-    width: GAUGE_SIZE + 20,
+    width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 6,
-  },
-  gaugeBg: {
-    width: GAUGE_SIZE,
-    height: GAUGE_MASK_HEIGHT + 2,
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-  },
-  gaugeBgImage: {
-    borderRadius: 12,
-    opacity: 0.22,
-  },
-  gaugeMask: {
-    width: GAUGE_SIZE,
-    height: GAUGE_MASK_HEIGHT,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-  },
-  gaugeArc: {
-    width: GAUGE_SIZE,
-    height: GAUGE_SIZE,
-    borderRadius: GAUGE_RADIUS,
-    borderWidth: 2,
-    borderColor: '#93c5fd',
-    backgroundColor: '#eff6ff',
-    position: 'absolute',
-    bottom: -GAUGE_RADIUS,
-  },
-  gaugeNeedle: {
-    position: 'absolute',
-    bottom: 8,
-    left: GAUGE_SIZE / 2 - GAUGE_NEEDLE_WIDTH / 2,
-    width: GAUGE_NEEDLE_WIDTH,
-    height: GAUGE_NEEDLE_HEIGHT,
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    shadowColor: GAUGE_NEEDLE_COLOR,
-    shadowOpacity: 0.35,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    zIndex: 5,
-  },
-  gaugeNeedleBody: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: GAUGE_NEEDLE_COLOR,
-    borderColor: '#166534',
-    borderWidth: 1,
-    borderTopLeftRadius: GAUGE_NEEDLE_WIDTH,
-    borderTopRightRadius: GAUGE_NEEDLE_WIDTH,
-    borderBottomLeftRadius: GAUGE_NEEDLE_WIDTH / 1.5,
-    borderBottomRightRadius: GAUGE_NEEDLE_WIDTH / 1.5,
-  },
-  gaugeNeedleHighlight: {
-    position: 'absolute',
-    top: 6,
-    width: GAUGE_NEEDLE_WIDTH / 1.5,
-    height: GAUGE_NEEDLE_HEIGHT * 0.6,
-    backgroundColor: '#bbf7d0',
-    borderTopLeftRadius: GAUGE_NEEDLE_WIDTH,
-    borderTopRightRadius: GAUGE_NEEDLE_WIDTH,
-    opacity: 0.6,
-  },
-  gaugeNeedleHub: {
-    position: 'absolute',
-    bottom: -2,
-    left: GAUGE_SIZE / 2 - 10,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#0f172a',
-    borderWidth: 2,
-    borderColor: '#86efac',
-    shadowColor: '#000',
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 1 },
-    zIndex: 6,
-  },
-  gaugeTicksOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: GAUGE_SIZE,
-    height: GAUGE_MASK_HEIGHT,
-  },
-  gaugeTickLabel: {
-    fontSize: 10,
-    color: '#6b7280',
-    fontWeight: '600',
+    marginBottom: 0,
   },
   section: {
     padding: 15,

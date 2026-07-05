@@ -11,8 +11,8 @@ import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 
 export default function AboutScreen({ navigation }) {
-  const currentVersion = Constants?.expoConfig?.version || '2.0.8';
-  const currentVersionDate = '03.07.2026';
+  const currentVersion = Constants?.expoConfig?.version || '2.0.9';
+  const currentVersionDate = '05.07.2026';
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -54,35 +54,31 @@ export default function AboutScreen({ navigation }) {
 
         {/* What's new */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Novosti (16.02.2026)</Text>
+          <Text style={styles.sectionTitle}>Novosti (05.07.2026)</Text>
           <View style={styles.featuresList}>
             <View style={styles.featureItem}>
-              <Ionicons name="camera" size={20} color="#2563eb" />
-              <Text style={styles.featureText}>Dodano je fotografiranje i upload slika uz popravke i servisne napomene.</Text>
+              <Ionicons name="flash" size={20} color="#2563eb" />
+              <Text style={styles.featureText}>Ubrzan je tok "Potpiši i pošalji": odgovor je osjetno brži, a slanje PDF-a i emaila ide u pozadini.</Text>
             </View>
             <View style={styles.featureItem}>
-              <Ionicons name="expand" size={20} color="#2563eb" />
-              <Text style={styles.featureText}>Uveden je zoom na fotografije (fullscreen + pinch to zoom).</Text>
+              <Ionicons name="checkmark-done" size={20} color="#2563eb" />
+              <Text style={styles.featureText}>Kod promjene statusa na "Završen" odmah se nudi "Kreiraj radni nalog" bez ručnog spremanja.</Text>
             </View>
             <View style={styles.featureItem}>
-              <Ionicons name="cloud-upload" size={20} color="#2563eb" />
-              <Text style={styles.featureText}>Cloudinary integracija za spremanje fotografija.</Text>
-            </View>
-            <View style={styles.featureItem}>
-              <Ionicons name="calendar" size={20} color="#2563eb" />
-              <Text style={styles.featureText}>Uveden je pregled "Događaji" koji objedinjava popravke, servisne napomene i aktivnosti u jednu kronološku listu.</Text>
-            </View>
-            <View style={styles.featureItem}>
-              <Ionicons name="add-circle" size={20} color="#2563eb" />
-              <Text style={styles.featureText}>Dodan je brzi unos popravaka i servisnih zapisa kroz novi FAB meni s jasnim akcijama.</Text>
+              <Ionicons name="save" size={20} color="#2563eb" />
+              <Text style={styles.featureText}>Pri kliku na "Kreiraj radni nalog" popravak se automatski spremi prije kreiranja naloga.</Text>
             </View>
             <View style={styles.featureItem}>
               <Ionicons name="document-text" size={20} color="#2563eb" />
-              <Text style={styles.featureText}>Popravci i servisi sada prikazuju status potpisanog radnog naloga s jasnim bojama.</Text>
+              <Text style={styles.featureText}>Dodana je jasna oznaka vrste potpisa radnog naloga: "Papirnato" ili "Digitalno".</Text>
             </View>
             <View style={styles.featureItem}>
-              <Ionicons name="list" size={20} color="#2563eb" />
-              <Text style={styles.featureText}>Liste popravaka su preglednije: prikaz je skraćen na osnovni naziv/adresu i opis kvara.</Text>
+              <Ionicons name="close-circle" size={20} color="#2563eb" />
+              <Text style={styles.featureText}>Ako je radni nalog ručno označen kao potpisan, onemogućeno je dodatno digitalno kreiranje naloga.</Text>
+            </View>
+            <View style={styles.featureItem}>
+              <Ionicons name="trash" size={20} color="#2563eb" />
+              <Text style={styles.featureText}>Brisanjem radnog naloga automatski se uklanja oznaka da je nalog potpisan.</Text>
             </View>
           </View>
         </View>
@@ -186,7 +182,7 @@ export default function AboutScreen({ navigation }) {
             © 2026 APPEL • Elevator Management
           </Text>
           <Text style={styles.footerSubtext}>
-            03.07.2026 • Android
+            05.07.2026 • Android
           </Text>
         </View>
 

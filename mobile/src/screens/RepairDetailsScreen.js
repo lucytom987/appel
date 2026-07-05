@@ -265,12 +265,22 @@ export default function RepairDetailsScreen({ route, navigation }) {
   );
   const [utroseniMaterijal, setUtroseniMaterijal] = useState(repairData.utroseniMaterijal || '');
   const [materijalStavke, setMaterijalStavke] = useState([{ naziv: '', kolicina: '', jedinica: '' }]);
-  const [expandedSections, setExpandedSections] = useState({
-    materijal: false,
-    fotografije: false,
-    serviseri: false,
-  });
+  const [expandedSections, setExpandedSections] = useState(() => ({
+    materijal: Boolean(String(repairData.utroseniMaterijal || '').trim()),
+    fotografije: Boolean((repair?.photos || repairData?.photos || []).length),
+    serviseri: Boolean(initialAdditionalServicers.length),
+  }));
   const isRepairLocked = workOrder?.status === 'sent';
+  const hasMaterialContent = materijalStavke.some((stavka) => String(stavka.naziv || '').trim() || String(stavka.kolicina || '').trim() || String(stavka.jedinica || '').trim())
+    || Boolean(String(utroseniMaterijal || '').trim());
+  const hasAdditionalServicersContent = additionalServicers.some((entry) => entry.userId || String(entry.hours || '').trim());
+  const hasPhotosContent = photos.length > 0;
+  const canCreateWorkOrder = Boolean(
+    online
+    && status === 'completed'
+    && !workOrder
+    && !isRepairLocked
+  );
 
   useEffect(() => {
     const isNewArchitecture = Boolean(global?.nativeFabricUIManager);
@@ -678,67 +688,10 @@ export default function RepairDetailsScreen({ route, navigation }) {
     );
   };
 
-  const handleCreateWorkOrder = async () => {
-    const id = repairData._id || repairData.id;
-
-    if (!online) {
-      Alert.alert('Offline', 'Potrebna je internet veza za kreiranje radnog naloga.');
-      return;
-    }
-
-    const isLocalId = String(id).startsWith('local_');
-    const isSynced = repairData.synced === 1 || repairData.sync_status === 'synced';
-
-    if (isLocalId || !isSynced) {
-      Alert.alert(
-        'Popravak nije sinkroniziran',
-        'Radni nalog se može kreirati samo za popravke koji su sinkronizirani sa serverom.\n\nMolimo prvo spremite ovaj popravak s internet vezom.',
-        [{ text: 'OK' }]
-      );
-      return;
-    }
-
-    if (workOrder) {
-      if (workOrder?.viewUrl) {
-        await openWorkOrderPreview(workOrder.viewUrl);
-      }
-      return;
-    }
-
-    setPendingWorkOrderRepairId(id);
-    setCreateWorkOrderCountdownSeconds(5);
-    setShowCreateWorkOrderCountdown(true);
-  };
-
-  const openWorkOrderMenu = () => {
-    if (!workOrder) return;
-    setShowWorkOrderMenu(true);
-  };
-
-  const promptWorkOrderFlow = (repairId) => {
-    setPendingWorkOrderRepairId(repairId);
-    setCreateWorkOrderCountdownSeconds(5);
-    setShowCreateWorkOrderCountdown(true);
-  };
-
-  useEffect(() => {
-    setIsTrebaloBi(Boolean(
-      repairData.trebaloBi ||
-      repairData.trebalo_bi ||
-      repairData.category === 'trebaloBi' || repairData.category === 'trebalo_bi' || repairData.category === 'trebalo-bi' || repairData.category === 'trebalo' ||
-      repairData.type === 'trebaloBi' || repairData.type === 'trebalo_bi' || repairData.type === 'trebalo-bi' || repairData.type === 'trebalo' ||
-      repairData.status === 'in_progress' ||
-      repairData.status === 'u tijeku' ||
-      repairData.status === 'u_tijeku'
-    ));
-    setStatus(repairData.status === 'completed' ? 'completed' : 'pending');
-    setRadniNalogPotpisan(Boolean(repairData.radniNalogPotpisan));
-  }, [repairData.trebaloBi, repairData.status, repairData.radniNalogPotpisan, repairData.category, repairData.type]);
-
-  const handleSave = async () => {
+  const saveRepair = async ({ showSuccessAlert = true } = {}) => {
     if (isRepairLocked) {
       Alert.alert('Zaključano', 'Popravak se više ne može uređivati jer je radni nalog potpisan i poslan.');
-      return;
+      return { success: false, repairId: null };
     }
 
     const id = repairData._id || repairData.id;
@@ -800,7 +753,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
         : (`${user?.ime || ''} ${user?.prezime || ''}`.trim() || user?.email || existingCompletedByName || '')
       )
       : null;
-    
+
     const payload = {
       id,
       elevatorId: repairData.elevatorId,
@@ -826,23 +779,16 @@ export default function RepairDetailsScreen({ route, navigation }) {
     setSaving(true);
     try {
       const onlineNow = online;
-      let savedSuccessfully = false;
       let finalRepairId = id;
       const shouldCreateOnServer = onlineNow && (isLocalId || !existsInDB);
-      
-      // Provjeri postoji li već u lokalnoj bazi
-      
+
       if (!existsInDB && !shouldCreateOnServer) {
-        // NOVA popravka - spremi localno prvo
         repairDB.insert({ ...repairData, ...payload, synced: 0, sync_status: 'dirty' });
         setRepairData((prev) => ({ ...prev, ...payload, synced: 0, sync_status: 'dirty' }));
-        savedSuccessfully = true;
       } else {
-        // Postojeća popravka - ažuriraj
         if (!onlineNow) {
           repairDB.update(id, { ...repairData, ...payload, synced: 0, sync_status: 'dirty' });
           setRepairData((prev) => ({ ...prev, ...payload, synced: 0, sync_status: 'dirty' }));
-          savedSuccessfully = true;
         } else {
           if (shouldCreateOnServer) {
             const createPayload = {
@@ -863,7 +809,6 @@ export default function RepairDetailsScreen({ route, navigation }) {
                 repairDB.insert({ ...repairData, ...created, id: serverId, _id: serverId, synced: 1, sync_status: 'synced' });
               }
               setRepairData((prev) => ({ ...prev, ...created, id: serverId, _id: serverId, synced: 1, sync_status: 'synced' }));
-              savedSuccessfully = true;
             } else {
               throw new Error('Server nije vratio ID za spremljeni popravak');
             }
@@ -873,32 +818,88 @@ export default function RepairDetailsScreen({ route, navigation }) {
             repairDB.update(id, { ...repairData, ...updated, synced: 1, sync_status: 'synced' });
             setRepairData((prev) => ({ ...prev, ...updated, synced: 1, sync_status: 'synced' }));
             finalRepairId = id;
-            savedSuccessfully = true;
           }
         }
       }
-      
-      Alert.alert('Pohranjeno', 'Popravak je uspješno pohranjen.', [
-        { text: 'OK', onPress: () => {
-          // Provjeri trebali li pitati o radnom nalogu
-          // Samo ako je sinkronizirano s serverom (ne lokalni ID)
-          const nowSynced = savedSuccessfully && onlineNow && !String(finalRepairId || '').startsWith('local_');
-          
-          if (nowSynced && !wasCompleted && status === 'completed') {
-            promptWorkOrderFlow(finalRepairId);
-          }
-          if (navigation.canGoBack()) {
-            navigation.goBack();
-          } else {
-            navigation.navigate('Repairs', { activeList: returnTo, filter });
-          }
-        } },
-      ]);
+
+      if (showSuccessAlert) {
+        Alert.alert('Pohranjeno', 'Popravak je uspješno pohranjen.');
+      }
+
+      return { success: true, repairId: finalRepairId };
     } catch (e) {
       Alert.alert('Greška', e?.message || 'Nije moguće spremiti popravku');
+      return { success: false, repairId: null };
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleCreateWorkOrder = async () => {
+    const currentId = repairData._id || repairData.id;
+
+    if (!online) {
+      Alert.alert('Offline', 'Potrebna je internet veza za kreiranje radnog naloga.');
+      return;
+    }
+
+    if (workOrder) {
+      if (workOrder?.viewUrl) {
+        await openWorkOrderPreview(workOrder.viewUrl);
+      }
+      return;
+    }
+
+    if (status !== 'completed') {
+      Alert.alert('Status nije završen', 'Za radni nalog status mora biti postavljen na "Završen".');
+      return;
+    }
+
+    const saveResult = await saveRepair({ showSuccessAlert: false });
+    if (!saveResult.success || !saveResult.repairId) return;
+
+    const repairIdForWorkOrder = saveResult.repairId;
+
+    if (String(repairIdForWorkOrder || '').startsWith('local_')) {
+      Alert.alert(
+        'Popravak nije sinkroniziran',
+        'Radni nalog se može kreirati samo za popravke koji su sinkronizirani sa serverom.'
+      );
+      return;
+    }
+
+    setPendingWorkOrderRepairId(repairIdForWorkOrder);
+    setCreateWorkOrderCountdownSeconds(5);
+    setShowCreateWorkOrderCountdown(true);
+  };
+
+  const openWorkOrderMenu = () => {
+    if (!workOrder) return;
+    setShowWorkOrderMenu(true);
+  };
+
+  const promptWorkOrderFlow = (repairId) => {
+    setPendingWorkOrderRepairId(repairId);
+    setCreateWorkOrderCountdownSeconds(5);
+    setShowCreateWorkOrderCountdown(true);
+  };
+
+  useEffect(() => {
+    setIsTrebaloBi(Boolean(
+      repairData.trebaloBi ||
+      repairData.trebalo_bi ||
+      repairData.category === 'trebaloBi' || repairData.category === 'trebalo_bi' || repairData.category === 'trebalo-bi' || repairData.category === 'trebalo' ||
+      repairData.type === 'trebaloBi' || repairData.type === 'trebalo_bi' || repairData.type === 'trebalo-bi' || repairData.type === 'trebalo' ||
+      repairData.status === 'in_progress' ||
+      repairData.status === 'u tijeku' ||
+      repairData.status === 'u_tijeku'
+    ));
+    setStatus(repairData.status === 'completed' ? 'completed' : 'pending');
+    setRadniNalogPotpisan(Boolean(repairData.radniNalogPotpisan));
+  }, [repairData.trebaloBi, repairData.status, repairData.radniNalogPotpisan, repairData.category, repairData.type]);
+
+  const handleSave = async () => {
+    await saveRepair({ showSuccessAlert: true });
   };
 
   return (
@@ -1002,68 +1003,6 @@ export default function RepairDetailsScreen({ route, navigation }) {
             />
           </View>
         </Modal>
-
-        <View style={styles.card}>
-          <View style={styles.sectionTitleRow}>
-            <Ionicons name="flag-outline" size={18} color="#10b981" />
-            <Text style={styles.sectionTitle}>Status</Text>
-          </View>
-          <View style={styles.statusChoiceRow}>
-            {[
-              { label: 'Prijavljen', value: 'pending', color: '#ef4444' },
-              { label: 'Završeno', value: 'completed', color: '#10b981' },
-            ].map((opt) => {
-              const active = status === opt.value;
-              return (
-                <TouchableOpacity
-                  key={opt.value}
-                  style={[styles.statusChip, active && styles.statusChipActive, active && { borderColor: opt.color }]}
-                  onPress={() => !isRepairLocked && setStatus(opt.value)}
-                  disabled={isRepairLocked}
-                >
-                  <Text style={[styles.statusChipText, active && { color: opt.color }]}>{opt.label}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-
-          <TouchableOpacity
-            style={[styles.toggleRow, radniNalogPotpisan && styles.toggleRowActive]}
-            onPress={() => !isRepairLocked && setRadniNalogPotpisan((p) => !p)}
-            disabled={isRepairLocked}
-          >
-            <Ionicons name={radniNalogPotpisan ? 'checkbox' : 'square-outline'} size={20} color={radniNalogPotpisan ? '#10b981' : '#6b7280'} />
-            <Text style={styles.toggleLabel}>Radni nalog potpisan</Text>
-          </TouchableOpacity>
-
-          {status === 'pending' && (reporterLabel || reportedAtLabel) && (
-            <View style={styles.reporterAuditBox}>
-              <Ionicons name="person-add-outline" size={18} color="#dc2626" />
-              <View style={{ flex: 1 }}>
-                {reporterLabel ? (
-                  <Text style={styles.reporterAuditText}>Prijavio: {reporterLabel}</Text>
-                ) : null}
-                {reportedAtLabel ? (
-                  <Text style={styles.reporterAuditSubText}>Vrijeme prijave: {reportedAtLabel}</Text>
-                ) : null}
-              </View>
-            </View>
-          )}
-
-          {status === 'completed' && (completedByLabel || completedAtLabel) && (
-            <View style={styles.completionAuditBox}>
-              <Ionicons name="person-circle-outline" size={18} color="#2563eb" />
-              <View style={{ flex: 1 }}>
-                {completedByLabel ? (
-                  <Text style={styles.completionAuditText}>Odradio: {completedByLabel}</Text>
-                ) : null}
-                {completedAtLabel ? (
-                  <Text style={styles.completionAuditSubText}>Vrijeme završetka: {completedAtLabel}</Text>
-                ) : null}
-              </View>
-            </View>
-          )}
-        </View>
 
         <View style={styles.card}>
           <TouchableOpacity style={styles.expandableHeader} onPress={() => toggleExpandableSection('materijal')}>
@@ -1303,91 +1242,149 @@ export default function RepairDetailsScreen({ route, navigation }) {
           )}
         </View>
 
-        {/* Postojeći radni nalog */}
-        {online && loadingWorkOrder && (
-          <View style={styles.card}>
-            <ActivityIndicator size="small" color="#2563eb" />
-            <Text style={{ textAlign: 'center', marginTop: ms(8), color: '#6b7280' }}>Učitavam radni nalog...</Text>
+        <View style={styles.card}>
+          <View style={styles.sectionTitleRow}>
+            <Ionicons name="flag-outline" size={18} color="#10b981" />
+            <Text style={styles.sectionTitle}>Status i radni nalog</Text>
           </View>
-        )}
-
-        {online && !loadingWorkOrder && workOrder && (
           <TouchableOpacity
-            activeOpacity={0.92}
-            style={[styles.card, { backgroundColor: '#eff6ff' }]}
-            onPress={openWorkOrderMenu}
-            disabled={deletingWorkOrder || deletingRepair}
+            style={[
+              styles.statusToggleButton,
+              status === 'completed' ? styles.statusToggleButtonCompleted : styles.statusToggleButtonPending,
+              isRepairLocked && styles.disabledAction,
+            ]}
+            onPress={() => {
+              if (isRepairLocked) return;
+              setStatus((prev) => (prev === 'completed' ? 'pending' : 'completed'));
+            }}
+            disabled={isRepairLocked}
           >
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: ms(8) }}>
-              <Ionicons name="document-text" size={20} color="#2563eb" />
-              <Text style={[styles.sectionTitle, { marginLeft: ms(8), flex: 1 }]}>Radni nalog</Text>
-              <View style={{
-                paddingHorizontal: ms(8),
-                paddingVertical: ms(4),
-                borderRadius: ms(6),
-                backgroundColor: workOrder.status === 'draft' ? '#fef3c7' : workOrder.status === 'signed' ? '#d1fae5' : '#e0e7ff'
-              }}>
-                <Text style={{
-                  fontSize: ms(11),
-                  fontWeight: '700',
-                  color: workOrder.status === 'draft' ? '#92400e' : workOrder.status === 'signed' ? '#065f46' : '#3730a3'
-                }}>
-                  {workOrderStatusLabel(workOrder.status)}
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={[styles.workOrderMenuBtn, (deletingWorkOrder || deletingRepair) && styles.disabledAction]}
-                onPress={openWorkOrderMenu}
-                disabled={deletingWorkOrder || deletingRepair}
-              >
-                <Ionicons name="ellipsis-horizontal" size={18} color="#334155" />
-              </TouchableOpacity>
-            </View>
-            
-            <Text style={{ fontSize: ms(13), color: '#374151', marginBottom: ms(4) }}>
-              <Text style={{ fontWeight: '700' }}>Broj:</Text> {workOrder.workOrderNumber}
+            <Ionicons
+              name={status === 'completed' ? 'checkmark-circle' : 'alert-circle'}
+              size={18}
+              color={status === 'completed' ? '#065f46' : '#991b1b'}
+            />
+            <Text style={[
+              styles.statusToggleButtonText,
+              status === 'completed' ? styles.statusToggleButtonTextCompleted : styles.statusToggleButtonTextPending,
+            ]}>
+              {status === 'completed' ? 'Završen' : 'Prijavljen'}
             </Text>
-            <Text style={{ fontSize: ms(13), color: '#374151', marginBottom: ms(8) }}>
-              <Text style={{ fontWeight: '700' }}>Kreiran:</Text> {workOrderCreatedLabel}
-            </Text>
-
-            {workOrder.status === 'draft' && (
-              <TouchableOpacity
-                style={[styles.secondaryButton, { marginTop: ms(8), backgroundColor: '#10b981', borderColor: '#10b981' }]}
-                onPress={() => openSignatureFlow(workOrder._id || workOrder.id)}
-              >
-                <Ionicons name="create-outline" size={18} color="#fff" />
-                <Text style={[styles.secondaryText, { color: '#fff', fontWeight: '700' }]}>Potpiši i označi kao poslano</Text>
-              </TouchableOpacity>
-            )}
+            <Ionicons name="swap-horizontal" size={16} color={status === 'completed' ? '#065f46' : '#991b1b'} />
           </TouchableOpacity>
-        )}
+
+          {status === 'pending' && (reporterLabel || reportedAtLabel) && (
+            <View style={styles.reporterAuditBoxCompact}>
+              <Ionicons name="person-add-outline" size={18} color="#dc2626" />
+              <View style={{ flex: 1 }}>
+                {reporterLabel ? (
+                  <Text style={styles.reporterAuditText}>Prijavio: {reporterLabel}</Text>
+                ) : null}
+                {reportedAtLabel ? (
+                  <Text style={styles.reporterAuditSubText}>Vrijeme prijave: {reportedAtLabel}</Text>
+                ) : null}
+              </View>
+            </View>
+          )}
+
+          {status === 'completed' && (
+            <View style={styles.statusActionsRow}>
+              <TouchableOpacity
+                style={[styles.toggleRow, styles.statusInlineToggle, radniNalogPotpisan && styles.toggleRowActive]}
+                onPress={() => !isRepairLocked && setRadniNalogPotpisan((p) => !p)}
+                disabled={isRepairLocked}
+              >
+                <Ionicons name={radniNalogPotpisan ? 'checkbox' : 'square-outline'} size={20} color={radniNalogPotpisan ? '#10b981' : '#6b7280'} />
+                <Text style={styles.toggleLabel}>Radni nalog potpisan</Text>
+              </TouchableOpacity>
+
+              {canCreateWorkOrder && (
+                <TouchableOpacity style={styles.inlineWorkOrderButton} onPress={handleCreateWorkOrder}>
+                  <Ionicons name="document-text-outline" size={18} color="#fff" />
+                  <Text style={styles.inlineWorkOrderButtonText}>Kreiraj radni nalog</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+
+          {status === 'completed' && (completedByLabel || completedAtLabel) && (
+            <View style={styles.completionAuditBox}>
+              <Ionicons name="person-circle-outline" size={18} color="#2563eb" />
+              <View style={{ flex: 1 }}>
+                {completedByLabel ? (
+                  <Text style={styles.completionAuditText}>Odradio: {completedByLabel}</Text>
+                ) : null}
+                {completedAtLabel ? (
+                  <Text style={styles.completionAuditSubText}>Vrijeme završetka: {completedAtLabel}</Text>
+                ) : null}
+              </View>
+            </View>
+          )}
+
+          {online && loadingWorkOrder && status === 'completed' && (
+            <View style={styles.inlineInfoRow}>
+              <ActivityIndicator size="small" color="#2563eb" />
+              <Text style={styles.inlineInfoText}>Učitavam radni nalog...</Text>
+            </View>
+          )}
+
+          {online && !loadingWorkOrder && workOrder && (
+            <TouchableOpacity
+              activeOpacity={0.92}
+              style={styles.inlineWorkOrderCard}
+              onPress={openWorkOrderMenu}
+              disabled={deletingWorkOrder || deletingRepair}
+            >
+              <View style={styles.inlineWorkOrderHeader}>
+                <View style={styles.inlineWorkOrderTitleWrap}>
+                  <Ionicons name="document-text" size={18} color="#2563eb" />
+                  <Text style={styles.inlineWorkOrderTitle}>Radni nalog</Text>
+                </View>
+                <View style={styles.inlineWorkOrderRight}>
+                  <View style={[
+                    styles.inlineWorkOrderStatusBadge,
+                    { backgroundColor: workOrder.status === 'draft' ? '#fef3c7' : workOrder.status === 'signed' ? '#d1fae5' : '#e0e7ff' },
+                  ]}>
+                    <Text style={[
+                      styles.inlineWorkOrderStatusText,
+                      { color: workOrder.status === 'draft' ? '#92400e' : workOrder.status === 'signed' ? '#065f46' : '#3730a3' },
+                    ]}>
+                      {workOrderStatusLabel(workOrder.status)}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={[styles.workOrderMenuBtn, (deletingWorkOrder || deletingRepair) && styles.disabledAction]}
+                    onPress={openWorkOrderMenu}
+                    disabled={deletingWorkOrder || deletingRepair}
+                  >
+                    <Ionicons name="ellipsis-horizontal" size={18} color="#334155" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <Text style={styles.inlineWorkOrderMeta}>
+                <Text style={styles.inlineWorkOrderMetaStrong}>Broj:</Text> {workOrder.workOrderNumber}
+              </Text>
+              <Text style={styles.inlineWorkOrderMeta}>
+                <Text style={styles.inlineWorkOrderMetaStrong}>Kreiran:</Text> {workOrderCreatedLabel}
+              </Text>
+
+              {workOrder.status === 'draft' && (
+                <TouchableOpacity
+                  style={styles.inlineSignButton}
+                  onPress={() => openSignatureFlow(workOrder._id || workOrder.id)}
+                >
+                  <Ionicons name="create-outline" size={18} color="#fff" />
+                  <Text style={styles.inlineSignButtonText}>Potpiši i označi kao poslano</Text>
+                </TouchableOpacity>
+              )}
+            </TouchableOpacity>
+          )}
+        </View>
 
         <TouchableOpacity style={[styles.primaryButton, isRepairLocked && styles.workOrderButtonDisabled]} onPress={handleSave} disabled={saving || isRepairLocked}>
           <Ionicons name="save-outline" size={18} color="#fff" />
           <Text style={styles.primaryButtonText}>{isRepairLocked ? 'Zaključano' : (saving ? 'Spremam...' : 'Spremi')}</Text>
-        </TouchableOpacity>
-
-        {/* Tipka za kreiranje/pregled radnog naloga */}
-        <TouchableOpacity
-          style={[
-            styles.workOrderButton,
-            (!online || String(repairData._id || repairData.id).startsWith('local_')) && styles.workOrderButtonDisabled
-          ]}
-          onPress={handleCreateWorkOrder}
-          disabled={!online || loadingWorkOrder || String(repairData._id || repairData.id).startsWith('local_')}
-        >
-          <Ionicons
-            name="document-text-outline"
-            size={18}
-            color={(online && !String(repairData._id || repairData.id).startsWith('local_')) ? '#fff' : '#9ca3af'}
-          />
-          <Text style={[
-            styles.workOrderButtonText,
-            (!online || String(repairData._id || repairData.id).startsWith('local_')) && { color: '#9ca3af' }
-          ]}>
-            {loadingWorkOrder ? 'Učitavam...' : workOrder ? 'Pregled radnog naloga' : 'Kreiraj radni nalog'}
-          </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -1751,12 +1748,55 @@ const styles = StyleSheet.create({
     paddingHorizontal: ms(6),
     borderRadius: ms(8),
   },
+  statusActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: ms(10),
+    marginTop: ms(2),
+    marginBottom: ms(4),
+  },
+  statusInlineToggle: {
+    flex: 1,
+    paddingVertical: ms(12),
+    paddingHorizontal: ms(10),
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: ms(10),
+    backgroundColor: '#f8fafc',
+  },
+  inlineWorkOrderButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: ms(8),
+    paddingHorizontal: ms(12),
+    paddingVertical: ms(12),
+    borderRadius: ms(10),
+    backgroundColor: '#0f766e',
+  },
+  inlineWorkOrderButtonText: {
+    color: '#fff',
+    fontSize: ms(13),
+    fontWeight: '700',
+  },
   toggleLabel: {
     fontSize: ms(15),
     color: '#111827',
   },
   reporterAuditBox: {
     marginTop: ms(10),
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: ms(8),
+    paddingVertical: ms(10),
+    paddingHorizontal: ms(12),
+    borderRadius: ms(10),
+    backgroundColor: '#fef2f2',
+    borderWidth: 1,
+    borderColor: '#fecaca',
+  },
+  reporterAuditBoxCompact: {
+    marginTop: ms(2),
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: ms(8),
@@ -1803,6 +1843,35 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: ms(8),
     marginBottom: ms(6),
+  },
+  statusToggleButton: {
+    marginBottom: ms(8),
+    borderRadius: ms(12),
+    borderWidth: 1.5,
+    paddingHorizontal: ms(14),
+    paddingVertical: ms(14),
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: ms(8),
+  },
+  statusToggleButtonPending: {
+    backgroundColor: '#fef2f2',
+    borderColor: '#fecaca',
+  },
+  statusToggleButtonCompleted: {
+    backgroundColor: '#f0fdf4',
+    borderColor: '#bbf7d0',
+  },
+  statusToggleButtonText: {
+    fontSize: ms(15),
+    fontWeight: '800',
+  },
+  statusToggleButtonTextPending: {
+    color: '#991b1b',
+  },
+  statusToggleButtonTextCompleted: {
+    color: '#065f46',
   },
   statusChip: {
     flex: 1,
@@ -2102,6 +2171,79 @@ const styles = StyleSheet.create({
     fontSize: ms(12),
     color: '#64748b',
     fontWeight: '600',
+  },
+  inlineInfoRow: {
+    marginTop: ms(10),
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: ms(8),
+    paddingVertical: ms(10),
+  },
+  inlineInfoText: {
+    fontSize: ms(13),
+    color: '#64748b',
+    fontWeight: '600',
+  },
+  inlineWorkOrderCard: {
+    marginTop: ms(10),
+    borderRadius: ms(12),
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    backgroundColor: '#eff6ff',
+    padding: ms(12),
+  },
+  inlineWorkOrderHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: ms(8),
+  },
+  inlineWorkOrderTitleWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: ms(8),
+  },
+  inlineWorkOrderTitle: {
+    fontSize: ms(15),
+    fontWeight: '800',
+    color: '#1e3a8a',
+  },
+  inlineWorkOrderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: ms(8),
+  },
+  inlineWorkOrderStatusBadge: {
+    paddingHorizontal: ms(8),
+    paddingVertical: ms(4),
+    borderRadius: ms(6),
+  },
+  inlineWorkOrderStatusText: {
+    fontSize: ms(11),
+    fontWeight: '700',
+  },
+  inlineWorkOrderMeta: {
+    fontSize: ms(13),
+    color: '#374151',
+    marginBottom: ms(4),
+  },
+  inlineWorkOrderMetaStrong: {
+    fontWeight: '700',
+  },
+  inlineSignButton: {
+    marginTop: ms(8),
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: ms(8),
+    backgroundColor: '#10b981',
+    borderRadius: ms(10),
+    paddingVertical: ms(12),
+  },
+  inlineSignButtonText: {
+    fontSize: ms(14),
+    color: '#fff',
+    fontWeight: '700',
   },
   countdownCancelButton: {
     marginTop: ms(16),

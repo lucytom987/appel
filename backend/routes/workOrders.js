@@ -108,9 +108,11 @@ const formatDayKey = (date = new Date()) => {
   return `${day}${month}${year}`;
 };
 
-const resolveBaseUrl = (req) => {
+const resolveBaseUrl = (req, explicitBaseUrl = null) => {
+  if (explicitBaseUrl) return String(explicitBaseUrl).replace(/\/$/, '');
   const envUrl = process.env.PUBLIC_BASE_URL || process.env.APP_BASE_URL;
   if (envUrl) return envUrl.replace(/\/$/, '');
+  if (!req) return '';
   return `${req.protocol}://${req.get('host')}`;
 };
 
@@ -170,7 +172,7 @@ const toEmbeddedImageDataUrl = async (value) => {
   }
 };
 
-const buildWorkOrderTemplateData = async (workOrder, req, token) => {
+const buildWorkOrderTemplateData = async (workOrder, req, token, explicitBaseUrl = null) => {
   const company = await Company.findById(workOrder.companyId).lean();
   const repair = await Repair.findById(workOrder.repairId)
     .populate('serviserID', 'ime prezime email')
@@ -199,7 +201,7 @@ const buildWorkOrderTemplateData = async (workOrder, req, token) => {
   const hasStructuredMaterial = materialItems.some((item) => item.structured || item.kolicina || item.jedinica);
   const companyLogoDataUrl = await toEmbeddedImageDataUrl(company?.logo);
 
-  const viewUrl = `${resolveBaseUrl(req)}/api/work-orders/view/${workOrder._id}?token=${encodeURIComponent(token)}`;
+  const viewUrl = `${resolveBaseUrl(req, explicitBaseUrl)}/api/work-orders/view/${workOrder._id}?token=${encodeURIComponent(token)}`;
   const qrCodeDataUrl = await QRCode.toDataURL(viewUrl, { margin: 1, width: 200 });
 
   return {
@@ -218,9 +220,65 @@ const buildWorkOrderTemplateData = async (workOrder, req, token) => {
   };
 };
 
-const renderWorkOrderHtml = async (workOrder, req, token) => {
-  const templateData = await buildWorkOrderTemplateData(workOrder, req, token);
+const renderWorkOrderHtml = async (workOrder, req, token, explicitBaseUrl = null) => {
+  const templateData = await buildWorkOrderTemplateData(workOrder, req, token, explicitBaseUrl);
   return ejs.renderFile(TEMPLATE_PATH, templateData);
+};
+
+const sendSignedWorkOrderEmailInBackground = async ({ workOrderId, companyId, baseUrl }) => {
+  const workOrder = await WorkOrder.findOne({ _id: workOrderId, companyId });
+  if (!workOrder) return;
+  if (String(workOrder.status || '').toLowerCase() !== 'sent') return;
+
+  const [repair, company] = await Promise.all([
+    Repair.findOne({ _id: workOrder.repairId, companyId })
+      .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala brojUgovora kontaktOsoba')
+      .populate('serviserID', 'ime prezime email'),
+    Company.findById(companyId),
+  ]);
+
+  if (!repair || !company?.email) return;
+
+  try {
+    const downloadUrl = `${baseUrl}/api/work-orders/download/${workOrder._id}?token=${encodeURIComponent(workOrder.viewToken)}`;
+    const htmlForEmail = await renderWorkOrderHtml(workOrder.toObject(), null, workOrder.viewToken, baseUrl);
+    let pdfBuffer = null;
+
+    try {
+      pdfBuffer = await generatePdfBufferFromHtml(htmlForEmail);
+
+      try {
+        ensureDir();
+        const fileName = `${workOrder.workOrderNumber || workOrder._id}.pdf`;
+        const filePath = path.join(OUTPUT_DIR, fileName);
+        await fs.promises.writeFile(filePath, pdfBuffer);
+        workOrder.pdfFileName = fileName;
+        workOrder.pdfPath = filePath;
+        workOrder.lastGeneratedAt = new Date();
+        await workOrder.save();
+      } catch (saveErr) {
+        console.error('Greška pri spremanju potpisanog PDF-a na disk:', saveErr.message || saveErr);
+      }
+    } catch (pdfError) {
+      console.error('❌ Greška pri generiranju PDF-a za email prilog:', pdfError.message);
+    }
+
+    const customerEmail = repair.elevatorId?.kontaktOsoba?.email || null;
+    await sendWorkOrderEmail(workOrder, company, repair, repair.elevatorId, downloadUrl, {
+      subject: `Radni nalog ${workOrder.workOrderNumber}`,
+      customerEmail,
+      attachments: pdfBuffer
+        ? [
+            {
+              filename: `${workOrder.workOrderNumber || 'radni-nalog'}.pdf`,
+              content: pdfBuffer,
+            },
+          ]
+        : [],
+    });
+  } catch (emailError) {
+    console.error('Greška pri slanju emaila:', emailError);
+  }
 };
 
 const generatePdfBufferFromHtml = async (html) => {
@@ -415,53 +473,6 @@ router.post('/:id/sign', authenticate, async (req, res) => {
     // workOrder.lastGeneratedAt = new Date();
     await workOrder.save();
 
-    // Pošalji email ako je radni nalog označen kao poslan i ako firma ima email
-    if (sendNow && company?.email) {
-      try {
-        const downloadUrl = `${baseUrl}/api/work-orders/download/${workOrder._id}?token=${encodeURIComponent(workOrder.viewToken)}`;
-        const htmlForEmail = await renderWorkOrderHtml(workOrder.toObject(), req, workOrder.viewToken);
-        let pdfBuffer = null;
-
-        try {
-          pdfBuffer = await generatePdfBufferFromHtml(htmlForEmail);
-          console.log('✅ PDF generiran za email prilog, veličina:', pdfBuffer.length, 'bajtova');
-
-          // Save signed PDF to disk (overwrite if exists)
-          try {
-            ensureDir();
-            const fileName = `${workOrder.workOrderNumber || workOrder._id}.pdf`;
-            const filePath = path.join(OUTPUT_DIR, fileName);
-            await fs.promises.writeFile(filePath, pdfBuffer);
-            workOrder.pdfFileName = fileName;
-            workOrder.pdfPath = filePath;
-            workOrder.lastGeneratedAt = new Date();
-            await workOrder.save();
-          } catch (saveErr) {
-            console.error('Greška pri spremanju potpisanog PDF-a na disk:', saveErr.message || saveErr);
-          }
-        } catch (pdfError) {
-          console.error('❌ Greška pri generiranju PDF-a za email prilog:', pdfError.message);
-        }
-
-        const customerEmail = repair.elevatorId?.kontaktOsoba?.email || null;
-        await sendWorkOrderEmail(workOrder, company, repair, repair.elevatorId, downloadUrl, {
-          subject: `Radni nalog ${workOrder.workOrderNumber}`,
-          customerEmail,
-          attachments: pdfBuffer
-            ? [
-                {
-                  filename: `${workOrder.workOrderNumber || 'radni-nalog'}.pdf`,
-                  content: pdfBuffer,
-                },
-              ]
-            : [],
-        });
-      } catch (emailError) {
-        console.error('Greška pri slanju emaila:', emailError);
-        // Nastavi dalje jer je radni nalog već spremljen
-      }
-    }
-
     await Repair.findByIdAndUpdate(repair._id, {
       radniNalogPotpisan: true,
       updated_at: new Date(),
@@ -484,6 +495,19 @@ router.post('/:id/sign', authenticate, async (req, res) => {
       message: sendNow ? 'Radni nalog potpisan i poslan' : 'Radni nalog potpisan',
       data: mapWorkOrderResponse(workOrder, req),
     });
+
+    // Teški dio (PDF + email) radi asinkrono nakon API odgovora radi bržeg UX-a.
+    if (sendNow && company?.email) {
+      setImmediate(() => {
+        sendSignedWorkOrderEmailInBackground({
+          workOrderId: workOrder._id,
+          companyId: req.companyId,
+          baseUrl,
+        }).catch((err) => {
+          console.error('Background slanje radnog naloga nije uspjelo:', err?.message || err);
+        });
+      });
+    }
   } catch (error) {
     console.error('Greška pri potpisu radnog naloga:', error);
     res.status(500).json({ success: false, message: 'Greška pri potpisu radnog naloga' });

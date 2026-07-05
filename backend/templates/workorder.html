@@ -215,10 +215,15 @@
       display: grid;
       grid-template-columns: 1fr 1fr 1fr;
       gap: 6mm;
-      align-items: end;
+      align-items: start;
     }
 
-    .sig { font-size: 10.5px; }
+    .sig {
+      font-size: 10.5px;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+    }
 
     .sig-label {
       font-weight: 800;
@@ -232,13 +237,22 @@
     .sig-line {
       border-bottom: 2px solid var(--line);
       padding-top: 2mm;
-      min-height: 8mm;
+      min-height: 22mm;
       font-size: 13px;
       font-weight: 700;
       letter-spacing: 0.5px;
       display: flex;
       align-items: flex-end;
       overflow: hidden;
+    }
+
+    .sig-date {
+      min-height: 22mm;
+      font-size: 28px;
+      letter-spacing: 0.8px;
+      font-weight: 800;
+      line-height: 1;
+      align-items: flex-end;
     }
 
     /* Standardized signature image sizing: fixed height, preserve aspect ratio */
@@ -259,7 +273,7 @@
     }
 
     .absent-note {
-      font-size: 9px;
+      font-size: 10px;
       color: var(--muted);
       font-style: italic;
       margin-top: 1mm;
@@ -319,6 +333,10 @@
       const satiNum = Number(row.sati);
       return sum + (Number.isFinite(satiNum) ? satiNum : 0);
     }, 0);
+    const customerDisplayName =
+      (elevator && elevator.kontaktOsoba && elevator.kontaktOsoba.imePrezime) ||
+      (elevator && elevator.nazivStranke) ||
+      '-';
   %>
 
   <div class="page">
@@ -424,7 +442,7 @@
     <div class="signatures">
       <div class="sig">
         <div class="sig-label">Nadnevak</div>
-        <div class="sig-line"><%= formatDateHR(workOrder && (workOrder.signedAt || workOrder.created_at)) %></div>
+        <div class="sig-line sig-date"><%= formatDateOnlyHR(workOrder && (workOrder.signedAt || workOrder.created_at)) %></div>
       </div>
       <div class="sig">
         <div class="sig-label">Potpis servisera</div>
@@ -442,11 +460,11 @@
           <% if (workOrder && workOrder.customerSignatureImage) { %>
             <img class="sig-image" src="<%= workOrder.customerSignatureImage %>" alt="Potpis stranke">
           <% } else if (workOrder && workOrder.customerAbsent) { %>
-            <span style="font-size: 10px; color: #64748b; font-style: italic;">Stranka nije bila prisutna</span>
+            <span><%= customerDisplayName %></span>
           <% } %>
         </div>
-        <% if (workOrder && workOrder.customerAbsent && elevator && elevator.nazivStranke) { %>
-          <div class="absent-note">Stranka: <%= elevator.nazivStranke %></div>
+        <% if (workOrder && workOrder.customerAbsent) { %>
+          <div class="absent-note">(stranka nije bila prisutna)</div>
         <% } %>
       </div>
     </div>

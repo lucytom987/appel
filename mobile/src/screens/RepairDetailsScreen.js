@@ -1421,6 +1421,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
       <SignatureModal
         visible={showSignatureModal}
         signerName={`${user?.ime || ''} ${user?.prezime || ''}`.trim() || user?.email || 'Serviser'}
+        signerId={user?._id || user?.id || ''}
         customerName={elevator?.nazivStranke || elevator?.kontaktOsoba?.ime || ''}
         onConfirm={handleSignatureConfirm}
         onCancel={() => { setShowSignatureModal(false); setPendingSignWorkOrderId(null); }}

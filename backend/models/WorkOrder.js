@@ -32,6 +32,8 @@ const workOrderSchema = new mongoose.Schema({
   sentAt: { type: Date },
   sentChannels: [{ type: String }],
 
+  companyLogoDataUrl: { type: String },
+
   lastGeneratedAt: { type: Date, default: Date.now },
 
   updated_by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },

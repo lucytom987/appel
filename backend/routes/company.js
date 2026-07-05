@@ -4,6 +4,36 @@ const { authenticate, checkRole } = require('../middleware/auth');
 const { logAction } = require('../services/auditService');
 const Company = require('../models/Company');
 
+const toEmbeddedImageDataUrl = async (value) => {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+
+  if (raw.startsWith('data:image/')) return raw;
+  if (!/^https?:\/\//i.test(raw)) return raw;
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    const response = await fetch(raw, {
+      signal: controller.signal,
+      redirect: 'follow',
+      headers: {
+        Accept: 'image/*,*/*;q=0.8',
+      },
+    });
+    clearTimeout(timeout);
+
+    if (!response.ok) return raw;
+    const contentType = response.headers.get('content-type') || 'image/png';
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (bytes.length > 3 * 1024 * 1024) return raw;
+
+    return `data:${contentType};base64,${bytes.toString('base64')}`;
+  } catch (error) {
+    return raw;
+  }
+};
+
 // GET /api/company/setup-status - Provjeri je li firma "setup" (obavezna polja)
 router.get('/setup-status', authenticate, async (req, res) => {
   try {
@@ -68,7 +98,11 @@ router.put('/', authenticate, checkRole(['admin', 'menadzer']), async (req, res)
     if (mobitel !== undefined) company.mobitel = mobitel;
     if (telefon !== undefined) company.telefon = telefon;
     if (web !== undefined) company.web = web;
-    if (logo !== undefined) company.logo = logo; // Base64 ili URL
+    if (logo !== undefined) {
+      const normalizedLogo = String(logo || '').trim();
+      company.logo = normalizedLogo || null; // Base64 ili URL
+      company.logoDataUrl = normalizedLogo ? await toEmbeddedImageDataUrl(normalizedLogo) : null;
+    }
 
     await company.save();
 

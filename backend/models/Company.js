@@ -35,6 +35,10 @@ const companySchema = new mongoose.Schema({
     type: String, // URL ili base64
     default: null,
   },
+  logoDataUrl: {
+    type: String,
+    default: null,
+  },
   created_at: {
     type: Date,
     default: Date.now,

@@ -199,7 +199,7 @@ const buildWorkOrderTemplateData = async (workOrder, req, token, explicitBaseUrl
 
   const materialItems = parseMaterialItems(normalizedRepair?.utroseniMaterijal);
   const hasStructuredMaterial = materialItems.some((item) => item.structured || item.kolicina || item.jedinica);
-  const companyLogoDataUrl = await toEmbeddedImageDataUrl(company?.logo);
+  const companyLogoDataUrl = workOrder?.companyLogoDataUrl || company?.logoDataUrl || await toEmbeddedImageDataUrl(company?.logo);
 
   const viewUrl = `${resolveBaseUrl(req, explicitBaseUrl)}/api/work-orders/view/${workOrder._id}?token=${encodeURIComponent(token)}`;
   const qrCodeDataUrl = await QRCode.toDataURL(viewUrl, { margin: 1, width: 200 });
@@ -304,6 +304,16 @@ const generatePdfBufferFromHtml = async (html) => {
   try {
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: 'networkidle0' });
+    await page.evaluate(async () => {
+      const images = Array.from(document.images || []);
+      await Promise.all(images.map((img) => {
+        if (img.complete) return Promise.resolve();
+        return new Promise((resolve) => {
+          img.onload = () => resolve();
+          img.onerror = () => resolve();
+        });
+      }));
+    });
 
     const pdfBuffer = await page.pdf({
       format: 'A4',
@@ -376,6 +386,7 @@ router.post('/from-repair/:repairId', authenticate, async (req, res) => {
         repairId: repair._id,
         elevatorId: repair.elevatorId?._id || repair.elevatorId,
         serviserID: repair.serviserID?._id || repair.serviserID,
+        companyLogoDataUrl: company?.logoDataUrl || await toEmbeddedImageDataUrl(company?.logo),
         workOrderNumber: numbering.workOrderNumber,
         dayKey: numbering.dayKey,
         dailySequence: numbering.dailySequence,
@@ -450,6 +461,9 @@ router.post('/:id/sign', authenticate, async (req, res) => {
     workOrder.signatureImage = req.body.signatureImage || workOrder.signatureImage;
     workOrder.customerSignatureImage = req.body.customerSignatureImage || workOrder.customerSignatureImage;
     workOrder.customerAbsent = req.body.customerAbsent === true;
+    if (!workOrder.companyLogoDataUrl) {
+      workOrder.companyLogoDataUrl = company?.logoDataUrl || await toEmbeddedImageDataUrl(company?.logo);
+    }
     workOrder.signedBy = req.user._id;
     workOrder.signedByName = signerName;
     workOrder.signedAt = new Date();

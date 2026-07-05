@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { Alert, Linking, Platform, TouchableOpacity, View, Text, StyleSheet } from 'react-native';
+import { Alert, Linking, Modal, Platform, TouchableOpacity, View, Text, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import Constants from 'expo-constants';
@@ -139,6 +139,14 @@ const STARTUP_TIPS = [
 export default function App() {
   const [tip, setTip] = useState(null);
   const [showTip, setShowTip] = useState(false);
+  const [updateState, setUpdateState] = useState({
+    visible: false,
+    required: false,
+    message: '',
+    storeUrl: '',
+    packageName: '',
+    version: '',
+  });
   const insets = useSafeAreaInsets();
 
   useEffect(() => {
@@ -237,23 +245,14 @@ export default function App() {
           ? 'Potrebno je ažurirati aplikaciju za nastavak korištenja.'
           : 'Dostupna je nova verzija aplikacije. Želite li ažurirati sada?';
 
-        if (requiresHardUpdate) {
-          Alert.alert('Obavezno ažuriranje', message, [
-            {
-              text: 'Ažuriraj',
-              onPress: () => openStore(storeUrl, packageName),
-            },
-          ], { cancelable: false });
-          return;
-        }
-
-        Alert.alert('Dostupna nova verzija', message, [
-          { text: 'Kasnije', style: 'cancel' },
-          {
-            text: 'Ažuriraj',
-            onPress: () => openStore(storeUrl, packageName),
-          },
-        ]);
+        setUpdateState({
+          visible: true,
+          required: requiresHardUpdate,
+          message,
+          storeUrl,
+          packageName,
+          version: latestVersion || `${latestVersionCode || ''}`,
+        });
       } catch (err) {
         console.log('ℹ️ Update check preskočen:', err?.message || 'n/a');
       }
@@ -264,9 +263,41 @@ export default function App() {
 
   const handleDismissTip = () => setShowTip(false);
 
+  const openUpdateStore = async () => {
+    await Linking.openURL(updateState.storeUrl || `https://play.google.com/store/apps/details?id=${updateState.packageName || 'hr.appel.elevators'}`);
+  };
+
+  const dismissUpdate = () => {
+    if (updateState.required) return;
+    setUpdateState((prev) => ({ ...prev, visible: false }));
+  };
+
   return (
     <AuthProvider>
-      <Navigation />
+      <View style={{ flex: 1 }}>
+        <Navigation />
+        {updateState.visible ? (
+          <View style={[styles.updateBanner, { top: (insets?.top || 0) + 10 }]}>
+            <View style={styles.updateBannerIconWrap}>
+              <Text style={styles.updateBannerIcon}>⬆</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.updateBannerTitle}>
+                {updateState.required ? 'Obavezno ažuriranje' : 'Dostupna nova verzija'}
+              </Text>
+              <Text style={styles.updateBannerText}>{updateState.message}</Text>
+            </View>
+            <TouchableOpacity style={styles.updateBannerAction} onPress={openUpdateStore}>
+              <Text style={styles.updateBannerActionText}>Ažuriraj</Text>
+            </TouchableOpacity>
+            {!updateState.required ? (
+              <TouchableOpacity style={styles.updateBannerClose} onPress={dismissUpdate}>
+                <Text style={styles.updateBannerCloseText}>×</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        ) : null}
+      </View>
       {showTip && tip ? (
         <TouchableOpacity
           onPress={handleDismissTip}
@@ -280,6 +311,18 @@ export default function App() {
         </TouchableOpacity>
       ) : null}
       <StatusBar style="auto" />
+
+      <Modal visible={updateState.visible && updateState.required} transparent animationType="fade" onRequestClose={() => {}}>
+        <View style={styles.updateModalOverlay}>
+          <View style={styles.updateModalCard}>
+            <Text style={styles.updateModalTitle}>Obavezno ažuriranje</Text>
+            <Text style={styles.updateModalText}>{updateState.message}</Text>
+            <TouchableOpacity style={styles.updateModalButton} onPress={openUpdateStore}>
+              <Text style={styles.updateModalButtonText}>Otvori Google Play</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </AuthProvider>
   );
 }
@@ -316,5 +359,112 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
     fontWeight: '600',
     textAlign: 'center',
+  },
+  updateBanner: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    zIndex: 120,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#0f172a',
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#334155',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  updateBannerIconWrap: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#1d4ed8',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  updateBannerIcon: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  updateBannerTitle: {
+    color: '#fff',
+    fontSize: 14.5,
+    fontWeight: '800',
+  },
+  updateBannerText: {
+    color: '#cbd5e1',
+    fontSize: 12.5,
+    marginTop: 2,
+  },
+  updateBannerAction: {
+    backgroundColor: '#2563eb',
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 10,
+    marginLeft: 6,
+  },
+  updateBannerActionText: {
+    color: '#fff',
+    fontSize: 12.5,
+    fontWeight: '800',
+  },
+  updateBannerClose: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1e293b',
+    marginLeft: 2,
+  },
+  updateBannerCloseText: {
+    color: '#fff',
+    fontSize: 18,
+    lineHeight: 18,
+    fontWeight: '900',
+  },
+  updateModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.7)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  updateModalCard: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    padding: 22,
+  },
+  updateModalTitle: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#0f172a',
+    marginBottom: 8,
+  },
+  updateModalText: {
+    fontSize: 14.5,
+    color: '#334155',
+    lineHeight: 21,
+    marginBottom: 18,
+  },
+  updateModalButton: {
+    backgroundColor: '#2563eb',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  updateModalButtonText: {
+    color: '#fff',
+    fontSize: 14.5,
+    fontWeight: '800',
   },
 });

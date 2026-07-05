@@ -545,17 +545,35 @@ export default function HomeScreen({ navigation }) {
               <View style={[styles.repairsList, isCompactScreen && styles.repairsListCompact]}>
                 <View style={[styles.repairsRow, isCompactScreen && styles.repairsRowCompact]}>
                   <View style={[styles.repairsRowDot, { backgroundColor: '#ef4444' }]} />
-                  <Text style={[styles.repairsRowLabel, isCompactScreen && styles.repairsRowLabelCompact]}>ČEKANJE</Text>
+                  <Text
+                    style={[styles.repairsRowLabel, isCompactScreen && styles.repairsRowLabelCompact]}
+                    numberOfLines={1}
+                    allowFontScaling={false}
+                  >
+                    ČEKANJE
+                  </Text>
                   <Text style={[styles.repairsRowNumber, isCompactScreen && styles.repairsRowNumberCompact, { color: '#ef4444' }]}>{stats.repairsPending}</Text>
                 </View>
                 <View style={[styles.repairsRow, isCompactScreen && styles.repairsRowCompact]}>
                   <View style={[styles.repairsRowDot, { backgroundColor: '#f59e0b' }]} />
-                  <Text style={[styles.repairsRowLabel, isCompactScreen && styles.repairsRowLabelCompact]}>TREBALO BI</Text>
+                  <Text
+                    style={[styles.repairsRowLabel, isCompactScreen && styles.repairsRowLabelCompact]}
+                    numberOfLines={1}
+                    allowFontScaling={false}
+                  >
+                    TREBALO BI
+                  </Text>
                   <Text style={[styles.repairsRowNumber, isCompactScreen && styles.repairsRowNumberCompact, { color: '#f59e0b' }]}>{stats.repairsTrebaloBi}</Text>
                 </View>
                 <View style={[styles.repairsRow, isCompactScreen && styles.repairsRowCompact]}>
                   <View style={[styles.repairsRowDot, { backgroundColor: '#2563eb' }]} />
-                  <Text style={[styles.repairsRowLabel, isCompactScreen && styles.repairsRowLabelCompact]}>NEPOTPISANO</Text>
+                  <Text
+                    style={[styles.repairsRowLabel, isCompactScreen && styles.repairsRowLabelCompact]}
+                    numberOfLines={1}
+                    allowFontScaling={false}
+                  >
+                    NEPOTPISANO
+                  </Text>
                   <Text style={[styles.repairsRowNumber, isCompactScreen && styles.repairsRowNumberCompact, { color: '#2563eb' }]}>{stats.repairsUnsigned}</Text>
                 </View>
               </View>
@@ -836,10 +854,12 @@ const styles = StyleSheet.create({
   },
   repairsRowLabel: {
     flex: 1,
+    flexShrink: 1,
     fontSize: rf(12, 10, 18),
     fontWeight: '700',
     color: '#334155',
     letterSpacing: 0.4,
+    marginRight: 6,
   },
   repairsRowLabelCompact: {
     fontSize: rf(11, 9.5, 16),

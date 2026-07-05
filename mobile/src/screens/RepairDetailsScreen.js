@@ -227,6 +227,11 @@ export default function RepairDetailsScreen({ route, navigation }) {
   );
   const [status, setStatus] = useState(repairData.status === 'completed' ? 'completed' : 'pending');
   const [radniNalogPotpisan, setRadniNalogPotpisan] = useState(Boolean(repairData.radniNalogPotpisan));
+  const [radniNalogPotpisVrsta, setRadniNalogPotpisVrsta] = useState(
+    repairData.radniNalogPotpisVrsta === 'digital' || repairData.radniNalogPotpisVrsta === 'paper'
+      ? repairData.radniNalogPotpisVrsta
+      : null
+  );
   const [saving, setSaving] = useState(false);
   const [workOrder, setWorkOrder] = useState(null);
   const [loadingWorkOrder, setLoadingWorkOrder] = useState(false);
@@ -278,9 +283,16 @@ export default function RepairDetailsScreen({ route, navigation }) {
   const canCreateWorkOrder = Boolean(
     online
     && status === 'completed'
+    && !radniNalogPotpisan
     && !workOrder
     && !isRepairLocked
   );
+  const signatureTypeLabel = (() => {
+    if (!radniNalogPotpisan) return '';
+    if (radniNalogPotpisVrsta === 'digital') return 'Digitalno';
+    if (radniNalogPotpisVrsta === 'paper') return 'Papirnato';
+    return workOrder ? 'Digitalno' : 'Papirnato';
+  })();
 
   useEffect(() => {
     const isNewArchitecture = Boolean(global?.nativeFabricUIManager);
@@ -596,6 +608,9 @@ export default function RepairDetailsScreen({ route, navigation }) {
       });
       const signed = signRes?.data?.data;
       setWorkOrder(signed);
+      setRadniNalogPotpisan(true);
+      setRadniNalogPotpisVrsta('digital');
+      setRepairData((prev) => ({ ...prev, radniNalogPotpisan: true, radniNalogPotpisVrsta: 'digital' }));
       setShowSignatureModal(false);
       setPendingSignWorkOrderId(null);
       Alert.alert(
@@ -633,7 +648,8 @@ export default function RepairDetailsScreen({ route, navigation }) {
               await workOrdersAPI.delete(woId);
               setWorkOrder(null);
               setRadniNalogPotpisan(false);
-              setRepairData((prev) => ({ ...prev, radniNalogPotpisan: false }));
+              setRadniNalogPotpisVrsta(null);
+              setRepairData((prev) => ({ ...prev, radniNalogPotpisan: false, radniNalogPotpisVrsta: null }));
               Alert.alert('Obrisano', 'Radni nalog je obrisan. Popravak je ponovno otključan za uređivanje.');
             } catch (err) {
               Alert.alert('Greška', err?.response?.data?.message || err?.message || 'Brisanje radnog naloga nije uspjelo');
@@ -754,6 +770,10 @@ export default function RepairDetailsScreen({ route, navigation }) {
       )
       : null;
 
+    const effectiveSignatureType = radniNalogPotpisan
+      ? (workOrder ? 'digital' : (radniNalogPotpisVrsta || 'paper'))
+      : null;
+
     const payload = {
       id,
       elevatorId: repairData.elevatorId,
@@ -762,6 +782,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
       status,
       trebaloBi: isTrebaloBi,
       radniNalogPotpisan,
+      radniNalogPotpisVrsta: effectiveSignatureType,
       dodatniServiseri: cleanedAdditionalServicers.map((entry) => entry.userId),
       radniSati: {
         glavni: glavniSati,
@@ -896,7 +917,12 @@ export default function RepairDetailsScreen({ route, navigation }) {
     ));
     setStatus(repairData.status === 'completed' ? 'completed' : 'pending');
     setRadniNalogPotpisan(Boolean(repairData.radniNalogPotpisan));
-  }, [repairData.trebaloBi, repairData.status, repairData.radniNalogPotpisan, repairData.category, repairData.type]);
+    setRadniNalogPotpisVrsta(
+      repairData.radniNalogPotpisVrsta === 'digital' || repairData.radniNalogPotpisVrsta === 'paper'
+        ? repairData.radniNalogPotpisVrsta
+        : null
+    );
+  }, [repairData.trebaloBi, repairData.status, repairData.radniNalogPotpisan, repairData.radniNalogPotpisVrsta, repairData.category, repairData.type]);
 
   const handleSave = async () => {
     await saveRepair({ showSuccessAlert: true });
@@ -1291,12 +1317,32 @@ export default function RepairDetailsScreen({ route, navigation }) {
             <View style={styles.statusActionsRow}>
               <TouchableOpacity
                 style={[styles.toggleRow, styles.statusInlineToggle, radniNalogPotpisan && styles.toggleRowActive]}
-                onPress={() => !isRepairLocked && setRadniNalogPotpisan((p) => !p)}
+                onPress={() => {
+                  if (isRepairLocked) return;
+                  setRadniNalogPotpisan((prev) => {
+                    const next = !prev;
+                    if (!next) {
+                      setRadniNalogPotpisVrsta(null);
+                    } else if (workOrder) {
+                      setRadniNalogPotpisVrsta('digital');
+                    } else {
+                      setRadniNalogPotpisVrsta('paper');
+                    }
+                    return next;
+                  });
+                }}
                 disabled={isRepairLocked}
               >
                 <Ionicons name={radniNalogPotpisan ? 'checkbox' : 'square-outline'} size={20} color={radniNalogPotpisan ? '#10b981' : '#6b7280'} />
                 <Text style={styles.toggleLabel}>Radni nalog potpisan</Text>
               </TouchableOpacity>
+
+              {radniNalogPotpisan ? (
+                <View style={styles.signatureTypeBadge}>
+                  <Ionicons name={signatureTypeLabel === 'Digitalno' ? 'phone-portrait-outline' : 'document-text-outline'} size={14} color="#1e3a8a" />
+                  <Text style={styles.signatureTypeBadgeText}>Potpis: {signatureTypeLabel}</Text>
+                </View>
+              ) : null}
 
               {canCreateWorkOrder && (
                 <TouchableOpacity style={styles.inlineWorkOrderButton} onPress={handleCreateWorkOrder}>
@@ -1782,6 +1828,23 @@ const styles = StyleSheet.create({
   toggleLabel: {
     fontSize: ms(15),
     color: '#111827',
+  },
+  signatureTypeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: ms(6),
+    paddingHorizontal: ms(10),
+    paddingVertical: ms(6),
+    borderRadius: ms(999),
+    backgroundColor: '#dbeafe',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+  },
+  signatureTypeBadgeText: {
+    fontSize: ms(12),
+    fontWeight: '700',
+    color: '#1e3a8a',
   },
   reporterAuditBox: {
     marginTop: ms(10),

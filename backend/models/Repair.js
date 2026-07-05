@@ -33,6 +33,11 @@ const repairSchema = new mongoose.Schema({
   trebaloBi: { type: Boolean, default: false },
 
   radniNalogPotpisan: { type: Boolean, default: false },
+  radniNalogPotpisVrsta: {
+    type: String,
+    enum: ['paper', 'digital', null],
+    default: null,
+  },
   popravkaUPotpunosti: { type: Boolean, default: false },
   napomene: String,
   

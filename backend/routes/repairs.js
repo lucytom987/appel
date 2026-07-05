@@ -44,6 +44,12 @@ const normalizeWorkHours = (value) => {
   };
 };
 
+const normalizeWorkOrderSignatureType = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'paper' || normalized === 'digital') return normalized;
+  return null;
+};
+
 // GET /api/repairs - popis popravaka (filtri)
 router.get('/', authenticate, async (req, res) => {
   try {
@@ -210,6 +216,8 @@ router.post('/', authenticate, async (req, res) => {
 
     const normalizedAdditionalTechnicians = await normalizeAdditionalTechnicians(req.body.dodatniServiseri, req.companyId);
     const normalizedWorkHours = normalizeWorkHours(req.body.radniSati);
+    const requestedSignatureType = normalizeWorkOrderSignatureType(req.body.radniNalogPotpisVrsta);
+    const isWorkOrderSigned = Boolean(req.body.radniNalogPotpisan);
     const repair = new Repair({
       ...req.body,
       companyId: req.companyId,
@@ -225,6 +233,7 @@ router.post('/', authenticate, async (req, res) => {
       completedBy: isCompleted ? req.user._id : undefined,
       completedByName: isCompleted ? completedByName : undefined,
       completedAt: isCompleted ? (req.body.datumPopravka || now) : undefined,
+      radniNalogPotpisVrsta: isWorkOrderSigned ? (requestedSignatureType || 'paper') : null,
       updated_at: now,
       updated_by: req.user._id,
       is_deleted: false,
@@ -266,16 +275,15 @@ router.put('/:id', authenticate, async (req, res) => {
       return res.status(404).json({ success: false, message: 'Popravak je obrisan' });
     }
 
-    const sentWorkOrder = await WorkOrder.findOne({
+    const relatedWorkOrder = await WorkOrder.findOne({
       repairId: existing._id,
       companyId: req.companyId,
-      status: 'sent',
-    }).select('_id workOrderNumber').lean();
+    }).select('_id workOrderNumber status').lean();
 
-    if (sentWorkOrder) {
+    if (relatedWorkOrder && relatedWorkOrder.status === 'sent') {
       return res.status(409).json({
         success: false,
-        message: `Popravak je zaključan jer je radni nalog ${sentWorkOrder.workOrderNumber || ''} već potpisan i poslan.`,
+        message: `Popravak je zaključan jer je radni nalog ${relatedWorkOrder.workOrderNumber || ''} već potpisan i poslan.`,
       });
     }
 
@@ -320,6 +328,20 @@ router.put('/:id', authenticate, async (req, res) => {
       updated_at: now,
       updated_by: req.user._id,
     };
+
+    const requestedSignatureType = normalizeWorkOrderSignatureType(req.body.radniNalogPotpisVrsta);
+    if (typeof req.body.radniNalogPotpisan === 'boolean') {
+      if (!req.body.radniNalogPotpisan) {
+        updatePayload.radniNalogPotpisVrsta = null;
+      } else if (requestedSignatureType) {
+        updatePayload.radniNalogPotpisVrsta = requestedSignatureType;
+      } else {
+        updatePayload.radniNalogPotpisVrsta = relatedWorkOrder ? 'digital' : 'paper';
+      }
+    } else if (requestedSignatureType) {
+      const effectiveSigned = existing.radniNalogPotpisan === true;
+      updatePayload.radniNalogPotpisVrsta = effectiveSigned ? requestedSignatureType : null;
+    }
 
     if (completingNow) {
       updatePayload.completedBy = req.user._id;

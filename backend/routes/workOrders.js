@@ -475,6 +475,7 @@ router.post('/:id/sign', authenticate, async (req, res) => {
 
     await Repair.findByIdAndUpdate(repair._id, {
       radniNalogPotpisan: true,
+      radniNalogPotpisVrsta: 'digital',
       updated_at: new Date(),
       updated_by: req.user._id,
     });
@@ -616,6 +617,7 @@ router.delete('/:id', authenticate, checkRole(['menadzer', 'admin']), async (req
       {
         $set: {
           radniNalogPotpisan: false,
+          radniNalogPotpisVrsta: null,
           updated_at: new Date(),
           updated_by: req.user._id,
         },

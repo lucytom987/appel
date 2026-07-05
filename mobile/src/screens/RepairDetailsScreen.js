@@ -166,6 +166,15 @@ export default function RepairDetailsScreen({ route, navigation }) {
     return parsed.toLocaleString('hr-HR');
   })();
 
+  const workOrderCreatedLabel = (() => {
+    if (!workOrder) return '';
+    const raw = workOrder.created_at || workOrder.updated_at || workOrder.sentAt || workOrder.signedAt || null;
+    if (!raw) return '-';
+    const parsed = new Date(raw);
+    if (Number.isNaN(parsed.getTime())) return '-';
+    return parsed.toLocaleString('hr-HR');
+  })();
+
   const reporterLabel = (() => {
     if (repairData?.status !== 'pending' && !repairData?.trebaloBi) return '';
     
@@ -226,6 +235,9 @@ export default function RepairDetailsScreen({ route, navigation }) {
   const [signingLoading, setSigningLoading] = useState(false);
   const [creatingWorkOrder, setCreatingWorkOrder] = useState(false);
   const [creatingWorkOrderSeconds, setCreatingWorkOrderSeconds] = useState(0);
+  const [showCreateWorkOrderCountdown, setShowCreateWorkOrderCountdown] = useState(false);
+  const [createWorkOrderCountdownSeconds, setCreateWorkOrderCountdownSeconds] = useState(5);
+  const [pendingWorkOrderRepairId, setPendingWorkOrderRepairId] = useState(null);
   const [deletingWorkOrder, setDeletingWorkOrder] = useState(false);
   const [deletingRepair, setDeletingRepair] = useState(false);
   const [showWorkOrderMenu, setShowWorkOrderMenu] = useState(false);
@@ -279,6 +291,48 @@ export default function RepairDetailsScreen({ route, navigation }) {
 
     return () => clearInterval(timer);
   }, [creatingWorkOrder]);
+
+  useEffect(() => {
+    if (!showCreateWorkOrderCountdown || !pendingWorkOrderRepairId) {
+      setCreateWorkOrderCountdownSeconds(5);
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setCreateWorkOrderCountdownSeconds((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [showCreateWorkOrderCountdown, pendingWorkOrderRepairId]);
+
+  useEffect(() => {
+    if (!showCreateWorkOrderCountdown || !pendingWorkOrderRepairId) return;
+    if (createWorkOrderCountdownSeconds > 0) return;
+
+    const executeCreate = async () => {
+      setShowCreateWorkOrderCountdown(false);
+      setCreatingWorkOrder(true);
+      try {
+        const draftRes = await workOrdersAPI.createFromRepair(pendingWorkOrderRepairId);
+        const newWorkOrder = draftRes?.data?.data;
+        setWorkOrder(newWorkOrder);
+      } catch (err) {
+        Alert.alert('Greška', err?.response?.data?.message || err?.message || 'Kreiranje radnog naloga nije uspjelo');
+      } finally {
+        setPendingWorkOrderRepairId(null);
+        setCreatingWorkOrder(false);
+        setCreateWorkOrderCountdownSeconds(5);
+      }
+    };
+
+    executeCreate();
+  }, [createWorkOrderCountdownSeconds, showCreateWorkOrderCountdown, pendingWorkOrderRepairId]);
 
   // Učitaj postojeći radni nalog (ako postoji)
   useEffect(() => {
@@ -545,81 +599,10 @@ export default function RepairDetailsScreen({ route, navigation }) {
     }
   };
 
-  const handleCreateWorkOrder = async () => {
-    const id = repairData._id || repairData.id;
-    
-    if (!online) {
-      Alert.alert('Offline', 'Potrebna je internet veza za kreiranje radnog naloga.');
-      return;
-    }
-
-    // Provjeri je li popravak sinkroniziran sa serverom
-    const isLocalId = String(id).startsWith('local_');
-    const isSynced = repairData.synced === 1 || repairData.sync_status === 'synced';
-    
-    if (isLocalId || !isSynced) {
-      Alert.alert(
-        'Popravak nije sinkroniziran',
-        'Radni nalog se može kreirati samo za popravke koji su sinkronizirani sa serverom.\n\nMolimo prvo spremite ovaj popravak s internet vezom.',
-        [{ text: 'OK' }]
-      );
-      return;
-    }
-
-    // Provjeri postoji li već radni nalog
-    if (workOrder) {
-      Alert.alert(
-        'Radni nalog već postoji',
-        `Broj: ${workOrder.workOrderNumber}\nStatus: ${workOrderStatusLabel(workOrder.status)}\n\nŽeliš li otvoriti pregled?`,
-        [
-          { text: 'Odustani', style: 'cancel' },
-          {
-            text: 'Otvori pregled',
-            onPress: async () => {
-              if (!workOrder?.viewUrl) return;
-              await openWorkOrderPreview(workOrder.viewUrl);
-            }
-          }
-        ]
-      );
-      return;
-    }
-
-    // Kreiraj novi radni nalog
-    Alert.alert(
-      'Kreiranje radnog naloga',
-      'Želiš li kreirati radni nalog za ovaj popravak?',
-      [
-        { text: 'Odustani', style: 'cancel' },
-        {
-          text: 'Kreiraj',
-          onPress: async () => {
-            setCreatingWorkOrder(true);
-            try {
-              const draftRes = await workOrdersAPI.createFromRepair(id);
-              const newWorkOrder = draftRes?.data?.data;
-              setWorkOrder(newWorkOrder);
-
-              Alert.alert(
-                'Radni nalog kreiran',
-                `Broj: ${newWorkOrder?.workOrderNumber || ''}\nStatus: ${workOrderStatusLabel(newWorkOrder?.status || 'draft')}\n\nŽeliš li odmah potpisati i označiti kao poslano?`,
-                [
-                  { text: 'Kasnije', style: 'cancel' },
-                  {
-                    text: 'Potpiši i pošalji',
-                    onPress: () => openSignatureFlow(newWorkOrder.id || newWorkOrder._id),
-                  }
-                ]
-              );
-            } catch (err) {
-              Alert.alert('Greška', err?.response?.data?.message || err?.message || 'Kreiranje radnog naloga nije uspjelo');
-            } finally {
-              setCreatingWorkOrder(false);
-            }
-          },
-        },
-      ]
-    );
+  const cancelCreateWorkOrderCountdown = () => {
+    setShowCreateWorkOrderCountdown(false);
+    setPendingWorkOrderRepairId(null);
+    setCreateWorkOrderCountdownSeconds(5);
   };
 
   const handleDeleteWorkOrder = () => {
@@ -695,46 +678,47 @@ export default function RepairDetailsScreen({ route, navigation }) {
     );
   };
 
+  const handleCreateWorkOrder = async () => {
+    const id = repairData._id || repairData.id;
+
+    if (!online) {
+      Alert.alert('Offline', 'Potrebna je internet veza za kreiranje radnog naloga.');
+      return;
+    }
+
+    const isLocalId = String(id).startsWith('local_');
+    const isSynced = repairData.synced === 1 || repairData.sync_status === 'synced';
+
+    if (isLocalId || !isSynced) {
+      Alert.alert(
+        'Popravak nije sinkroniziran',
+        'Radni nalog se može kreirati samo za popravke koji su sinkronizirani sa serverom.\n\nMolimo prvo spremite ovaj popravak s internet vezom.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    if (workOrder) {
+      if (workOrder?.viewUrl) {
+        await openWorkOrderPreview(workOrder.viewUrl);
+      }
+      return;
+    }
+
+    setPendingWorkOrderRepairId(id);
+    setCreateWorkOrderCountdownSeconds(5);
+    setShowCreateWorkOrderCountdown(true);
+  };
+
   const openWorkOrderMenu = () => {
     if (!workOrder) return;
     setShowWorkOrderMenu(true);
   };
 
   const promptWorkOrderFlow = (repairId) => {
-    Alert.alert(
-      'Kreiranje radnog naloga',
-      'Popravak je završen. Želiš li kreirati radni nalog?',
-      [
-        { text: 'Kasnije', style: 'cancel' },
-        {
-          text: 'Kreiraj',
-          onPress: async () => {
-            setCreatingWorkOrder(true);
-            try {
-              const draftRes = await workOrdersAPI.createFromRepair(repairId);
-              const newWorkOrder = draftRes?.data?.data;
-              setWorkOrder(newWorkOrder); // Spremi u state
-
-              Alert.alert(
-                'Nacrt kreiran',
-                `Radni nalog ${newWorkOrder?.workOrderNumber || ''} je kreiran.\n\nŽeliš li odmah potpisati i označiti kao poslano?`,
-                [
-                  { text: 'Kasnije', style: 'cancel' },
-                  {
-                    text: 'Potpiši',
-                    onPress: () => openSignatureFlow(newWorkOrder.id || newWorkOrder._id),
-                  }
-                ]
-              );
-            } catch (err) {
-              Alert.alert('Greška', err?.response?.data?.message || err?.message || 'Kreiranje radnog naloga nije uspjelo');
-            } finally {
-              setCreatingWorkOrder(false);
-            }
-          },
-        },
-      ]
-    );
+    setPendingWorkOrderRepairId(repairId);
+    setCreateWorkOrderCountdownSeconds(5);
+    setShowCreateWorkOrderCountdown(true);
   };
 
   useEffect(() => {
@@ -1328,7 +1312,12 @@ export default function RepairDetailsScreen({ route, navigation }) {
         )}
 
         {online && !loadingWorkOrder && workOrder && (
-          <View style={[styles.card, { backgroundColor: '#eff6ff' }]}>
+          <TouchableOpacity
+            activeOpacity={0.92}
+            style={[styles.card, { backgroundColor: '#eff6ff' }]}
+            onPress={openWorkOrderMenu}
+            disabled={deletingWorkOrder || deletingRepair}
+          >
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: ms(8) }}>
               <Ionicons name="document-text" size={20} color="#2563eb" />
               <Text style={[styles.sectionTitle, { marginLeft: ms(8), flex: 1 }]}>Radni nalog</Text>
@@ -1359,7 +1348,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
               <Text style={{ fontWeight: '700' }}>Broj:</Text> {workOrder.workOrderNumber}
             </Text>
             <Text style={{ fontSize: ms(13), color: '#374151', marginBottom: ms(8) }}>
-              <Text style={{ fontWeight: '700' }}>Kreiran:</Text> {new Date(workOrder.created_at).toLocaleString('hr-HR')}
+              <Text style={{ fontWeight: '700' }}>Kreiran:</Text> {workOrderCreatedLabel}
             </Text>
 
             {workOrder.status === 'draft' && (
@@ -1371,7 +1360,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
                 <Text style={[styles.secondaryText, { color: '#fff', fontWeight: '700' }]}>Potpiši i označi kao poslano</Text>
               </TouchableOpacity>
             )}
-          </View>
+          </TouchableOpacity>
         )}
 
         <TouchableOpacity style={[styles.primaryButton, isRepairLocked && styles.workOrderButtonDisabled]} onPress={handleSave} disabled={saving || isRepairLocked}>
@@ -1435,6 +1424,20 @@ export default function RepairDetailsScreen({ route, navigation }) {
             <Text style={styles.loadingTitle}>Kreiram radni nalog...</Text>
             <Text style={styles.loadingSubtitle}>Pričekaj malo, obrada traje duže na sporijoj mreži.</Text>
             <Text style={styles.loadingTimer}>Trajanje: {creatingWorkOrderSeconds}s</Text>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={showCreateWorkOrderCountdown} transparent animationType="fade" onRequestClose={cancelCreateWorkOrderCountdown}>
+        <View style={styles.loadingOverlay}>
+          <View style={styles.loadingCard}>
+            <Ionicons name="document-text-outline" size={30} color="#2563eb" />
+            <Text style={styles.loadingTitle}>Kreiram radni nalog...</Text>
+            <Text style={styles.loadingSubtitle}>Ako si se predomislio, možeš odustati prije početka kreiranja.</Text>
+            <Text style={styles.loadingTimer}>Pokretanje za: {createWorkOrderCountdownSeconds}s</Text>
+            <TouchableOpacity style={styles.countdownCancelButton} onPress={cancelCreateWorkOrderCountdown}>
+              <Text style={styles.countdownCancelButtonText}>Odustani</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -2099,6 +2102,18 @@ const styles = StyleSheet.create({
     fontSize: ms(12),
     color: '#64748b',
     fontWeight: '600',
+  },
+  countdownCancelButton: {
+    marginTop: ms(16),
+    paddingHorizontal: ms(18),
+    paddingVertical: ms(10),
+    borderRadius: ms(10),
+    backgroundColor: '#e2e8f0',
+  },
+  countdownCancelButtonText: {
+    fontSize: ms(14),
+    fontWeight: '700',
+    color: '#334155',
   },
   disabledAction: {
     opacity: 0.45,

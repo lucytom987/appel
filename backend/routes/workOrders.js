@@ -273,6 +273,7 @@ const mapWorkOrderResponse = (workOrder, req) => {
 
   return {
     id: workOrder._id,
+    _id: workOrder._id,
     workOrderNumber: workOrder.workOrderNumber,
     status: workOrder.status,
     signedAt: workOrder.signedAt,
@@ -280,6 +281,8 @@ const mapWorkOrderResponse = (workOrder, req) => {
     sentAt: workOrder.sentAt,
     sentChannels: workOrder.sentChannels || [],
     tokenExpiresAt: workOrder.tokenExpiresAt,
+    created_at: workOrder.created_at,
+    updated_at: workOrder.updated_at,
     viewUrl,
     downloadUrl,
     qrUrl: viewUrl,

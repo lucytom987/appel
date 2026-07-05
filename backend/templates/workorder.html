@@ -248,11 +248,15 @@
 
     .sig-date {
       min-height: 22mm;
-      font-size: 28px;
+      font-size: 26px;
       letter-spacing: 0.8px;
       font-weight: 800;
       line-height: 1;
       align-items: flex-end;
+    }
+
+    .customer-signature-name {
+      font-size: 15px;
     }
 
     /* Standardized signature image sizing: fixed height, preserve aspect ratio */
@@ -460,7 +464,7 @@
           <% if (workOrder && workOrder.customerSignatureImage) { %>
             <img class="sig-image" src="<%= workOrder.customerSignatureImage %>" alt="Potpis stranke">
           <% } else if (workOrder && workOrder.customerAbsent) { %>
-            <span><%= customerDisplayName %></span>
+            <span class="customer-signature-name"><%= customerDisplayName %></span>
           <% } %>
         </div>
         <% if (workOrder && workOrder.customerAbsent) { %>

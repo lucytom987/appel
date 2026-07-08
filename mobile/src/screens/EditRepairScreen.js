@@ -252,7 +252,20 @@ export default function EditRepairScreen({ route, navigation }) {
       poslanMajstorId: form.poslanMajstorId || null,
       poslanMajstorIme: (() => {
         const selected = korisnici.find((k) => String(k._id || k.id) === String(form.poslanMajstorId || ''));
-        return selected ? `${selected.ime || ''} ${selected.prezime || ''}`.trim() || selected.email || '' : '';
+        if (selected) {
+          return `${selected.ime || ''} ${selected.prezime || ''}`.trim() || selected.email || '';
+        }
+
+        const fromCache = form.poslanMajstorId ? userDB.getById(form.poslanMajstorId) : null;
+        if (fromCache) {
+          return `${fromCache.ime || ''} ${fromCache.prezime || ''}`.trim() || fromCache.email || '';
+        }
+
+        if (typeof baseRepair?.poslanMajstorIme === 'string' && baseRepair.poslanMajstorIme.trim()) {
+          return baseRepair.poslanMajstorIme.trim();
+        }
+
+        return '';
       })(),
       radniNalogPotpisan: baseRepair.radniNalogPotpisan,
       popravkaUPotpunosti: baseRepair.popravkaUPotpunosti,

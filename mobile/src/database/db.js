@@ -796,6 +796,16 @@ export const repairDB = {
       serviserID = serviserID._id || serviserID.id || '';
     }
 
+    let poslanMajstorId = repair.poslanMajstorId;
+    if (poslanMajstorId && typeof poslanMajstorId === 'object') {
+      poslanMajstorId = poslanMajstorId._id || poslanMajstorId.id || '';
+    }
+
+    const poslanMajstorIme = repair.poslanMajstorIme
+      || (repair.poslanMajstorId && typeof repair.poslanMajstorId === 'object'
+        ? `${repair.poslanMajstorId.ime || ''} ${repair.poslanMajstorId.prezime || ''}`.trim() || repair.poslanMajstorId.email || ''
+        : '');
+
     return db.runSync(
       `INSERT INTO repairs (id, elevatorId, serviserID, poslanMajstorId, poslanMajstorIme, poslanMajstorAt, completedBy, completedByName, completedAt, datumPrijave, datumPopravka, 
        opisKvara, opisPopravka, trebaloBi, status, radniNalogPotpisan, popravkaUPotpunosti, 
@@ -806,8 +816,8 @@ export const repairDB = {
         id,
         elevatorId,
         serviserID,
-        repair.poslanMajstorId || null,
-        repair.poslanMajstorIme || null,
+        poslanMajstorId || null,
+        poslanMajstorIme || null,
         repair.poslanMajstorAt || repair.updated_at || null,
         repair.completedBy || null,
         repair.completedByName || null,
@@ -858,6 +868,16 @@ export const repairDB = {
       elevatorId = elevatorId._id || elevatorId.id || '';
     }
 
+    let poslanMajstorId = repair.poslanMajstorId;
+    if (poslanMajstorId && typeof poslanMajstorId === 'object') {
+      poslanMajstorId = poslanMajstorId._id || poslanMajstorId.id || '';
+    }
+
+    const poslanMajstorIme = repair.poslanMajstorIme
+      || (repair.poslanMajstorId && typeof repair.poslanMajstorId === 'object'
+        ? `${repair.poslanMajstorId.ime || ''} ${repair.poslanMajstorId.prezime || ''}`.trim() || repair.poslanMajstorId.email || ''
+        : '');
+
     return db.runSync(
       `UPDATE repairs SET elevatorId=?, serviserID=?, poslanMajstorId=?, poslanMajstorIme=?, poslanMajstorAt=?, completedBy=?, completedByName=?, completedAt=?, datumPrijave=?, datumPopravka=?, opisKvara=?, 
        opisPopravka=?, trebaloBi=?, status=?, radniNalogPotpisan=?, popravkaUPotpunosti=?, 
@@ -865,8 +885,8 @@ export const repairDB = {
       [
         elevatorId,
         serviserID,
-        repair.poslanMajstorId || null,
-        repair.poslanMajstorIme || null,
+        poslanMajstorId || null,
+        poslanMajstorIme || null,
         repair.poslanMajstorAt || repair.updated_at || null,
         repair.completedBy || null,
         repair.completedByName || null,

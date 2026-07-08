@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -133,6 +134,8 @@ export default function AddRepairScreen({ navigation, route }) {
   }
 
   const handleSubmit = async () => {
+    if (loading) return;
+
     if (!selectedElevator) {
       Alert.alert('Greška', 'Odaberite dizalo');
       return;
@@ -143,13 +146,30 @@ export default function AddRepairScreen({ navigation, route }) {
       return;
     }
 
+    if (!online && !isOfflineDemo) {
+      Alert.alert('Offline', 'Za slanje prijave potreban je internet.');
+      return;
+    }
+
+    const result = await persistRepair({
+      assignedTechnicianId: formData.poslanMajstorId,
+      showSuccessAlert: true,
+      navigateAfterSave: true,
+    });
+
+    return result;
+  };
+
+  const persistRepair = async ({ assignedTechnicianId, showSuccessAlert = true, navigateAfterSave = true }) => {
+    const normalizedAssignedId = assignedTechnicianId || null;
+    const assignedTechnician = korisnici.find((k) => String(k._id || k.id) === String(normalizedAssignedId || '')) || null;
+
     setLoading(true);
 
     try {
       const receiverName = formData.primioPoziv?.trim() || defaultReporter.name;
       const reporterName = formData.pozivatelj?.trim() || '';
       const reporterPhone = formData.pozivateljTelefon?.trim() || '';
-      const assignedTechnician = korisnici.find((k) => String(k._id || k.id) === String(formData.poslanMajstorId || ''));
       const assignedTechnicianName = assignedTechnician
         ? `${assignedTechnician.ime || ''} ${assignedTechnician.prezime || ''}`.trim() || assignedTechnician.email || ''
         : '';
@@ -169,8 +189,9 @@ export default function AddRepairScreen({ navigation, route }) {
         prijavio: reporterName,
         kontaktTelefon: reporterPhone,
         primioPoziv: receiverName,
-        poslanMajstorId: formData.poslanMajstorId || null,
+        poslanMajstorId: normalizedAssignedId,
         poslanMajstorIme: assignedTechnicianName,
+        poslanMajstorAt: new Date().toISOString(),
         trebaloBi: isTrebaloBi,
       };
 
@@ -187,9 +208,15 @@ export default function AddRepairScreen({ navigation, route }) {
           synced: 0, // Bit će syncirano kada se prijavi s pravim korisnicima
         });
 
-        Alert.alert('Prijavljeno', 'Prijava kvara je spremljena lokalno', [
-          { text: 'OK', onPress: () => navigation.navigate('Repairs') }
-        ]);
+        if (showSuccessAlert) {
+          Alert.alert('Prijavljeno', 'Prijava kvara je spremljena lokalno', [
+            { text: 'OK', onPress: () => navigateAfterSave && navigation.navigate('Repairs') }
+          ]);
+        } else if (navigateAfterSave) {
+          navigation.navigate('Repairs');
+        }
+
+        return { success: true, assignedTechnician };
       } else {
         // Online s pravim korisničkim tokenom - spremi na backend
         try {
@@ -204,9 +231,15 @@ export default function AddRepairScreen({ navigation, route }) {
             synced: true,
           });
 
-          Alert.alert('Prijavljeno', 'Prijava kvara je uspješno poslana', [
-            { text: 'OK', onPress: () => navigation.navigate('Repairs') }
-          ]);
+          if (showSuccessAlert) {
+            Alert.alert('Prijavljeno', 'Prijava kvara je uspješno poslana', [
+              { text: 'OK', onPress: () => navigateAfterSave && navigation.navigate('Repairs') }
+            ]);
+          } else if (navigateAfterSave) {
+            navigation.navigate('Repairs');
+          }
+
+          return { success: true, assignedTechnician };
         } catch (error) {
           console.error('Greška pri slanju na backend:', error);
           if (error.response?.status === 401) {
@@ -220,18 +253,89 @@ export default function AddRepairScreen({ navigation, route }) {
             synced: 0,
           });
 
-          Alert.alert('Prijavljeno', 'Kvar je spremljen lokalno (sync kad budete online)', [
-            { text: 'OK', onPress: () => navigation.navigate('Repairs') }
-          ]);
+          if (showSuccessAlert) {
+            Alert.alert('Prijavljeno', 'Kvar je spremljen lokalno (sync kad budete online)', [
+              { text: 'OK', onPress: () => navigateAfterSave && navigation.navigate('Repairs') }
+            ]);
+          } else if (navigateAfterSave) {
+            navigation.navigate('Repairs');
+          }
+
+          return { success: true, assignedTechnician };
         }
       }
 
     } catch (error) {
       console.error('Greška pri logranju popravka:', error);
       Alert.alert('Greška', error.message || error.response?.data?.message || 'Nije moguće logirati popravak');
+      return { success: false, assignedTechnician: null };
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleAssignedTechnicianSelection = async (technicianId, selectedTechnician) => {
+    const nextId = technicianId || null;
+    const alreadySelected = String(formData.poslanMajstorId || '') === String(nextId || '');
+
+    setFormData((prev) => ({ ...prev, poslanMajstorId: alreadySelected ? null : nextId }));
+    setShowMajstori(false);
+
+    if (alreadySelected) return;
+    if (!nextId) return;
+
+    if (!selectedElevator) return;
+
+    if (!formData.opis.trim()) {
+      Alert.alert('Odabran majstor', 'Majstor je odabran. Za automatsko spremanje prvo unesite opis kvara.');
+      return;
+    }
+
+    if (!online && !isOfflineDemo) {
+      Alert.alert('Offline', 'Za automatsko spremanje i poziv majstora potreban je internet.');
+      return;
+    }
+
+    const result = await persistRepair({
+      assignedTechnicianId: nextId,
+      showSuccessAlert: false,
+      navigateAfterSave: false,
+    });
+
+    if (!result?.success) return;
+
+    const name = selectedTechnician
+      ? `${selectedTechnician.ime || ''} ${selectedTechnician.prezime || ''}`.trim() || selectedTechnician.email || 'odabrani majstor'
+      : 'odabrani majstor';
+    const rawPhone = selectedTechnician?.telefon || selectedTechnician?.phone || selectedTechnician?.mobitel || '';
+    const normalizedPhone = String(rawPhone || '').trim().replace(/\s+/g, '');
+
+    if (!normalizedPhone) {
+      Alert.alert('Prijava spremljena', `Kvar je spremljen i poslan majstoru ${name}. Broj telefona nije upisan.`, [
+        { text: 'OK', onPress: () => navigation.navigate('Repairs') },
+      ]);
+      return;
+    }
+
+    Alert.alert(
+      'Prijava spremljena',
+      `Kvar je spremljen i dodijeljen: ${name}. Želite li ga odmah nazvati?`,
+      [
+        { text: 'Samo spremi', onPress: () => navigation.navigate('Repairs') },
+        {
+          text: 'Spremi i nazovi',
+          onPress: async () => {
+            try {
+              await Linking.openURL(`tel:${normalizedPhone}`);
+            } catch (e) {
+              Alert.alert('Poziv nije uspio', 'Nije moguće pokrenuti telefonski poziv na ovom uređaju.');
+            } finally {
+              navigation.navigate('Repairs');
+            }
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -355,10 +459,7 @@ export default function AddRepairScreen({ navigation, route }) {
                     <TouchableOpacity
                       key={String(id)}
                       style={[styles.userRow, selected && styles.userRowSelected]}
-                      onPress={() => {
-                        setFormData((prev) => ({ ...prev, poslanMajstorId: selected ? null : id }));
-                        setShowMajstori(false);
-                      }}
+                      onPress={() => handleAssignedTechnicianSelection(id, k)}
                     >
                       <Ionicons name={selected ? 'checkmark-circle' : 'ellipse-outline'} size={20} color={selected ? '#16a34a' : '#94a3b8'} />
                       <Text style={styles.userRowText}>{(k.ime || '')} {(k.prezime || '')}</Text>

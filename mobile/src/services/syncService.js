@@ -694,6 +694,11 @@ export const syncRepairsFromServer = async () => {
         }
         const elevatorId = r.elevatorId?._id || r.elevatorId?.id || r.elevator || r.elevatorId;
         const serviserID = r.serviserID?._id || r.serviserID?.id || r.serviserID;
+        const poslanMajstorId = r.poslanMajstorId?._id || r.poslanMajstorId?.id || r.poslanMajstorId || null;
+        const poslanMajstorIme = r.poslanMajstorIme
+          || `${r.poslanMajstorId?.ime || ''} ${r.poslanMajstorId?.prezime || ''}`.trim()
+          || r.poslanMajstorId?.email
+          || null;
         const local = repairDB.getById?.(r._id);
         const serverUpdated = toMs(r.updated_at || r.azuriranDatum || r.updatedAt || r.kreiranDatum);
         const localUpdated = local ? toMs(local.updated_at || local.azuriranDatum) : 0;
@@ -711,6 +716,9 @@ export const syncRepairsFromServer = async () => {
           completedBy: r.completedBy?._id || r.completedBy?.id || r.completedBy || null,
           completedByName: r.completedByName || `${r.completedBy?.ime || ''} ${r.completedBy?.prezime || ''}`.trim() || r.completedBy?.email || null,
           completedAt: r.completedAt || null,
+          poslanMajstorId,
+          poslanMajstorIme,
+          poslanMajstorAt: r.poslanMajstorAt || null,
           dodatniServiseri: r.dodatniServiseri || [],
           radniSati: r.radniSati || {},
           utroseniMaterijal: r.utroseniMaterijal,

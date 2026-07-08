@@ -115,6 +115,7 @@ export default function EditServiceScreen({ route, navigation }) {
     serviceDate: parseDate(freshService.datum) || new Date(),
     nextServiceDate: parseDate(freshService.sljedeciServis) || new Date(),
     napomene: freshService.napomene || '',
+    utroseniMaterijal: freshService.utroseniMaterijal || '',
     kolegaId: Array.isArray(freshService.dodatniServiseri) && freshService.dodatniServiseri.length
       ? (freshService.dodatniServiseri[0]?._id || freshService.dodatniServiseri[0]?.id || freshService.dodatniServiseri[0])
       : null,
@@ -228,6 +229,7 @@ export default function EditServiceScreen({ route, navigation }) {
       serviserID: freshService.serviserID || user?._id,
       datum: form.serviceDate?.toISOString?.() || freshService.datum,
       napomene: form.napomene,
+      utroseniMaterijal: form.utroseniMaterijal,
       imaNedostataka: freshService.imaNedostataka || false,
       nedostaci: freshService.nedostaci || [],
       sljedeciServis: form.nextServiceDate?.toISOString?.() || freshService.sljedeciServis,
@@ -434,6 +436,17 @@ export default function EditServiceScreen({ route, navigation }) {
               value={form.napomene}
               onChangeText={(t) => setForm((prev) => ({ ...prev, napomene: t }))}
               onFocus={handleNapomeneInputFocus}
+            />
+          </View>
+
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Ugrađeno / zamijenjeno</Text>
+            <TextInput
+              style={styles.textArea}
+              multiline
+              placeholder="Npr. žarulja - 1 kom"
+              value={form.utroseniMaterijal}
+              onChangeText={(t) => setForm((prev) => ({ ...prev, utroseniMaterijal: t }))}
             />
           </View>
 

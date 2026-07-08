@@ -4,14 +4,24 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { elevatorDB, userDB, serviceDB } from '../database/db';
-import { servicesAPI } from '../services/api';
+import { serviceWorkOrdersAPI, servicesAPI } from '../services/api';
 import ImageViewer from 'react-native-image-zoom-viewer';
+import SignatureModal from '../components/SignatureModal';
+import { useAuth } from '../context/AuthContext';
 
 export default function ServiceDetailsScreen({ route, navigation }) {
   const { service: routeService } = route.params;
+  const { user, isOnline, serverAwake } = useAuth();
+  const online = Boolean(isOnline && serverAwake);
   const [service, setService] = useState(routeService);
   const [activePhotoUrl, setActivePhotoUrl] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [serviceWorkOrder, setServiceWorkOrder] = useState(null);
+  const [loadingServiceWorkOrder, setLoadingServiceWorkOrder] = useState(false);
+  const [creatingServiceWorkOrder, setCreatingServiceWorkOrder] = useState(false);
+  const [showSignatureModal, setShowSignatureModal] = useState(false);
+  const [pendingSignWorkOrderId, setPendingSignWorkOrderId] = useState(null);
+  const [signingLoading, setSigningLoading] = useState(false);
 
   const serviceId = routeService?._id || routeService?.id;
 
@@ -48,10 +58,52 @@ export default function ServiceDetailsScreen({ route, navigation }) {
     }, [serviceId])
   );
 
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+
+      const loadServiceWorkOrder = async () => {
+        if (!serviceId || !online) {
+          if (active) {
+            setServiceWorkOrder(null);
+            setLoadingServiceWorkOrder(false);
+          }
+          return;
+        }
+
+        setLoadingServiceWorkOrder(true);
+        try {
+          const res = await serviceWorkOrdersAPI.getByService(serviceId);
+          if (active) setServiceWorkOrder(res?.data?.data || null);
+        } catch (err) {
+          const status = err?.status || err?.response?.status;
+          if (status !== 404) {
+            console.log('Greška pri dohvaćanju servisnog naloga:', err?.message);
+          }
+          if (active) setServiceWorkOrder(null);
+        } finally {
+          if (active) setLoadingServiceWorkOrder(false);
+        }
+      };
+
+      loadServiceWorkOrder();
+      return () => {
+        active = false;
+      };
+    }, [serviceId, online])
+  );
+
   const elevator = elevatorDB.getById(service?.elevatorId);
 
   const checklistItems = Array.isArray(service.checklist) ? service.checklist : [];
   const notePhotos = Array.isArray(service?.notePhotos) ? service.notePhotos : [];
+  const serviceWorkOrderStatusLabel = (status) => {
+    const normalized = String(status || '').toLowerCase();
+    if (normalized === 'draft') return 'NACRT';
+    if (normalized === 'signed') return 'POTPISAN';
+    if (normalized === 'sent') return 'POSLAN';
+    return String(status || '').toUpperCase();
+  };
 
   const serviserValue = (() => {
     const raw = service?.serviserID;
@@ -211,6 +263,87 @@ export default function ServiceDetailsScreen({ route, navigation }) {
     }
   };
 
+  const handleCreateServiceWorkOrder = async () => {
+    if (!serviceId) return;
+    if (!online) {
+      Alert.alert('Offline', 'Za generiranje radnog naloga servisa potrebna je internet veza.');
+      return;
+    }
+
+    if (serviceWorkOrder?.viewUrl) {
+      navigation.navigate('WebViewScreen', {
+        url: serviceWorkOrder.viewUrl,
+        title: `RN ${serviceWorkOrder.workOrderNumber || ''}`,
+      });
+      return;
+    }
+
+    setCreatingServiceWorkOrder(true);
+    try {
+      const res = await serviceWorkOrdersAPI.createFromService(serviceId);
+      const wo = res?.data?.data;
+      setServiceWorkOrder(wo || null);
+      Alert.alert('Radni nalog servisa', 'Draft radni nalog servisa je kreiran.');
+    } catch (err) {
+      Alert.alert('Greška', err?.response?.data?.message || err?.message || 'Kreiranje radnog naloga servisa nije uspjelo.');
+    } finally {
+      setCreatingServiceWorkOrder(false);
+    }
+  };
+
+  const handleDeleteServiceWorkOrder = () => {
+    const woId = serviceWorkOrder?._id || serviceWorkOrder?.id;
+    if (!woId) return;
+
+    Alert.alert('Obriši radni nalog servisa', 'Sigurno želiš obrisati ovaj radni nalog servisa?', [
+      { text: 'Odustani', style: 'cancel' },
+      {
+        text: 'Obriši',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await serviceWorkOrdersAPI.delete(woId);
+            setServiceWorkOrder(null);
+            Alert.alert('Obrisano', 'Radni nalog servisa je obrisan.');
+          } catch (err) {
+            Alert.alert('Greška', err?.response?.data?.message || err?.message || 'Brisanje nije uspjelo.');
+          }
+        },
+      },
+    ]);
+  };
+
+  const openSignatureFlow = (woId) => {
+    setPendingSignWorkOrderId(woId);
+    setShowSignatureModal(true);
+  };
+
+  const handleSignatureConfirm = async ({ servicerSignature, customerSignature, customerAbsent }) => {
+    const woId = pendingSignWorkOrderId;
+    if (!woId) return;
+
+    setSigningLoading(true);
+    try {
+      const signerName = `${user?.ime || ''} ${user?.prezime || ''}`.trim() || user?.email || 'Serviser';
+      const signRes = await serviceWorkOrdersAPI.sign(woId, {
+        signedByName: signerName,
+        sendNow: true,
+        signatureImage: servicerSignature || undefined,
+        customerSignatureImage: customerSignature || undefined,
+        customerAbsent: customerAbsent || false,
+      });
+      const signed = signRes?.data?.data;
+      setServiceWorkOrder(signed || null);
+      setShowSignatureModal(false);
+      setPendingSignWorkOrderId(null);
+      Alert.alert('Radni nalog servisa potpisan i poslan', `Broj: ${signed?.workOrderNumber || ''}`);
+    } catch (err) {
+      Alert.alert('Greška', err?.response?.data?.message || err?.message || 'Potpis nije uspio');
+    } finally {
+      setSigningLoading(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <View style={styles.header}>
@@ -290,6 +423,67 @@ export default function ServiceDetailsScreen({ route, navigation }) {
           )}
           <DetailRow label="Serviser" value={serviserValue} />
           <DetailRow label="Dodatni serviseri" value={dodatniServiseriValue} />
+          <DetailRow label="Utrošeni materijal" value={service?.utroseniMaterijal || '-'} />
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Radni nalog servisa</Text>
+          {loadingServiceWorkOrder ? (
+            <View style={styles.inlineInfoRow}>
+              <ActivityIndicator size="small" color="#2563eb" />
+              <Text style={styles.inlineInfoText}>Učitavam radni nalog servisa...</Text>
+            </View>
+          ) : serviceWorkOrder ? (
+            <>
+              <DetailRow label="Broj" value={serviceWorkOrder.workOrderNumber || '-'} />
+              <DetailRow label="Status" value={serviceWorkOrderStatusLabel(serviceWorkOrder.status)} />
+
+              <View style={styles.woActionsRow}>
+                <TouchableOpacity
+                  style={styles.woActionBtn}
+                  onPress={() => navigation.navigate('WebViewScreen', {
+                    url: serviceWorkOrder.viewUrl,
+                    title: `RN ${serviceWorkOrder.workOrderNumber || ''}`,
+                  })}
+                >
+                  <Ionicons name="eye-outline" size={17} color="#1d4ed8" />
+                  <Text style={styles.woActionBtnText}>Pregled</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.woActionBtn}
+                  onPress={() => navigation.navigate('WebViewScreen', {
+                    url: serviceWorkOrder.downloadUrl,
+                    title: `PDF ${serviceWorkOrder.workOrderNumber || ''}`,
+                  })}
+                >
+                  <Ionicons name="download-outline" size={17} color="#1d4ed8" />
+                  <Text style={styles.woActionBtnText}>PDF</Text>
+                </TouchableOpacity>
+              </View>
+
+              {serviceWorkOrder.status === 'draft' && (
+                <TouchableOpacity style={styles.signButton} onPress={() => openSignatureFlow(serviceWorkOrder._id || serviceWorkOrder.id)}>
+                  <Ionicons name="create-outline" size={18} color="#fff" />
+                  <Text style={styles.signButtonText}>Potpiši i pošalji</Text>
+                </TouchableOpacity>
+              )}
+
+              <TouchableOpacity style={styles.deleteWoButton} onPress={handleDeleteServiceWorkOrder}>
+                <Ionicons name="trash-outline" size={16} color="#9f1239" />
+                <Text style={styles.deleteWoButtonText}>Obriši radni nalog servisa</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <TouchableOpacity style={styles.createWoButton} onPress={handleCreateServiceWorkOrder} disabled={creatingServiceWorkOrder}>
+              {creatingServiceWorkOrder ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Ionicons name="document-text-outline" size={18} color="#fff" />
+              )}
+              <Text style={styles.createWoButtonText}>{creatingServiceWorkOrder ? 'Kreiram...' : 'Kreiraj radni nalog servisa'}</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {!!service?.napomene && (
@@ -385,6 +579,19 @@ export default function ServiceDetailsScreen({ route, navigation }) {
 
         <View style={{ height: 60 }} />
       </ScrollView>
+
+      <SignatureModal
+        visible={showSignatureModal}
+        signerName={`${user?.ime || ''} ${user?.prezime || ''}`.trim() || user?.email || 'Serviser'}
+        signerId={user?._id || user?.id || ''}
+        customerName={elevator?.nazivStranke || elevator?.kontaktOsoba?.ime || ''}
+        onConfirm={handleSignatureConfirm}
+        onCancel={() => {
+          setShowSignatureModal(false);
+          setPendingSignWorkOrderId(null);
+        }}
+        loading={signingLoading}
+      />
     </SafeAreaView>
   );
 }
@@ -426,6 +633,84 @@ const styles = StyleSheet.create({
   detailLabel: { fontSize: 14, color: '#6b7280' },
   detailValue: { fontSize: 14, color: '#1f2937', fontWeight: '500' },
   notes: { fontSize: 14, color: '#4b5563', lineHeight: 20 },
+  createWoButton: {
+    marginTop: 8,
+    backgroundColor: '#0f766e',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  createWoButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  inlineInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  inlineInfoText: {
+    color: '#475569',
+    fontSize: 13,
+  },
+  woActionsRow: {
+    marginTop: 8,
+    flexDirection: 'row',
+    gap: 8,
+  },
+  woActionBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    backgroundColor: '#eff6ff',
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 6,
+  },
+  woActionBtnText: {
+    color: '#1d4ed8',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  signButton: {
+    marginTop: 10,
+    backgroundColor: '#2563eb',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 7,
+  },
+  signButtonText: {
+    color: '#fff',
+    fontWeight: '800',
+    fontSize: 14,
+  },
+  deleteWoButton: {
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: '#fbcfe8',
+    backgroundColor: '#fff1f2',
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 6,
+  },
+  deleteWoButtonText: {
+    color: '#9f1239',
+    fontWeight: '700',
+    fontSize: 13,
+  },
   checkItem: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6 },
   checkLabel: { fontSize: 14, color: '#1f2937' },
   elevatorBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, backgroundColor: '#eef2ff', borderWidth: 1, borderColor: '#e0e7ff' },

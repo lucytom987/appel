@@ -18,7 +18,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import * as SecureStore from 'expo-secure-store';
 import { useAuth } from '../context/AuthContext';
 import { serviceDB, elevatorDB, userDB } from '../database/db';
-import { servicesAPI, usersAPI } from '../services/api';
+import { servicesAPI, serviceWorkOrdersAPI, usersAPI } from '../services/api';
 import { usePhotoUpload } from '../hooks/usePhotoUpload';
 import ms from '../utils/scale';
 
@@ -141,6 +141,7 @@ export default function AddServiceScreen({ navigation, route }) {
   const [formData, setFormData] = useState({
     serviceDate: new Date(),
     napomene: '',
+    utroseniMaterijal: '',
     nextServiceDate: (() => {
       const d = new Date();
       d.setMonth(d.getMonth() + intervalMjeseci);
@@ -331,6 +332,7 @@ export default function AddServiceScreen({ navigation, route }) {
         serviserID: user._id,
         datum: formData.serviceDate.toISOString(),
         napomene: formData.napomene,
+        utroseniMaterijal: formData.utroseniMaterijal,
         imaNedostataka: false,
         nedostaci: [],
         sljedeciServis: formData.nextServiceDate.toISOString(),
@@ -361,13 +363,15 @@ export default function AddServiceScreen({ navigation, route }) {
           { text: 'OK', onPress: () => navigation.navigate('Home') }
         ]);
       } else {
+        const createdOnlineServiceIds = [];
         for (const target of targets) {
           const payload = { ...serviceDataBase, checklist: buildChecklistPayload(target._id || target.id), elevatorId: target._id || target.id };
           try {
             const response = await servicesAPI.create(payload);
             const created = response.data?.data || response.data;
+            const createdId = created._id || created.id;
             serviceDB.insert({
-              id: created._id || created.id,
+              id: createdId,
               elevatorId: created.elevatorId || created.elevator || payload.elevatorId,
               serviserID: created.serviserID || created.performedBy || payload.serviserID,
               dodatniServiseri: created.dodatniServiseri || payload.dodatniServiseri || [],
@@ -377,11 +381,14 @@ export default function AddServiceScreen({ navigation, route }) {
               nedostaci: created.nedostaci || payload.nedostaci,
               notePhotos: created.notePhotos || payload.notePhotos || [],
               napomene: created.napomene ?? created.notes ?? payload.napomene,
+              utroseniMaterijal: created.utroseniMaterijal ?? payload.utroseniMaterijal,
               sljedeciServis: created.sljedeciServis || created.nextServiceDate || payload.sljedeciServis,
               kreiranDatum: created.kreiranDatum || new Date().toISOString(),
               azuriranDatum: created.azuriranDatum || new Date().toISOString(),
               synced: 1,
             });
+
+            if (createdId) createdOnlineServiceIds.push(String(createdId));
 
             try {
               const elev = elevatorDB.getById(payload.elevatorId);
@@ -408,13 +415,38 @@ export default function AddServiceScreen({ navigation, route }) {
           }
         }
 
-        Alert.alert(
-          failCount === 0 ? 'Uspjeh' : 'Djelomični uspjeh',
-          failCount === 0
-            ? `Servisi logirani za ${successCount}/${targets.length} dizala.`
-            : `Logirano ${successCount}/${targets.length}, ${failCount} spremljeno lokalno (sync kasnije).`,
-          [{ text: 'OK', onPress: () => navigation.navigate('Home') }]
-        );
+        const baseTitle = failCount === 0 ? 'Uspjeh' : 'Djelomični uspjeh';
+        const baseMessage = failCount === 0
+          ? `Servisi logirani za ${successCount}/${targets.length} dizala.`
+          : `Logirano ${successCount}/${targets.length}, ${failCount} spremljeno lokalno (sync kasnije).`;
+
+        if (createdOnlineServiceIds.length === 1) {
+          const serviceIdForWorkOrder = createdOnlineServiceIds[0];
+          Alert.alert(
+            baseTitle,
+            `${baseMessage}\n\nŽelite li odmah generirati radni nalog servisa?`,
+            [
+              { text: 'Kasnije', style: 'cancel', onPress: () => navigation.navigate('Home') },
+              {
+                text: 'Generiraj',
+                onPress: async () => {
+                  try {
+                    await serviceWorkOrdersAPI.createFromService(serviceIdForWorkOrder);
+                    Alert.alert('Radni nalog kreiran', 'Draft radni nalog servisa je kreiran.', [
+                      { text: 'OK', onPress: () => navigation.navigate('Home') },
+                    ]);
+                  } catch (woErr) {
+                    Alert.alert('Greška', woErr?.response?.data?.message || woErr?.message || 'Kreiranje radnog naloga servisa nije uspjelo.', [
+                      { text: 'OK', onPress: () => navigation.navigate('Home') },
+                    ]);
+                  }
+                },
+              },
+            ]
+          );
+        } else {
+          Alert.alert(baseTitle, baseMessage, [{ text: 'OK', onPress: () => navigation.navigate('Home') }]);
+        }
       }
 
     } catch (error) {
@@ -637,6 +669,19 @@ export default function AddServiceScreen({ navigation, route }) {
             value={formData.napomene}
             onChangeText={(text) => setFormData(prev => ({ ...prev, napomene: text }))}
             placeholder="Dodatne napomene..."
+            multiline
+            numberOfLines={3}
+            textAlignVertical="top"
+          />
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.label}>Ugrađeno / zamijenjeno (materijal)</Text>
+          <TextInput
+            style={[styles.input, styles.textArea]}
+            value={formData.utroseniMaterijal}
+            onChangeText={(text) => setFormData(prev => ({ ...prev, utroseniMaterijal: text }))}
+            placeholder="Npr. žarulja - 1 kom"
             multiline
             numberOfLines={3}
             textAlignVertical="top"

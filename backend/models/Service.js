@@ -37,6 +37,7 @@ const serviceSchema = new mongoose.Schema({
   }],
   
   napomene: String,
+  utroseniMaterijal: String,
   sljedeciServis: Date,
   
   // Fotografije (Cloudinary URLs)

@@ -198,6 +198,13 @@ export const servicesAPI = {
   getMonthlyStats: (year, month) => api.get('/services/stats/monthly', { params: { year, month } }),
 };
 
+export const serviceWorkOrdersAPI = {
+  createFromService: (serviceId) => api.post(`/service-work-orders/from-service/${serviceId}`),
+  getByService: (serviceId) => api.get(`/service-work-orders/by-service/${serviceId}`),
+  sign: (id, data) => api.post(`/service-work-orders/${id}/sign`, data),
+  delete: (id) => api.delete(`/service-work-orders/${id}`),
+};
+
 export const workOrdersAPI = {
   createFromRepair: (repairId) => api.post(`/work-orders/from-repair/${repairId}`),
   getOne: (id) => api.get(`/work-orders/${id}`),
@@ -262,9 +269,9 @@ export const repairsAPI = {
         ? data.popravkaUPotpunosti
         : (typeof data.repairCompleted === 'boolean' ? data.repairCompleted : false),
       napomene: data.napomene || data.notes,
+      utroseniMaterijal: data.utroseniMaterijal || '',
       dodatniServiseri: data.dodatniServiseri || [],
       radniSati: data.radniSati || {},
-      utroseniMaterijal: data.utroseniMaterijal || '',
       photos: data.photos || [],
       prijavio: data.prijavio || data.reportedBy,
       kontaktTelefon: data.kontaktTelefon || data.contactPhone,
@@ -286,9 +293,9 @@ export const repairsAPI = {
         ? data.popravkaUPotpunosti
         : (typeof data.repairCompleted === 'boolean' ? data.repairCompleted : undefined),
       napomene: data.napomene || data.notes,
+      utroseniMaterijal: data.utroseniMaterijal || '',
       dodatniServiseri: data.dodatniServiseri || [],
       radniSati: data.radniSati || {},
-      utroseniMaterijal: data.utroseniMaterijal || '',
       photos: data.photos || [],
       prijavio: data.prijavio || data.reportedBy,
       kontaktTelefon: data.kontaktTelefon || data.contactPhone,

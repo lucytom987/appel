@@ -83,6 +83,7 @@ app.use('/api/elevators', require('./routes/elevators'));
 app.use('/api/services', require('./routes/services'));
 app.use('/api/repairs', require('./routes/repairs'));
 app.use('/api/work-orders', require('./routes/workOrders'));
+app.use('/api/service-work-orders', require('./routes/serviceWorkOrders'));
 app.use('/api/events', require('./routes/events'));
 app.use('/api/app', require('./routes/app'));
 app.use('/api/chatrooms', require('./routes/chatrooms'));

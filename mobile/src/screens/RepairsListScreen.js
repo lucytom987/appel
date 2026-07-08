@@ -460,6 +460,7 @@ export default function RepairsListScreen({ navigation, route }) {
   const flowAssignedTechnician = (() => {
     const fromLinked = resolveUserName(selectedFlow?.poslanMajstorId);
     const name = fromLinked || safeText(selectedFlow?.poslanMajstorIme, '');
+    if (!name) return '-';
     const assignedAt = selectedFlow?.poslanMajstorAt || selectedFlow?.datumPrijave || null;
     return composeFlowValue(name, assignedAt);
   })();

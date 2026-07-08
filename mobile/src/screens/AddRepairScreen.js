@@ -11,6 +11,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Linking,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -29,6 +30,12 @@ export default function AddRepairScreen({ navigation, route }) {
   const [korisnici, setKorisnici] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [showMajstori, setShowMajstori] = useState(false);
+  const [callPrompt, setCallPrompt] = useState({
+    visible: false,
+    name: '',
+    phone: '',
+    hasPhone: false,
+  });
 
   // Konvertiraj isOnline u boolean i čekaj da se backend probudi
   const online = Boolean(isOnline && serverAwake);
@@ -191,7 +198,7 @@ export default function AddRepairScreen({ navigation, route }) {
         primioPoziv: receiverName,
         poslanMajstorId: normalizedAssignedId,
         poslanMajstorIme: assignedTechnicianName,
-        poslanMajstorAt: new Date().toISOString(),
+        poslanMajstorAt: normalizedAssignedId ? new Date().toISOString() : null,
         trebaloBi: isTrebaloBi,
       };
 
@@ -310,32 +317,34 @@ export default function AddRepairScreen({ navigation, route }) {
     const rawPhone = selectedTechnician?.telefon || selectedTechnician?.phone || selectedTechnician?.mobitel || '';
     const normalizedPhone = String(rawPhone || '').trim().replace(/\s+/g, '');
 
-    if (!normalizedPhone) {
-      Alert.alert('Prijava spremljena', `Kvar je spremljen i poslan majstoru ${name}. Broj telefona nije upisan.`, [
-        { text: 'OK', onPress: () => navigation.navigate('Repairs') },
-      ]);
-      return;
-    }
+    setCallPrompt({
+      visible: true,
+      name,
+      phone: normalizedPhone,
+      hasPhone: Boolean(normalizedPhone),
+    });
+  };
 
-    Alert.alert(
-      'Prijava spremljena',
-      `Kvar je spremljen i dodijeljen: ${name}. Želite li ga odmah nazvati?`,
-      [
-        { text: 'Samo spremi', onPress: () => navigation.navigate('Repairs') },
-        {
-          text: 'Spremi i nazovi',
-          onPress: async () => {
-            try {
-              await Linking.openURL(`tel:${normalizedPhone}`);
-            } catch (e) {
-              Alert.alert('Poziv nije uspio', 'Nije moguće pokrenuti telefonski poziv na ovom uređaju.');
-            } finally {
-              navigation.navigate('Repairs');
-            }
-          },
-        },
-      ]
-    );
+  const closeCallPrompt = () => {
+    setCallPrompt({ visible: false, name: '', phone: '', hasPhone: false });
+  };
+
+  const handleCallPromptSaveOnly = () => {
+    closeCallPrompt();
+    navigation.navigate('Repairs');
+  };
+
+  const handleCallPromptCall = async () => {
+    if (!callPrompt.phone) return;
+
+    try {
+      await Linking.openURL(`tel:${callPrompt.phone}`);
+    } catch (e) {
+      Alert.alert('Poziv nije uspio', 'Nije moguće pokrenuti telefonski poziv na ovom uređaju.');
+    } finally {
+      closeCallPrompt();
+      navigation.navigate('Repairs');
+    }
   };
 
   return (
@@ -492,6 +501,49 @@ export default function AddRepairScreen({ navigation, route }) {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      <Modal
+        visible={callPrompt.visible}
+        transparent
+        animationType="fade"
+        onRequestClose={closeCallPrompt}
+      >
+        <View style={styles.callPromptOverlay}>
+          <View style={styles.callPromptCard}>
+            <TouchableOpacity style={styles.callPromptClose} onPress={closeCallPrompt}>
+              <Ionicons name="close" size={22} color="#64748b" />
+            </TouchableOpacity>
+
+            <View style={styles.callPromptIconWrap}>
+              <Ionicons name="call" size={28} color="#16a34a" />
+            </View>
+
+            <Text style={styles.callPromptTitle}>Prijava spremljena</Text>
+            <Text style={styles.callPromptMessage}>
+              {callPrompt.hasPhone
+                ? `Kvar je spremljen i dodijeljen: ${callPrompt.name}. Želite li odmah nazvati majstora?`
+                : `Kvar je spremljen i dodijeljen: ${callPrompt.name}. Broj telefona nije upisan.`}
+            </Text>
+
+            {callPrompt.hasPhone ? (
+              <TouchableOpacity style={styles.callPromptPrimaryButton} onPress={handleCallPromptCall} activeOpacity={0.85}>
+                <Ionicons name="call" size={22} color="#fff" />
+                <Text style={styles.callPromptPrimaryButtonText}>Pozovi majstora</Text>
+              </TouchableOpacity>
+            ) : null}
+
+            <View style={styles.callPromptSecondaryRow}>
+              <TouchableOpacity style={styles.callPromptSecondaryButton} onPress={closeCallPrompt} activeOpacity={0.8}>
+                <Text style={styles.callPromptSecondaryButtonText}>Natrag</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.callPromptGhostButton} onPress={handleCallPromptSaveOnly} activeOpacity={0.8}>
+                <Text style={styles.callPromptGhostButtonText}>Samo spremi</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -656,5 +708,105 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#fff',
+  },
+  callPromptOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.48)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  callPromptCard: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: '#ffffff',
+    borderRadius: 24,
+    paddingHorizontal: 22,
+    paddingTop: 22,
+    paddingBottom: 18,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.18,
+    shadowRadius: 24,
+    elevation: 8,
+  },
+  callPromptClose: {
+    alignSelf: 'flex-end',
+    padding: 4,
+  },
+  callPromptIconWrap: {
+    alignSelf: 'center',
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#dcfce7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
+    marginBottom: 14,
+  },
+  callPromptTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#111827',
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  callPromptMessage: {
+    fontSize: 17,
+    lineHeight: 24,
+    color: '#334155',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  callPromptPrimaryButton: {
+    minHeight: 58,
+    borderRadius: 18,
+    backgroundColor: '#16a34a',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingHorizontal: 18,
+    marginBottom: 14,
+  },
+  callPromptPrimaryButtonText: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#fff',
+  },
+  callPromptSecondaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  callPromptSecondaryButton: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+  },
+  callPromptSecondaryButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#334155',
+  },
+  callPromptGhostButton: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#eff6ff',
+  },
+  callPromptGhostButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1d4ed8',
   },
 });

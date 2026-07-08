@@ -12,6 +12,12 @@ import ImageViewer from 'react-native-image-zoom-viewer';
 import SignatureModal from '../components/SignatureModal';
 import ms from '../utils/scale';
 
+const safeText = (value, fallback = '') => {
+  if (value === null || value === undefined) return fallback;
+  const normalized = String(value).trim();
+  return normalized || fallback;
+};
+
 const statusLabel = (repair) => {
   if (repair.trebaloBi) return 'Trebalo bi';
   if (repair.status === 'completed') return 'Završeno';
@@ -246,6 +252,10 @@ export default function RepairDetailsScreen({ route, navigation }) {
   const [deletingWorkOrder, setDeletingWorkOrder] = useState(false);
   const [deletingRepair, setDeletingRepair] = useState(false);
   const [showWorkOrderMenu, setShowWorkOrderMenu] = useState(false);
+  const [showFlowModal, setShowFlowModal] = useState(false);
+  const [flowLoadingSigner, setFlowLoadingSigner] = useState(false);
+  const [flowSignerName, setFlowSignerName] = useState('');
+  const [flowSignerAt, setFlowSignerAt] = useState(null);
   const [korisnici, setKorisnici] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [showKolegePickerIndex, setShowKolegePickerIndex] = useState(null);
@@ -292,6 +302,83 @@ export default function RepairDetailsScreen({ route, navigation }) {
     if (radniNalogPotpisVrsta === 'digital') return 'Digitalno';
     if (radniNalogPotpisVrsta === 'paper') return 'Papirnato';
     return workOrder ? 'Digitalno' : 'Papirnato';
+  })();
+
+  const selectedFlow = repairData || {};
+  const selectedFlowRepairId = selectedFlow?._id || selectedFlow?.id;
+
+  const formatDateTime = (value) => {
+    if (!value) return '';
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return '';
+    return parsed.toLocaleString('hr-HR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  const composeFlowValue = (name, dateValue) => {
+    const resolvedName = safeText(name, '').trim();
+    const resolvedDate = formatDateTime(dateValue);
+    if (resolvedName && resolvedDate) return `${resolvedName} • ${resolvedDate}`;
+    if (resolvedName) return resolvedName;
+    if (resolvedDate) return resolvedDate;
+    return '-';
+  };
+
+  const resolveUserName = (value) => {
+    if (!value) return '';
+    if (typeof value === 'object') {
+      const full = `${safeText(value.ime)} ${safeText(value.prezime)}`.trim();
+      return full || safeText(value.email) || safeText(value._id || value.id);
+    }
+    const id = String(value);
+    const found = userDB.getById(id);
+    if (found) {
+      const full = `${safeText(found.ime)} ${safeText(found.prezime)}`.trim();
+      return full || safeText(found.email) || id;
+    }
+    return id;
+  };
+
+  const flowReportedAt = selectedFlow?.datumPrijave || selectedFlow?.datumKvara || null;
+  const flowReportedBy = (() => {
+    if (!selectedFlowRepairId) return '-';
+    return composeFlowValue(resolveUserName(selectedFlow?.serviserID), flowReportedAt);
+  })();
+
+  const flowCaller = composeFlowValue(
+    safeText(selectedFlow?.pozivatelj || selectedFlow?.Pozivatelj || selectedFlow?.prijavio, ''),
+    flowReportedAt
+  );
+
+  const flowAssignedTechnician = (() => {
+    const fromLinked = resolveUserName(selectedFlow?.poslanMajstorId);
+    const name = fromLinked || safeText(selectedFlow?.poslanMajstorIme, '');
+    if (!name) return '-';
+    const assignedAt = selectedFlow?.poslanMajstorAt || selectedFlow?.datumPrijave || null;
+    return composeFlowValue(name, assignedAt);
+  })();
+
+  const flowResolvedBy = (() => {
+    if (selectedFlow?.status !== 'completed') return '-';
+    const resolvedName = safeText(selectedFlow?.completedByName) || resolveUserName(selectedFlow?.completedBy) || '';
+    const resolvedAt = selectedFlow?.completedAt || selectedFlow?.datumPopravka || null;
+    return composeFlowValue(resolvedName, resolvedAt);
+  })();
+
+  const flowSignedBy = (() => {
+    if (!selectedFlow?.radniNalogPotpisan) return '-';
+    if (flowLoadingSigner) return 'Učitavam...';
+    if (flowSignerName || flowSignerAt) {
+      return composeFlowValue(flowSignerName, flowSignerAt);
+    }
+    const signatureType = String(selectedFlow?.radniNalogPotpisVrsta || '').toLowerCase();
+    const fallbackName = signatureType === 'paper' ? 'Papirnato potpisano' : 'Potpisano';
+    return composeFlowValue(fallbackName, selectedFlow?.updated_at || selectedFlow?.azuriranDatum || null);
   })();
 
   useEffect(() => {
@@ -907,6 +994,35 @@ export default function RepairDetailsScreen({ route, navigation }) {
     setShowWorkOrderMenu(true);
   };
 
+  const openFlowPopup = async () => {
+    setFlowSignerName('');
+    setFlowSignerAt(null);
+    setShowFlowModal(true);
+
+    const repairId = selectedFlowRepairId;
+    if (!online || !repairId || String(repairId).startsWith('local_') || !selectedFlow?.radniNalogPotpisan) {
+      return;
+    }
+
+    setFlowLoadingSigner(true);
+    try {
+      const woRes = await workOrdersAPI.getByRepair(repairId);
+      const wo = woRes?.data?.data;
+      const signer = wo?.signedByName
+        || (wo?.signedBy && typeof wo.signedBy === 'object'
+          ? `${safeText(wo.signedBy.ime)} ${safeText(wo.signedBy.prezime)}`.trim() || safeText(wo.signedBy.email)
+          : '')
+        || '';
+      setFlowSignerName(signer);
+      setFlowSignerAt(wo?.signedAt || wo?.updated_at || wo?.sentAt || null);
+    } catch (err) {
+      setFlowSignerName('');
+      setFlowSignerAt(null);
+    } finally {
+      setFlowLoadingSigner(false);
+    }
+  };
+
   const promptWorkOrderFlow = (repairId) => {
     setPendingWorkOrderRepairId(repairId);
     setCreateWorkOrderCountdownSeconds(5);
@@ -1308,7 +1424,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
           </TouchableOpacity>
 
           {status === 'pending' && (reporterLabel || reportedAtLabel) && (
-            <View style={styles.reporterAuditBoxCompact}>
+            <TouchableOpacity style={styles.reporterAuditBoxCompact} onPress={openFlowPopup} activeOpacity={0.8}>
               <Ionicons name="person-add-outline" size={18} color="#dc2626" />
               <View style={{ flex: 1 }}>
                 {reporterLabel ? (
@@ -1318,7 +1434,8 @@ export default function RepairDetailsScreen({ route, navigation }) {
                   <Text style={styles.reporterAuditSubText}>Vrijeme prijave: {reportedAtLabel}</Text>
                 ) : null}
               </View>
-            </View>
+              <Ionicons name="information-circle-outline" size={18} color="#475569" />
+            </TouchableOpacity>
           )}
 
           {status === 'completed' && (
@@ -1362,7 +1479,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
           )}
 
           {status === 'completed' && (completedByLabel || completedAtLabel) && (
-            <View style={styles.completionAuditBox}>
+            <TouchableOpacity style={styles.completionAuditBox} onPress={openFlowPopup} activeOpacity={0.8}>
               <Ionicons name="person-circle-outline" size={18} color="#2563eb" />
               <View style={{ flex: 1 }}>
                 {completedByLabel ? (
@@ -1372,7 +1489,8 @@ export default function RepairDetailsScreen({ route, navigation }) {
                   <Text style={styles.completionAuditSubText}>Vrijeme završetka: {completedAtLabel}</Text>
                 ) : null}
               </View>
-            </View>
+              <Ionicons name="information-circle-outline" size={18} color="#475569" />
+            </TouchableOpacity>
           )}
 
           {online && loadingWorkOrder && status === 'completed' && (
@@ -1456,6 +1574,39 @@ export default function RepairDetailsScreen({ route, navigation }) {
 
         <View style={{ height: 60 }} />
       </ScrollView>
+
+      <Modal
+        visible={showFlowModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowFlowModal(false)}
+      >
+        <View style={styles.flowModalOverlay}>
+          <View style={styles.flowModalCard}>
+            <View style={styles.flowModalHeader}>
+              <Text style={styles.flowModalTitle}>Tok prijave i izvedbe</Text>
+              <TouchableOpacity onPress={() => setShowFlowModal(false)}>
+                <Ionicons name="close" size={22} color="#334155" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.flowModalRows}>
+              <FlowRow label="Prijavio kvar" value={flowReportedBy} icon="person-add-outline" />
+              <FlowRow label="Pozivatelj" value={flowCaller} icon="person-outline" />
+              <FlowRow label="Majstor poslan" value={flowAssignedTechnician} icon="construct-outline" />
+              <FlowRow label="Riješio kvar" value={flowResolvedBy} icon="checkmark-done-outline" />
+              <FlowRow label="Potpisao" value={flowSignedBy} icon="create-outline" />
+            </View>
+
+            {flowLoadingSigner && (
+              <View style={styles.flowModalLoadingRow}>
+                <ActivityIndicator size="small" color="#2563eb" />
+                <Text style={styles.flowModalLoadingText}>Provjeravam tko je potpisao...</Text>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
       </KeyboardAvoidingView>
 
       <SignatureModal
@@ -1539,6 +1690,18 @@ export default function RepairDetailsScreen({ route, navigation }) {
         </View>
       </Modal>
     </SafeAreaView>
+  );
+}
+
+function FlowRow({ label, value, icon }) {
+  return (
+    <View style={styles.flowRow}>
+      <View style={styles.flowLabelWrap}>
+        <Ionicons name={icon} size={16} color="#334155" />
+        <Text style={styles.flowLabel}>{label}</Text>
+      </View>
+      <Text style={styles.flowValue}>{value || '-'}</Text>
+    </View>
   );
 }
 
@@ -1940,6 +2103,63 @@ const styles = StyleSheet.create({
   },
   statusToggleButtonTextPending: {
     color: '#991b1b',
+  },
+  flowModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  flowModalCard: {
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    padding: 18,
+    gap: 14,
+  },
+  flowModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  flowModalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0f172a',
+  },
+  flowModalRows: {
+    gap: 10,
+  },
+  flowRow: {
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 14,
+    padding: 12,
+    backgroundColor: '#f8fafc',
+    gap: 8,
+  },
+  flowLabelWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  flowLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#334155',
+  },
+  flowValue: {
+    fontSize: 14,
+    color: '#0f172a',
+    lineHeight: 20,
+  },
+  flowModalLoadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  flowModalLoadingText: {
+    fontSize: 13,
+    color: '#475569',
   },
   statusToggleButtonTextCompleted: {
     color: '#065f46',

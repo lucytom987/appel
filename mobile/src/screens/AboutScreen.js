@@ -11,8 +11,8 @@ import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 
 export default function AboutScreen({ navigation }) {
-  const currentVersion = Constants?.expoConfig?.version || '2.0.9';
-  const currentVersionDate = '05.07.2026';
+  const currentVersion = Constants?.expoConfig?.version || '2.0.10';
+  const currentVersionDate = '08.07.2026';
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -54,7 +54,7 @@ export default function AboutScreen({ navigation }) {
 
         {/* What's new */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Novosti (05.07.2026)</Text>
+          <Text style={styles.sectionTitle}>Novosti (08.07.2026)</Text>
           <View style={styles.featuresList}>
             <View style={styles.featureItem}>
               <Ionicons name="flash" size={20} color="#2563eb" />

@@ -3,15 +3,15 @@ const express = require('express');
 const router = express.Router();
 
 router.get('/version', (req, res) => {
-  const latestVersion = process.env.LATEST_APP_VERSION || '2.0.9';
-  const minSupportedVersion = process.env.MIN_SUPPORTED_APP_VERSION || '2.0.9';
+  const latestVersion = process.env.LATEST_APP_VERSION || '2.0.10';
+  const minSupportedVersion = process.env.MIN_SUPPORTED_APP_VERSION || '2.0.10';
 
   const latestVersionCodeRaw = process.env.LATEST_APP_VERSION_CODE;
   const minSupportedVersionCodeRaw = process.env.MIN_SUPPORTED_APP_VERSION_CODE;
 
   const latestVersionCode = Number.isFinite(Number(latestVersionCodeRaw))
     ? Number(latestVersionCodeRaw)
-    : 13;
+    : 14;
 
   const minSupportedVersionCode = Number.isFinite(Number(minSupportedVersionCodeRaw))
     ? Number(minSupportedVersionCodeRaw)

@@ -249,10 +249,17 @@ router.post('/', authenticate, async (req, res) => {
     }
 
     const normalizedAdditionalTechnicians = await normalizeAdditionalTechnicians(req.body.dodatniServiseri, req.companyId);
-    const normalizedAssignedTechnician = await normalizeAssignedTechnician({
-      poslanMajstorId: req.body.poslanMajstorId,
-      poslanMajstorIme: req.body.poslanMajstorIme,
-    }, req.companyId);
+    const hasAssignedTechnicianField = Object.prototype.hasOwnProperty.call(req.body, 'poslanMajstorId')
+      || Object.prototype.hasOwnProperty.call(req.body, 'poslanMajstorIme');
+    const normalizedAssignedTechnician = hasAssignedTechnicianField
+      ? await normalizeAssignedTechnician({
+          poslanMajstorId: req.body.poslanMajstorId,
+          poslanMajstorIme: req.body.poslanMajstorIme,
+        }, req.companyId)
+      : {
+          poslanMajstorId: existing.poslanMajstorId || null,
+          poslanMajstorIme: existing.poslanMajstorIme || '',
+        };
     const normalizedWorkHours = normalizeWorkHours(req.body.radniSati);
     const requestedSignatureType = normalizeWorkOrderSignatureType(req.body.radniNalogPotpisVrsta);
     const isWorkOrderSigned = Boolean(req.body.radniNalogPotpisan);

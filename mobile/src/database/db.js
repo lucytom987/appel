@@ -142,6 +142,9 @@ export const initDatabase = () => {
         id TEXT PRIMARY KEY,
         elevatorId TEXT,
         serviserID TEXT,
+        poslanMajstorId TEXT,
+        poslanMajstorIme TEXT,
+        poslanMajstorAt TEXT,
         completedBy TEXT,
         completedByName TEXT,
         completedAt TEXT,
@@ -158,6 +161,7 @@ export const initDatabase = () => {
         radniSati TEXT,
         utroseniMaterijal TEXT,
         photos TEXT,
+        pozivatelj TEXT,
         prijavio TEXT,
         kontaktTelefon TEXT,
         primioPoziv TEXT,
@@ -289,6 +293,10 @@ export const initDatabase = () => {
     try { db.execSync('ALTER TABLE repairs ADD COLUMN completedBy TEXT;'); } catch (e) {}
     try { db.execSync('ALTER TABLE repairs ADD COLUMN completedByName TEXT;'); } catch (e) {}
     try { db.execSync('ALTER TABLE repairs ADD COLUMN completedAt TEXT;'); } catch (e) {}
+    try { db.execSync('ALTER TABLE repairs ADD COLUMN pozivatelj TEXT;'); } catch (e) {}
+    try { db.execSync('ALTER TABLE repairs ADD COLUMN poslanMajstorId TEXT;'); } catch (e) {}
+    try { db.execSync('ALTER TABLE repairs ADD COLUMN poslanMajstorIme TEXT;'); } catch (e) {}
+    try { db.execSync('ALTER TABLE repairs ADD COLUMN poslanMajstorAt TEXT;'); } catch (e) {}
     try { db.execSync('ALTER TABLE services ADD COLUMN dodatniServiseri TEXT;'); } catch (e) {}
     try { db.execSync('ALTER TABLE services ADD COLUMN is_deleted INTEGER DEFAULT 0;'); } catch (e) {}
     try { db.execSync('ALTER TABLE services ADD COLUMN deleted_at TEXT;'); } catch (e) {}
@@ -789,15 +797,18 @@ export const repairDB = {
     }
 
     return db.runSync(
-      `INSERT INTO repairs (id, elevatorId, serviserID, completedBy, completedByName, completedAt, datumPrijave, datumPopravka, 
+      `INSERT INTO repairs (id, elevatorId, serviserID, poslanMajstorId, poslanMajstorIme, poslanMajstorAt, completedBy, completedByName, completedAt, datumPrijave, datumPopravka, 
        opisKvara, opisPopravka, trebaloBi, status, radniNalogPotpisan, popravkaUPotpunosti, 
-       napomene, dodatniServiseri, radniSati, utroseniMaterijal, photos, prijavio, kontaktTelefon, primioPoziv, kreiranDatum, azuriranDatum, 
+       napomene, dodatniServiseri, radniSati, utroseniMaterijal, photos, pozivatelj, prijavio, kontaktTelefon, primioPoziv, kreiranDatum, azuriranDatum, 
        is_deleted, deleted_at, updated_by, updated_at, sync_status, synced) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
       [
         id,
         elevatorId,
         serviserID,
+        repair.poslanMajstorId || null,
+        repair.poslanMajstorIme || null,
+        repair.poslanMajstorAt || repair.updated_at || null,
         repair.completedBy || null,
         repair.completedByName || null,
         repair.completedAt || null,
@@ -814,6 +825,7 @@ export const repairDB = {
         JSON.stringify(repair.radniSati || {}),
         repair.utroseniMaterijal || null,
         JSON.stringify(repair.photos || []),
+        repair.pozivatelj || null,
         repair.prijavio,
         repair.kontaktTelefon,
         repair.primioPoziv,
@@ -847,12 +859,15 @@ export const repairDB = {
     }
 
     return db.runSync(
-      `UPDATE repairs SET elevatorId=?, serviserID=?, completedBy=?, completedByName=?, completedAt=?, datumPrijave=?, datumPopravka=?, opisKvara=?, 
+      `UPDATE repairs SET elevatorId=?, serviserID=?, poslanMajstorId=?, poslanMajstorIme=?, poslanMajstorAt=?, completedBy=?, completedByName=?, completedAt=?, datumPrijave=?, datumPopravka=?, opisKvara=?, 
        opisPopravka=?, trebaloBi=?, status=?, radniNalogPotpisan=?, popravkaUPotpunosti=?, 
-       napomene=?, dodatniServiseri=?, radniSati=?, utroseniMaterijal=?, photos=?, prijavio=?, kontaktTelefon=?, primioPoziv=?, azuriranDatum=?, is_deleted=?, deleted_at=?, updated_by=?, updated_at=?, sync_status=?, synced=? WHERE id=?`,
+       napomene=?, dodatniServiseri=?, radniSati=?, utroseniMaterijal=?, photos=?, pozivatelj=?, prijavio=?, kontaktTelefon=?, primioPoziv=?, azuriranDatum=?, is_deleted=?, deleted_at=?, updated_by=?, updated_at=?, sync_status=?, synced=? WHERE id=?`,
       [
         elevatorId,
         serviserID,
+        repair.poslanMajstorId || null,
+        repair.poslanMajstorIme || null,
+        repair.poslanMajstorAt || repair.updated_at || null,
         repair.completedBy || null,
         repair.completedByName || null,
         repair.completedAt || null,
@@ -869,6 +884,7 @@ export const repairDB = {
         JSON.stringify(repair.radniSati || {}),
         repair.utroseniMaterijal || null,
         JSON.stringify(repair.photos || []),
+        repair.pozivatelj || null,
         repair.prijavio,
         repair.kontaktTelefon,
         repair.primioPoziv,

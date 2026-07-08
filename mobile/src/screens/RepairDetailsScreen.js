@@ -791,6 +791,14 @@ export default function RepairDetailsScreen({ route, navigation }) {
       },
       utroseniMaterijal: materijalTekst,
       photos,
+      pozivatelj: repairData.pozivatelj || repairData.Pozivatelj || repairData.prijavio || '',
+      prijavio: repairData.prijavio || repairData.pozivatelj || repairData.Pozivatelj || '',
+      kontaktTelefon: repairData.kontaktTelefon || '',
+      primioPoziv: repairData.primioPoziv || '',
+      poslanMajstorId: typeof repairData.poslanMajstorId === 'object'
+        ? (repairData.poslanMajstorId?._id || repairData.poslanMajstorId?.id || null)
+        : (repairData.poslanMajstorId || null),
+      poslanMajstorIme: repairData.poslanMajstorIme || '',
       completedBy: completionUserId,
       completedByName: completionName,
       completedAt: completionTimestamp,

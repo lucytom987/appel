@@ -21,6 +21,7 @@ import { useAuth } from '../context/AuthContext';
 import { elevatorDB, serviceDB, userDB } from '../database/db';
 import { servicesAPI, usersAPI } from '../services/api';
 import ms from '../utils/scale';
+import { applyUserPickerFilter } from '../utils/userPickerFilters';
 
 const baseChecklistState = {
   lubrication: false,
@@ -135,9 +136,11 @@ export default function EditServiceScreen({ route, navigation }) {
   React.useEffect(() => {
     const fetchUsers = async () => {
       setLoadingUsers(true);
-      const filterOutCurrent = (arr = []) => (Array.isArray(arr) ? arr : []).filter(
-        (u) => (u._id || u.id) !== (user?._id || user?.id)
-      );
+      const filterOutCurrent = (arr = []) => applyUserPickerFilter(arr, {
+        currentUserId: user?._id || user?.id,
+        technicianOnly: true,
+        requireActiveAccount: true,
+      });
       try {
         if (online) {
           const res = await usersAPI.getLite();

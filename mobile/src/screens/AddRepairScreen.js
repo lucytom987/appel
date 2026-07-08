@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
   Platform,
   Linking,
   Modal,
+  Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,6 +21,7 @@ import { useAuth } from '../context/AuthContext';
 import { repairDB, userDB } from '../database/db';
 import { repairsAPI, usersAPI } from '../services/api';
 import ms from '../utils/scale';
+import { applyUserPickerFilter } from '../utils/userPickerFilters';
 
 export default function AddRepairScreen({ navigation, route }) {
   const { elevator } = route.params || {};
@@ -29,7 +31,10 @@ export default function AddRepairScreen({ navigation, route }) {
   const [isTrebaloBi, setIsTrebaloBi] = useState(false);
   const [korisnici, setKorisnici] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
-  const [showMajstori, setShowMajstori] = useState(false);
+  const [showTechnicianModal, setShowTechnicianModal] = useState(false);
+  const [currentStep, setCurrentStep] = useState('opis');
+  const [didAutoFocusOpis, setDidAutoFocusOpis] = useState(false);
+  const [didAutoFocusKontakt, setDidAutoFocusKontakt] = useState(false);
   const [callPrompt, setCallPrompt] = useState({
     visible: false,
     name: '',
@@ -58,6 +63,8 @@ export default function AddRepairScreen({ navigation, route }) {
     pozivateljTelefon: '',
     poslanMajstorId: null,
   });
+  const opisInputRef = useRef(null);
+  const callerInputRef = useRef(null);
 
   // Prefill reporter/contact from logged-in user for convenience
   const defaultReporter = React.useMemo(() => {
@@ -76,6 +83,23 @@ export default function AddRepairScreen({ navigation, route }) {
     }));
   }, [defaultReporter.name, defaultReporter.phone]);
 
+  React.useEffect(() => {
+    setCurrentStep('opis');
+    setDidAutoFocusOpis(false);
+    setDidAutoFocusKontakt(false);
+  }, [isTrebaloBi]);
+
+  const focusInput = React.useCallback((inputRef) => {
+    const target = inputRef?.current;
+    if (!target) return;
+
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        target.focus?.();
+      }, 60);
+    });
+  }, []);
+
   // Kada se odabere "Trebalo bi", auto-popuni tko prijavljuje
   React.useEffect(() => {
     if (!isTrebaloBi) return;
@@ -91,12 +115,39 @@ export default function AddRepairScreen({ navigation, route }) {
     const fetchUsers = async () => {
       setLoadingUsers(true);
       const currentUserId = user?._id || user?.id;
-      const filterOutCurrent = (arr = []) => (Array.isArray(arr) ? arr : []).filter((u) => {
-        const id = u?._id || u?.id;
-        if (!id || String(id) === String(currentUserId)) return false;
-        const role = String(u?.uloga || u?.role || '').toLowerCase();
-        return role === 'serviser' || role === 'technician';
-      });
+      const filterAssignableUsers = (arr = []) => {
+        const filtered = applyUserPickerFilter(arr, {
+          currentUserId: null,
+          technicianOnly: true,
+          requireActiveAccount: true,
+        });
+
+        if (!currentUserId) return filtered;
+
+        const hasCurrentUser = filtered.some((u) => String(u?._id || u?.id) === String(currentUserId));
+        if (hasCurrentUser) return filtered;
+
+        const meFromList = (Array.isArray(arr) ? arr : []).find((u) => String(u?._id || u?.id) === String(currentUserId));
+        if (meFromList) return [meFromList, ...filtered];
+
+        if (user) {
+          const me = {
+            _id: currentUserId,
+            id: currentUserId,
+            ime: user.ime || user.firstName || '',
+            prezime: user.prezime || user.lastName || '',
+            email: user.email || '',
+            telefon: user.telefon || user.phone || '',
+            uloga: user.uloga || user.role || 'serviser',
+            aktivan: true,
+          };
+          return [me, ...filtered];
+        }
+
+        return filtered;
+      };
+
+      const filterOutCurrent = (arr = []) => filterAssignableUsers(arr);
 
       try {
         if (online) {
@@ -284,9 +335,11 @@ export default function AddRepairScreen({ navigation, route }) {
   const handleAssignedTechnicianSelection = async (technicianId, selectedTechnician) => {
     const nextId = technicianId || null;
     const alreadySelected = String(formData.poslanMajstorId || '') === String(nextId || '');
+    const currentUserId = user?._id || user?.id;
+    const selectedSelf = Boolean(nextId) && String(nextId) === String(currentUserId || '');
 
     setFormData((prev) => ({ ...prev, poslanMajstorId: alreadySelected ? null : nextId }));
-    setShowMajstori(false);
+    setShowTechnicianModal(false);
 
     if (alreadySelected) return;
     if (!nextId) return;
@@ -311,6 +364,11 @@ export default function AddRepairScreen({ navigation, route }) {
 
     if (!result?.success) return;
 
+    if (selectedSelf) {
+      navigation.navigate('Repairs');
+      return;
+    }
+
     const name = selectedTechnician
       ? `${selectedTechnician.ime || ''} ${selectedTechnician.prezime || ''}`.trim() || selectedTechnician.email || 'odabrani majstor'
       : 'odabrani majstor';
@@ -327,6 +385,40 @@ export default function AddRepairScreen({ navigation, route }) {
 
   const closeCallPrompt = () => {
     setCallPrompt({ visible: false, name: '', phone: '', hasPhone: false });
+  };
+
+  const openTechnicianModal = () => {
+    setShowTechnicianModal(true);
+  };
+
+  const selectedTechnicianLabel = formData.poslanMajstorId
+    ? (() => {
+        const found = korisnici.find((k) => String(k._id || k.id) === String(formData.poslanMajstorId));
+        return found ? `${found.ime || ''} ${found.prezime || ''}`.trim() || found.email || 'Majstor odabran' : 'Majstor odabran';
+      })()
+    : 'Odaberi majstora (opcionalno)';
+
+  const handleContinueFromOpis = () => {
+    if (!formData.opis.trim()) {
+      Alert.alert('Opis je obavezan', 'Prvo unesite opis kvara.');
+      return;
+    }
+    setDidAutoFocusKontakt(false);
+    setCurrentStep('kontakt');
+  };
+
+  const handleContinueFromKontakt = () => {
+    if (!formData.opis.trim()) {
+      setCurrentStep('opis');
+      Alert.alert('Opis je obavezan', 'Prvo unesite opis kvara.');
+      return;
+    }
+    if (!formData.pozivatelj.trim()) {
+      Alert.alert('Pozivatelj je obavezan', 'Unesite ime pozivatelja prije dodjele majstora.');
+      return;
+    }
+    Keyboard.dismiss();
+    setCurrentStep('majstor');
   };
 
   const handleCallPromptSaveOnly = () => {
@@ -360,13 +452,14 @@ export default function AddRepairScreen({ navigation, route }) {
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior="padding"
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : ms(2)}
       >
         <ScrollView
           style={styles.content}
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ paddingBottom: 24 }}
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          contentContainerStyle={styles.contentContainer}
         >
         {/* Vrsta prijave: popravak ili "trebalo bi" */}
         <View style={styles.toggleRow}>
@@ -400,10 +493,37 @@ export default function AddRepairScreen({ navigation, route }) {
           </View>
         )}
 
+        <View style={styles.stepIndicatorWrap}>
+          <View style={[styles.stepIndicatorItem, currentStep === 'opis' && styles.stepIndicatorItemActive]}>
+            <Text style={[styles.stepIndicatorNumber, currentStep === 'opis' && styles.stepIndicatorNumberActive]}>1</Text>
+            <Text style={[styles.stepIndicatorLabel, currentStep === 'opis' && styles.stepIndicatorLabelActive]}>Opis</Text>
+          </View>
+          <View style={styles.stepIndicatorLine} />
+          <View style={[styles.stepIndicatorItem, currentStep === 'kontakt' && styles.stepIndicatorItemActive]}>
+            <Text style={[styles.stepIndicatorNumber, currentStep === 'kontakt' && styles.stepIndicatorNumberActive]}>2</Text>
+            <Text style={[styles.stepIndicatorLabel, currentStep === 'kontakt' && styles.stepIndicatorLabelActive]}>Pozivatelj</Text>
+          </View>
+          <View style={styles.stepIndicatorLine} />
+          <View style={[styles.stepIndicatorItem, currentStep === 'majstor' && styles.stepIndicatorItemActive]}>
+            <Text style={[styles.stepIndicatorNumber, currentStep === 'majstor' && styles.stepIndicatorNumberActive]}>3</Text>
+            <Text style={[styles.stepIndicatorLabel, currentStep === 'majstor' && styles.stepIndicatorLabelActive]}>Majstor</Text>
+          </View>
+        </View>
+
         {/* Opis kvara */}
-        <View style={styles.section}>
+        {currentStep === 'opis' && (
+        <View
+          style={styles.section}
+          onLayout={() => {
+            if (didAutoFocusOpis) return;
+            setDidAutoFocusOpis(true);
+            focusInput(opisInputRef);
+          }}
+        >
+          <Text style={styles.stepCaption}>Korak 1 od 3</Text>
           <Text style={styles.label}>{isTrebaloBi ? 'Opis problema *' : 'Opis kvara *'}</Text>
           <TextInput
+            ref={opisInputRef}
             style={[styles.input, styles.textArea]}
             value={formData.opis}
             onChangeText={(text) => setFormData(prev => ({ ...prev, opis: text }))}
@@ -411,23 +531,41 @@ export default function AddRepairScreen({ navigation, route }) {
             multiline
             numberOfLines={4}
             textAlignVertical="top"
+            showSoftInputOnFocus
           />
           {isTrebaloBi && !!defaultReporter.name && (
             <Text style={styles.helperText}>
               Prijavljuje: {defaultReporter.name}
             </Text>
           )}
+
+          <TouchableOpacity style={styles.stepButton} onPress={handleContinueFromOpis} activeOpacity={0.85}>
+            <Text style={styles.stepButtonText}>Nastavi na pozivatelja</Text>
+            <Ionicons name="arrow-forward" size={18} color="#fff" />
+          </TouchableOpacity>
         </View>
+        )}
 
         {/* Pozivatelj */}
-        <View style={styles.section}>
+        {currentStep === 'kontakt' && (
+        <View
+          style={styles.section}
+          onLayout={() => {
+            if (didAutoFocusKontakt) return;
+            setDidAutoFocusKontakt(true);
+            focusInput(callerInputRef);
+          }}
+        >
+          <Text style={styles.stepCaption}>Korak 2 od 3</Text>
           <Text style={styles.label}>Pozivatelj</Text>
           <TextInput
+            ref={callerInputRef}
             style={styles.input}
             value={formData.pozivatelj}
             onChangeText={(text) => setFormData(prev => ({ ...prev, pozivatelj: text }))}
             placeholder="Ime i prezime pozivatelja"
             placeholderTextColor="#9ca3af"
+            showSoftInputOnFocus
           />
           <TextInput
             style={[styles.input, { marginTop: 10 }]}
@@ -437,70 +575,134 @@ export default function AddRepairScreen({ navigation, route }) {
             placeholderTextColor="#9ca3af"
             keyboardType="phone-pad"
           />
-        </View>
 
+          <View style={styles.stepActionsRow}>
+            <TouchableOpacity
+              style={styles.stepSecondaryButton}
+              onPress={() => {
+                setDidAutoFocusOpis(false);
+                setCurrentStep('opis');
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.stepSecondaryButtonText}>Nazad</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.stepButtonCompact} onPress={handleContinueFromKontakt} activeOpacity={0.85}>
+              <Text style={styles.stepButtonText}>Dodijeli majstora</Text>
+              <Ionicons name="arrow-forward" size={18} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        </View>
+        )}
+
+        {currentStep === 'majstor' && (
         <View style={styles.section}>
+          <Text style={styles.stepCaption}>Korak 3 od 3</Text>
           <Text style={styles.label}>Majstor poslan na kvar</Text>
-          <TouchableOpacity style={styles.selectorButton} onPress={() => setShowMajstori((v) => !v)}>
-            <Ionicons name={showMajstori ? 'chevron-up' : 'chevron-down'} size={18} color="#1d4ed8" />
-            <Text style={styles.selectorButtonText}>
-              {formData.poslanMajstorId
-                ? (() => {
-                    const found = korisnici.find((k) => String(k._id || k.id) === String(formData.poslanMajstorId));
-                    return found ? `${found.ime || ''} ${found.prezime || ''}`.trim() || found.email || 'Majstor odabran' : 'Majstor odabran';
-                  })()
-                : 'Odaberi majstora (opcionalno)'}
-            </Text>
+          <TouchableOpacity style={styles.selectorButton} onPress={openTechnicianModal} activeOpacity={0.85}>
+            <Ionicons name="people-outline" size={18} color="#1d4ed8" />
+            <Text style={styles.selectorButtonText}>{selectedTechnicianLabel}</Text>
+            <Ionicons name="chevron-forward" size={18} color="#1d4ed8" style={{ marginLeft: 'auto' }} />
           </TouchableOpacity>
 
-          {showMajstori && (
-            loadingUsers ? (
-              <View style={styles.userRow}>
+          <Text style={styles.selectorHint}>
+            Nakon odabira majstora prijava se automatski sprema i otvara se pozivni prozor.
+          </Text>
+
+          <View style={styles.stepActionsRow}>
+            <TouchableOpacity
+              style={styles.stepSecondaryButton}
+              onPress={() => {
+                setDidAutoFocusKontakt(false);
+                setCurrentStep('kontakt');
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.stepSecondaryButtonText}>Nazad</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.submitButtonInline, (loading || (!online && !isOfflineDemo)) && styles.submitButtonDisabled]}
+              onPress={handleSubmit}
+              disabled={loading || (!online && !isOfflineDemo)}
+              activeOpacity={0.85}
+            >
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <>
+                  <Ionicons name="checkmark-circle" size={22} color="#fff" />
+                  <Text style={styles.submitButtonText}>{formData.poslanMajstorId ? 'Spremi bez poziva' : (isTrebaloBi ? 'Spremi "trebalo bi"' : 'Logiraj popravak')}</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+        )}
+
+        <View style={{ height: 40 }} />
+      </ScrollView>
+
+      <Modal
+        visible={showTechnicianModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowTechnicianModal(false)}
+      >
+        <View style={styles.technicianModalOverlay}>
+          <View style={styles.technicianModalCard}>
+            <View style={styles.technicianModalHeader}>
+              <View>
+                <Text style={styles.technicianModalTitle}>Odaberi majstora</Text>
+                <Text style={styles.technicianModalSubtitle}>Dodjela je opcionalna. Odabir odmah sprema prijavu.</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowTechnicianModal(false)} style={styles.technicianModalClose}>
+                <Ionicons name="close" size={22} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+
+            {loadingUsers ? (
+              <View style={styles.technicianLoadingWrap}>
                 <ActivityIndicator size="small" color="#0ea5e9" />
-                <Text style={styles.userRowText}>Učitavanje...</Text>
+                <Text style={styles.userRowText}>Učitavanje servisera...</Text>
               </View>
             ) : (
-              <ScrollView style={{ maxHeight: 320, marginTop: 8 }}>
+              <ScrollView style={styles.technicianList} contentContainerStyle={styles.technicianListContent} keyboardShouldPersistTaps="handled">
                 {korisnici.map((k) => {
                   const id = k._id || k.id;
                   const selected = String(formData.poslanMajstorId || '') === String(id || '');
                   return (
                     <TouchableOpacity
                       key={String(id)}
-                      style={[styles.userRow, selected && styles.userRowSelected]}
+                      style={[styles.technicianRow, selected && styles.technicianRowSelected]}
                       onPress={() => handleAssignedTechnicianSelection(id, k)}
+                      activeOpacity={0.8}
                     >
-                      <Ionicons name={selected ? 'checkmark-circle' : 'ellipse-outline'} size={20} color={selected ? '#16a34a' : '#94a3b8'} />
-                      <Text style={styles.userRowText}>{(k.ime || '')} {(k.prezime || '')}</Text>
+                      <View style={styles.technicianAvatar}>
+                        <Ionicons name={selected ? 'checkmark-circle' : 'person-outline'} size={18} color={selected ? '#16a34a' : '#1d4ed8'} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.technicianName}>{(k.ime || '')} {(k.prezime || '')}</Text>
+                        <Text style={styles.technicianMeta}>
+                          {String(k._id || k.id) === String(user?._id || user?.id)
+                            ? 'Ja (bez poziva)'
+                            : (k.telefon || k.email || 'Bez kontakta')}
+                        </Text>
+                      </View>
                     </TouchableOpacity>
                   );
                 })}
                 {korisnici.length === 0 && (
-                  <Text style={{ color: '#94a3b8', marginTop: 6 }}>Nema dostupnih servisera.</Text>
+                  <Text style={styles.technicianEmptyText}>Nema dostupnih servisera.</Text>
                 )}
               </ScrollView>
-            )
-          )}
+            )}
+
+            <TouchableOpacity style={styles.technicianSkipButton} onPress={() => setShowTechnicianModal(false)} activeOpacity={0.8}>
+              <Text style={styles.technicianSkipButtonText}>Zatvori bez dodjele</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-
-        {/* Submit button */}
-        <TouchableOpacity
-          style={[styles.submitButton, (loading || (!online && !isOfflineDemo)) && styles.submitButtonDisabled]}
-          onPress={handleSubmit}
-          disabled={loading || (!online && !isOfflineDemo)}
-        >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <>
-              <Ionicons name="checkmark-circle" size={24} color="#fff" />
-              <Text style={styles.submitButtonText}>{isTrebaloBi ? 'Spremi "trebalo bi"' : 'Logiraj popravak'}</Text>
-            </>
-          )}
-        </TouchableOpacity>
-
-        <View style={{ height: 40 }} />
-      </ScrollView>
+      </Modal>
 
       <Modal
         visible={callPrompt.visible}
@@ -573,6 +775,10 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
+  contentContainer: {
+    paddingBottom: 32,
+    flexGrow: 1,
+  },
   offlineWarning: {
     backgroundColor: '#fef2f2',
     padding: 15,
@@ -591,6 +797,21 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     padding: 20,
     marginTop: 15,
+    borderRadius: 24,
+    marginHorizontal: 16,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.05,
+    shadowRadius: 16,
+    elevation: 2,
+  },
+  stepCaption: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0f766e',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginBottom: 10,
   },
   label: {
     fontSize: 14,
@@ -601,8 +822,53 @@ const styles = StyleSheet.create({
   toggleRow: {
     flexDirection: 'row',
     gap: 10,
-    padding: 20,
+    padding: 16,
     paddingBottom: 10,
+  },
+  stepIndicatorWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+  stepIndicatorItem: {
+    alignItems: 'center',
+    gap: 6,
+  },
+  stepIndicatorItemActive: {
+    transform: [{ scale: 1.02 }],
+  },
+  stepIndicatorNumber: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    textAlign: 'center',
+    textAlignVertical: 'center',
+    lineHeight: 28,
+    backgroundColor: '#e5e7eb',
+    color: '#64748b',
+    fontWeight: '800',
+    fontSize: 13,
+  },
+  stepIndicatorNumberActive: {
+    backgroundColor: '#0f766e',
+    color: '#fff',
+  },
+  stepIndicatorLabel: {
+    fontSize: 12,
+    color: '#94a3b8',
+    fontWeight: '700',
+  },
+  stepIndicatorLabelActive: {
+    color: '#0f172a',
+  },
+  stepIndicatorLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#dbe4ea',
+    marginHorizontal: 10,
+    marginBottom: 18,
   },
   typeToggle: {
     flex: 1,
@@ -663,6 +929,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#1d4ed8',
   },
+  selectorHint: {
+    marginTop: 10,
+    fontSize: 12,
+    lineHeight: 18,
+    color: '#64748b',
+  },
   userRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -685,12 +957,76 @@ const styles = StyleSheet.create({
     minHeight: 100,
     paddingTop: 12,
   },
+  stepButton: {
+    marginTop: 16,
+    minHeight: 48,
+    borderRadius: 14,
+    backgroundColor: '#0f766e',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  stepButtonCompact: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 14,
+    backgroundColor: '#0f766e',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+  },
+  stepButtonText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#fff',
+  },
+  stepActionsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 16,
+    alignItems: 'stretch',
+  },
+  stepSecondaryButton: {
+    minWidth: 96,
+    minHeight: 48,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+  },
+  stepSecondaryButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#334155',
+  },
   submitButton: {
     backgroundColor: '#b91c1c',
     marginHorizontal: 20,
     marginTop: 20,
     padding: 16,
     borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  submitButtonInline: {
+    flex: 1,
+    backgroundColor: '#b91c1c',
+    minHeight: 52,
+    paddingHorizontal: 16,
+    borderRadius: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -806,6 +1142,112 @@ const styles = StyleSheet.create({
   },
   callPromptGhostButtonText: {
     fontSize: 16,
+    fontWeight: '700',
+    color: '#1d4ed8',
+  },
+  technicianModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.48)',
+    justifyContent: 'flex-end',
+  },
+  technicianModalCard: {
+    backgroundColor: '#ffffff',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 28,
+    maxHeight: '78%',
+  },
+  technicianModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 14,
+  },
+  technicianModalTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#0f172a',
+  },
+  technicianModalSubtitle: {
+    marginTop: 4,
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#64748b',
+    maxWidth: '90%',
+  },
+  technicianModalClose: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#f8fafc',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  technicianLoadingWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 18,
+  },
+  technicianList: {
+    maxHeight: 420,
+  },
+  technicianListContent: {
+    gap: 10,
+    paddingBottom: 8,
+  },
+  technicianRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    backgroundColor: '#f8fafc',
+  },
+  technicianRowSelected: {
+    backgroundColor: '#f0fdf4',
+    borderColor: '#86efac',
+  },
+  technicianAvatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#dbeafe',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  technicianName: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  technicianMeta: {
+    marginTop: 2,
+    fontSize: 13,
+    color: '#64748b',
+  },
+  technicianEmptyText: {
+    paddingVertical: 20,
+    fontSize: 14,
+    color: '#94a3b8',
+    textAlign: 'center',
+  },
+  technicianSkipButton: {
+    marginTop: 16,
+    minHeight: 50,
+    borderRadius: 16,
+    backgroundColor: '#eff6ff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  technicianSkipButtonText: {
+    fontSize: 15,
     fontWeight: '700',
     color: '#1d4ed8',
   },

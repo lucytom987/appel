@@ -19,6 +19,7 @@ import { elevatorDB, repairDB, userDB } from '../database/db';
 import { repairsAPI, usersAPI } from '../services/api';
 import ms from '../utils/scale';
 import { useFocusEffect } from '@react-navigation/native';
+import { applyUserPickerFilter } from '../utils/userPickerFilters';
 
 function formatName(person) {
   if (!person) return '';
@@ -167,11 +168,10 @@ export default function EditRepairScreen({ route, navigation }) {
     const fetchUsers = async () => {
       setLoadingUsers(true);
       const currentUserId = user?._id || user?.id;
-      const filterOutCurrent = (arr = []) => (Array.isArray(arr) ? arr : []).filter((u) => {
-        const id = u?._id || u?.id;
-        if (!id || String(id) === String(currentUserId)) return false;
-        const role = String(u?.uloga || u?.role || '').toLowerCase();
-        return role === 'serviser' || role === 'technician';
+      const filterOutCurrent = (arr = []) => applyUserPickerFilter(arr, {
+        currentUserId,
+        technicianOnly: true,
+        requireActiveAccount: true,
       });
 
       try {

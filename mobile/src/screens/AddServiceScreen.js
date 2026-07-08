@@ -21,6 +21,7 @@ import { serviceDB, elevatorDB, userDB } from '../database/db';
 import { servicesAPI, serviceWorkOrdersAPI, usersAPI } from '../services/api';
 import { usePhotoUpload } from '../hooks/usePhotoUpload';
 import ms from '../utils/scale';
+import { applyUserPickerFilter } from '../utils/userPickerFilters';
 
 export default function AddServiceScreen({ navigation, route }) {
   const { elevator } = route.params || {};
@@ -66,9 +67,11 @@ export default function AddServiceScreen({ navigation, route }) {
   React.useEffect(() => {
     const fetchUsers = async () => {
       setLoadingUsers(true);
-      const filterOutCurrent = (arr = []) => (Array.isArray(arr) ? arr : []).filter(
-        (u) => (u._id || u.id) !== (user?._id || user?.id)
-      );
+      const filterOutCurrent = (arr = []) => applyUserPickerFilter(arr, {
+        currentUserId: user?._id || user?.id,
+        technicianOnly: true,
+        requireActiveAccount: true,
+      });
       try {
         if (online) {
           const res = await usersAPI.getLite();

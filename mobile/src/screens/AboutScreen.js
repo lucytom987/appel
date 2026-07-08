@@ -11,7 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 
 export default function AboutScreen({ navigation }) {
-  const currentVersion = Constants?.expoConfig?.version || '2.0.10';
+  const currentVersion = Constants?.expoConfig?.version || '2.0.11';
   const currentVersionDate = '08.07.2026';
 
   return (
@@ -182,7 +182,7 @@ export default function AboutScreen({ navigation }) {
             © 2026 APPEL • Elevator Management
           </Text>
           <Text style={styles.footerSubtext}>
-            05.07.2026 • Android
+            08.07.2026 • Android
           </Text>
         </View>
 

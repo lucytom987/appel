@@ -11,6 +11,7 @@ import {
   Modal,
   TextInput,
   ScrollView,
+  KeyboardAvoidingView,
   Clipboard,
   StatusBar,
   Platform,
@@ -20,6 +21,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { usersAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { userDB } from '../database/db';
+import {
+  getPickerOnlyMarkedEnabled,
+  getUserId,
+  getUserPickerVisibilityMap,
+  setPickerOnlyMarkedEnabled,
+  setUserPickerVisible,
+} from '../utils/userPickerFilters';
 
 const UserManagementScreen = ({ navigation }) => {
   const { user, isOnline, serverAwake } = useAuth();
@@ -33,9 +41,13 @@ const UserManagementScreen = ({ navigation }) => {
   const [passwordModalVisible, setPasswordModalVisible] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
   const [selectedUser, setSelectedUser] = useState(null);
+  const [pickerVisibilityMap, setPickerVisibilityMap] = useState({});
+  const [showOnlyMarked, setShowOnlyMarked] = useState(true);
   const online = Boolean(isOnline && serverAwake);
 
   useEffect(() => {
+    setPickerVisibilityMap(getUserPickerVisibilityMap());
+    setShowOnlyMarked(getPickerOnlyMarkedEnabled());
     loadUsers();
   }, []);
 
@@ -88,10 +100,30 @@ const UserManagementScreen = ({ navigation }) => {
     }
   };
 
+  const refreshPickerSettings = () => {
+    setPickerVisibilityMap(getUserPickerVisibilityMap());
+    setShowOnlyMarked(getPickerOnlyMarkedEnabled());
+  };
+
   const onRefresh = useCallback(() => {
     setRefreshing(true);
+    refreshPickerSettings();
     loadUsers();
   }, []);
+
+  const handleToggleOnlyMarked = () => {
+    const next = !showOnlyMarked;
+    setPickerOnlyMarkedEnabled(next);
+    setShowOnlyMarked(next);
+  };
+
+  const handleToggleUserPickerVisibility = (targetUser) => {
+    const id = getUserId(targetUser);
+    if (!id) return;
+    const currentlyVisible = pickerVisibilityMap[String(id)] !== false;
+    setUserPickerVisible(id, !currentlyVisible);
+    setPickerVisibilityMap(getUserPickerVisibilityMap());
+  };
 
   const handleAddUser = () => {
     navigation.navigate('AddUser');
@@ -237,6 +269,18 @@ const UserManagementScreen = ({ navigation }) => {
     }
   };
 
+  const pickerEligibleUsers = users.filter((u) => {
+    const role = String(u?.uloga || u?.role || '').toLowerCase();
+    const isTechnician = role === 'serviser' || role === 'technician';
+    const isActive = !(u?.aktivan === false || u?.aktivan === 0 || String(u?.aktivan).toLowerCase() === 'false');
+    return isTechnician && isActive;
+  });
+  const pickerVisibleCount = pickerEligibleUsers.reduce((count, entry) => {
+    const id = String(getUserId(entry) || '');
+    if (!id) return count;
+    return count + (pickerVisibilityMap[id] !== false ? 1 : 0);
+  }, 0);
+
   const renderUserItem = ({ item }) => (
     <View style={styles.userCard}>
       <View style={styles.userHeader}>
@@ -262,6 +306,27 @@ const UserManagementScreen = ({ navigation }) => {
           <Ionicons name="call" size={14} /> {item.telefon}
         </Text>
       )}
+
+      <View style={styles.pickerRow}>
+        <Text style={styles.pickerLabel}>Prikaz u odabiru majstora</Text>
+        <TouchableOpacity
+          style={[
+            styles.pickerToggle,
+            (pickerVisibilityMap[String(getUserId(item))] !== false) ? styles.pickerToggleOn : styles.pickerToggleOff,
+          ]}
+          onPress={() => handleToggleUserPickerVisibility(item)}
+          activeOpacity={0.85}
+        >
+          <Ionicons
+            name={(pickerVisibilityMap[String(getUserId(item))] !== false) ? 'checkmark-circle' : 'close-circle'}
+            size={16}
+            color="#fff"
+          />
+          <Text style={styles.pickerToggleText}>
+            {(pickerVisibilityMap[String(getUserId(item))] !== false) ? 'Aktivan' : 'Skriven'}
+          </Text>
+        </TouchableOpacity>
+      </View>
 
       <View style={styles.actionsContainer}>
         <TouchableOpacity
@@ -312,6 +377,29 @@ const UserManagementScreen = ({ navigation }) => {
           <Text style={styles.pageTitle}>Korisnici</Text>
           <Text style={styles.pageSubtitle}>Upravljanje korisnicima i lozinkama</Text>
         </View>
+      </View>
+      <View style={styles.filterSettingsCard}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.filterSettingsTitle}>Prikaz u svim odabirima servisera</Text>
+          <Text style={styles.filterSettingsHint}>
+            {showOnlyMarked
+              ? 'U prijavi/uređivanju se prikazuju samo korisnici označeni kao Aktivan.'
+              : 'U prijavi/uređivanju se prikazuju svi aktivni serviseri.'}
+          </Text>
+          <View style={styles.pickerStatsRow}>
+            <Text style={styles.pickerStatsLabel}>Aktivni za picker</Text>
+            <View style={styles.pickerStatsBadge}>
+              <Text style={styles.pickerStatsBadgeText}>{pickerVisibleCount}/{pickerEligibleUsers.length}</Text>
+            </View>
+          </View>
+        </View>
+        <TouchableOpacity
+          style={[styles.modeToggle, showOnlyMarked ? styles.modeToggleOn : styles.modeToggleOff]}
+          onPress={handleToggleOnlyMarked}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.modeToggleText}>{showOnlyMarked ? 'Samo označeni' : 'Svi serviseri'}</Text>
+        </TouchableOpacity>
       </View>
       <FlatList
         data={users}
@@ -367,7 +455,11 @@ const UserManagementScreen = ({ navigation }) => {
 
       {/* Edit Modal */}
       <Modal visible={modalVisible} transparent animationType="slide">
-        <View style={styles.modalContainer}>
+        <KeyboardAvoidingView
+          style={styles.modalContainer}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
+        >
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Uredi korisnika</Text>
@@ -376,7 +468,12 @@ const UserManagementScreen = ({ navigation }) => {
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.modalForm}>
+            <ScrollView
+              style={styles.modalForm}
+              contentContainerStyle={styles.modalFormContent}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+            >
               <View style={styles.formGroup}>
                 <Text style={styles.label}>Ime</Text>
                 <TextInput
@@ -459,7 +556,7 @@ const UserManagementScreen = ({ navigation }) => {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
@@ -506,6 +603,66 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: 12,
+  },
+  filterSettingsCard: {
+    marginHorizontal: 12,
+    marginBottom: 6,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  filterSettingsTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  filterSettingsHint: {
+    marginTop: 4,
+    fontSize: 12,
+    color: '#6b7280',
+  },
+  pickerStatsRow: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  pickerStatsLabel: {
+    fontSize: 12,
+    color: '#334155',
+    fontWeight: '600',
+  },
+  pickerStatsBadge: {
+    backgroundColor: '#0f172a',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  pickerStatsBadgeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  modeToggle: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 999,
+  },
+  modeToggleOn: {
+    backgroundColor: '#0ea5e9',
+  },
+  modeToggleOff: {
+    backgroundColor: '#64748b',
+  },
+  modeToggleText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
   },
   userCard: {
     backgroundColor: '#FFF',
@@ -554,6 +711,38 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#666',
     marginBottom: 12,
+  },
+  pickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    gap: 10,
+  },
+  pickerLabel: {
+    flex: 1,
+    fontSize: 13,
+    color: '#374151',
+    fontWeight: '600',
+  },
+  pickerToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+  },
+  pickerToggleOn: {
+    backgroundColor: '#16a34a',
+  },
+  pickerToggleOff: {
+    backgroundColor: '#6b7280',
+  },
+  pickerToggleText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
   },
   actionsContainer: {
     flexDirection: 'row',
@@ -675,6 +864,9 @@ const styles = StyleSheet.create({
   modalForm: {
     paddingHorizontal: 20,
     paddingVertical: 16,
+  },
+  modalFormContent: {
+    paddingBottom: 10,
   },
   formGroup: {
     marginBottom: 16,

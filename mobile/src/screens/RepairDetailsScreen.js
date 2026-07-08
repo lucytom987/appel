@@ -11,6 +11,7 @@ import { usePhotoUpload } from '../hooks/usePhotoUpload';
 import ImageViewer from 'react-native-image-zoom-viewer';
 import SignatureModal from '../components/SignatureModal';
 import ms from '../utils/scale';
+import { applyUserPickerFilter } from '../utils/userPickerFilters';
 
 const safeText = (value, fallback = '') => {
   if (value === null || value === undefined) return fallback;
@@ -500,6 +501,12 @@ export default function RepairDetailsScreen({ route, navigation }) {
         return Boolean(userCompanyId) && String(userCompanyId) === String(currentCompanyId);
       });
 
+      const applyPickerFilter = (arr = []) => applyUserPickerFilter(arr, {
+        currentUserId,
+        technicianOnly: true,
+        requireActiveAccount: true,
+      });
+
       try {
         if (online) {
           const res = await usersAPI.getLite();
@@ -512,19 +519,20 @@ export default function RepairDetailsScreen({ route, navigation }) {
             const isActive = !(u?.aktivan === false || u?.aktivan === 0 || String(u?.aktivan).toLowerCase() === 'false');
             return (role === 'serviser' || role === 'technician') && isActive;
           });
+          const finalFiltered = applyPickerFilter(filtered);
           try {
-            userDB.bulkInsert(filtered);
+            userDB.bulkInsert(finalFiltered);
           } catch (cacheErr) {
             console.log('Cache users failed', cacheErr?.message);
           }
-          setKorisnici(filtered);
+          setKorisnici(finalFiltered);
         } else {
           // Offline: fail-closed. Ako ne znamo firmu, ne prikazuj nikoga.
-          setKorisnici(filterOutCurrent(userDB.getAll(), true));
+          setKorisnici(applyPickerFilter(filterOutCurrent(userDB.getAll(), true)));
         }
       } catch (e) {
         console.log('Load users failed', e?.message);
-        setKorisnici(filterOutCurrent(userDB.getAll(), true));
+        setKorisnici(applyPickerFilter(filterOutCurrent(userDB.getAll(), true)));
       } finally {
         setLoadingUsers(false);
       }

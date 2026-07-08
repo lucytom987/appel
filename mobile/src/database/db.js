@@ -87,6 +87,20 @@ export const initDatabase = () => {
         updated_at INTEGER
       );
 
+      -- Vidljivost korisnika u pickerima (lokalna preferenca po uređaju)
+      CREATE TABLE IF NOT EXISTS user_picker_visibility (
+        userId TEXT PRIMARY KEY,
+        visible INTEGER DEFAULT 1,
+        updated_at INTEGER
+      );
+
+      -- Jednostavne lokalne postavke pickera
+      CREATE TABLE IF NOT EXISTS picker_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT,
+        updated_at INTEGER
+      );
+
       -- Dizala
       CREATE TABLE IF NOT EXISTS elevators (
         id TEXT PRIMARY KEY,
@@ -1191,6 +1205,43 @@ export const userDB = {
         console.log(`Korisnik ${user.email} već postoji`);
       }
     });
+  },
+};
+
+export const userPickerVisibilityDB = {
+  getAll: () => db.getAllSync('SELECT userId, visible FROM user_picker_visibility'),
+
+  getMap: () => {
+    const rows = db.getAllSync('SELECT userId, visible FROM user_picker_visibility');
+    return rows.reduce((acc, row) => {
+      if (!row?.userId) return acc;
+      acc[String(row.userId)] = Number(row.visible) === 1;
+      return acc;
+    }, {});
+  },
+
+  setVisible: (userId, visible) => {
+    if (!userId) return null;
+    return db.runSync(
+      'INSERT OR REPLACE INTO user_picker_visibility (userId, visible, updated_at) VALUES (?, ?, ?)',
+      [String(userId), visible ? 1 : 0, Date.now()]
+    );
+  },
+
+  remove: (userId) => {
+    if (!userId) return null;
+    return db.runSync('DELETE FROM user_picker_visibility WHERE userId = ?', [String(userId)]);
+  },
+};
+
+export const pickerSettingsDB = {
+  get: (key) => db.getFirstSync('SELECT value FROM picker_settings WHERE key = ?', [String(key)]),
+
+  set: (key, value) => {
+    return db.runSync(
+      'INSERT OR REPLACE INTO picker_settings (key, value, updated_at) VALUES (?, ?, ?)',
+      [String(key), String(value), Date.now()]
+    );
   },
 };
 

@@ -358,6 +358,8 @@ export default function ElevatorsListScreen({ navigation }) {
         data={filteredElevators}
         renderItem={renderElevator}
         keyExtractor={item => item.id}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         contentContainerStyle={styles.listContent}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />

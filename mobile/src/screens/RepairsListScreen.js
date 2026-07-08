@@ -7,11 +7,15 @@ import {
   TouchableOpacity,
   RefreshControl,
   BackHandler,
+  Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { repairDB, elevatorDB, userDB } from '../database/db';
 import { syncAll } from '../services/syncService';
+import { useAuth } from '../context/AuthContext';
+import { workOrdersAPI } from '../services/api';
 
 const safeText = (value, fallback = '') => {
   if (value === null || value === undefined) return fallback;
@@ -36,6 +40,8 @@ const buildElevatorDisplay = (elevator) => {
 };
 
 export default function RepairsListScreen({ navigation, route }) {
+  const { isOnline, serverAwake } = useAuth();
+  const online = Boolean(isOnline && serverAwake);
   const [repairs, setRepairs] = useState([]);
   const [filteredRepairs, setFilteredRepairs] = useState([]);
   const [trebaloBiList, setTrebaloBiList] = useState([]);
@@ -48,6 +54,11 @@ export default function RepairsListScreen({ navigation, route }) {
   });
   const [periodFilter, setPeriodFilter] = useState('current'); // 'current' | 'all'
   const [userMap] = useState({}); // placeholder, više se ne koristi u prikazu
+  const [showFlowModal, setShowFlowModal] = useState(false);
+  const [selectedRepairForFlow, setSelectedRepairForFlow] = useState(null);
+  const [flowSignerName, setFlowSignerName] = useState('');
+  const [flowSignerAt, setFlowSignerAt] = useState(null);
+  const [flowLoadingSigner, setFlowLoadingSigner] = useState(false);
 
   const monthNames = [
     'Siječanj',
@@ -301,6 +312,34 @@ export default function RepairsListScreen({ navigation, route }) {
       return '';
     })();
 
+    const openFlowPopup = async () => {
+      setSelectedRepairForFlow(item);
+      setFlowSignerName('');
+      setFlowSignerAt(null);
+      setShowFlowModal(true);
+
+      const repairId = item?._id || item?.id;
+      if (!online || !repairId || String(repairId).startsWith('local_') || !item?.radniNalogPotpisan) {
+        return;
+      }
+
+      setFlowLoadingSigner(true);
+      try {
+        const woRes = await workOrdersAPI.getByRepair(repairId);
+        const wo = woRes?.data?.data;
+        const signer = wo?.signedByName
+          || (wo?.signedBy && typeof wo.signedBy === 'object' ? `${safeText(wo.signedBy.ime)} ${safeText(wo.signedBy.prezime)}`.trim() || safeText(wo.signedBy.email) : '')
+          || '';
+        setFlowSignerName(signer);
+        setFlowSignerAt(wo?.signedAt || wo?.updated_at || wo?.sentAt || null);
+      } catch (err) {
+        setFlowSignerName('');
+        setFlowSignerAt(null);
+      } finally {
+        setFlowLoadingSigner(false);
+      }
+    };
+
     const reportedDateLabel = (() => {
       if (item.status !== 'pending') return '';
       const datum = item.datumPrijave || item.datumKvara;
@@ -348,22 +387,100 @@ export default function RepairsListScreen({ navigation, route }) {
           </Text>
 
           {reporterLabel && reportedDateLabel ? (
-            <View style={styles.reporterRow}>
+            <TouchableOpacity style={styles.reporterRow} onPress={openFlowPopup} activeOpacity={0.75}>
               <Ionicons name="person-add-outline" size={15} color="#dc2626" />
               <Text style={styles.reporterText}>{reporterLabel} • {reportedDateLabel}</Text>
-            </View>
+              <Ionicons name="information-circle-outline" size={15} color="#475569" />
+            </TouchableOpacity>
           ) : null}
 
           {completedByLabel ? (
-            <View style={styles.completedByRow}>
+            <TouchableOpacity style={styles.completedByRow} onPress={openFlowPopup} activeOpacity={0.75}>
               <Ionicons name="person-circle-outline" size={15} color="#1d4ed8" />
               <Text style={styles.completedByText}>Odradio: {completedByLabel}</Text>
-            </View>
+              <Ionicons name="information-circle-outline" size={15} color="#475569" />
+            </TouchableOpacity>
           ) : null}
         </View>
       </TouchableOpacity>
     );
   };
+
+  const selectedFlow = selectedRepairForFlow || {};
+  const selectedFlowRepairId = selectedFlow?._id || selectedFlow?.id;
+
+  const formatDateTime = (value) => {
+    if (!value) return '';
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return '';
+    return parsed.toLocaleString('hr-HR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  const composeFlowValue = (name, dateValue) => {
+    const resolvedName = safeText(name, '').trim();
+    const resolvedDate = formatDateTime(dateValue);
+    if (resolvedName && resolvedDate) return `${resolvedName} • ${resolvedDate}`;
+    if (resolvedName) return resolvedName;
+    if (resolvedDate) return resolvedDate;
+    return '-';
+  };
+
+  const resolveUserName = (value) => {
+    if (!value) return '';
+    if (typeof value === 'object') {
+      const full = `${safeText(value.ime)} ${safeText(value.prezime)}`.trim();
+      return full || safeText(value.email) || safeText(value._id || value.id);
+    }
+    const id = String(value);
+    const found = userDB.getById(id);
+    if (found) {
+      const full = `${safeText(found.ime)} ${safeText(found.prezime)}`.trim();
+      return full || safeText(found.email) || id;
+    }
+    return id;
+  };
+
+  const flowReportedAt = selectedFlow?.datumPrijave || selectedFlow?.datumKvara || null;
+  const flowReportedBy = (() => {
+    if (!selectedFlowRepairId) return '-';
+    return composeFlowValue(resolveUserName(selectedFlow?.serviserID), flowReportedAt);
+  })();
+
+  const flowCaller = composeFlowValue(
+    safeText(selectedFlow?.pozivatelj || selectedFlow?.Pozivatelj || selectedFlow?.prijavio, ''),
+    flowReportedAt
+  );
+
+  const flowAssignedTechnician = (() => {
+    const fromLinked = resolveUserName(selectedFlow?.poslanMajstorId);
+    const name = fromLinked || safeText(selectedFlow?.poslanMajstorIme, '');
+    const assignedAt = selectedFlow?.poslanMajstorAt || selectedFlow?.datumPrijave || null;
+    return composeFlowValue(name, assignedAt);
+  })();
+
+  const flowResolvedBy = (() => {
+    if (selectedFlow?.status !== 'completed') return '-';
+    const resolvedName = safeText(selectedFlow?.completedByName) || resolveUserName(selectedFlow?.completedBy) || '';
+    const resolvedAt = selectedFlow?.completedAt || selectedFlow?.datumPopravka || null;
+    return composeFlowValue(resolvedName, resolvedAt);
+  })();
+
+  const flowSignedBy = (() => {
+    if (!selectedFlow?.radniNalogPotpisan) return '-';
+    if (flowLoadingSigner) return 'Učitavam...';
+    if (flowSignerName || flowSignerAt) {
+      return composeFlowValue(flowSignerName, flowSignerAt);
+    }
+    const signatureType = String(selectedFlow?.radniNalogPotpisVrsta || '').toLowerCase();
+    const fallbackName = signatureType === 'paper' ? 'Papirnato potpisano' : 'Potpisano';
+    return composeFlowValue(fallbackName, selectedFlow?.updated_at || selectedFlow?.azuriranDatum || null);
+  })();
 
   const renderEmptyState = (type) => (
     <View style={styles.emptyState}>
@@ -476,7 +593,52 @@ export default function RepairsListScreen({ navigation, route }) {
         stickySectionHeadersEnabled={false}
         contentContainerStyle={styles.listContent}
       />
+
+      <Modal
+        visible={showFlowModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowFlowModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Tok prijave i izvedbe</Text>
+              <TouchableOpacity onPress={() => setShowFlowModal(false)}>
+                <Ionicons name="close" size={22} color="#334155" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalRows}>
+              <FlowRow label="Prijavio kvar" value={flowReportedBy} icon="person-add-outline" />
+              <FlowRow label="Pozivatelj" value={flowCaller} icon="person-outline" />
+              <FlowRow label="Majstor poslan" value={flowAssignedTechnician} icon="construct-outline" />
+              <FlowRow label="Riješio kvar" value={flowResolvedBy} icon="checkmark-done-outline" />
+              <FlowRow label="Potpisao" value={flowSignedBy} icon="create-outline" />
+            </View>
+
+            {flowLoadingSigner && (
+              <View style={styles.modalLoadingRow}>
+                <ActivityIndicator size="small" color="#2563eb" />
+                <Text style={styles.modalLoadingText}>Provjeravam tko je potpisao...</Text>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
+  );
+}
+
+function FlowRow({ label, value, icon }) {
+  return (
+    <View style={styles.flowRow}>
+      <View style={styles.flowLabelWrap}>
+        <Ionicons name={icon} size={16} color="#334155" />
+        <Text style={styles.flowLabel}>{label}</Text>
+      </View>
+      <Text style={styles.flowValue}>{value || '-'}</Text>
+    </View>
   );
 }
 
@@ -686,6 +848,65 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#1e3a8a',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.5)',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  modalCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
+    padding: 16,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0f172a',
+  },
+  modalRows: {
+    gap: 10,
+  },
+  flowRow: {
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    backgroundColor: '#f8fafc',
+  },
+  flowLabelWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  flowLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#475569',
+  },
+  flowValue: {
+    fontSize: 14,
+    color: '#0f172a',
+    fontWeight: '600',
+  },
+  modalLoadingRow: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  modalLoadingText: {
+    fontSize: 12,
+    color: '#475569',
   },
   emptyState: {
     flex: 1,

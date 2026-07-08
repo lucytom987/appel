@@ -50,6 +50,38 @@ const normalizeWorkOrderSignatureType = (value) => {
   return null;
 };
 
+const normalizeAssignedTechnician = async ({ poslanMajstorId, poslanMajstorIme }, companyId) => {
+  const fallbackName = typeof poslanMajstorIme === 'string' ? poslanMajstorIme.trim() : '';
+
+  if (!poslanMajstorId || !mongoose.Types.ObjectId.isValid(String(poslanMajstorId))) {
+    return {
+      poslanMajstorId: null,
+      poslanMajstorIme: fallbackName,
+    };
+  }
+
+  const user = await User.findOne({
+    _id: poslanMajstorId,
+    companyId,
+    aktivan: { $ne: false },
+  })
+    .select('_id ime prezime email')
+    .lean();
+
+  if (!user) {
+    return {
+      poslanMajstorId: null,
+      poslanMajstorIme: fallbackName,
+    };
+  }
+
+  const resolvedName = `${user.ime || ''} ${user.prezime || ''}`.trim() || user.email || fallbackName;
+  return {
+    poslanMajstorId: user._id,
+    poslanMajstorIme: resolvedName,
+  };
+};
+
 // GET /api/repairs - popis popravaka (filtri)
 router.get('/', authenticate, async (req, res) => {
   try {
@@ -77,6 +109,7 @@ router.get('/', authenticate, async (req, res) => {
       .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala')
       .populate('serviserID', 'ime prezime email')
       .populate('completedBy', 'ime prezime email')
+      .populate('poslanMajstorId', 'ime prezime email')
       .sort({ datumPrijave: -1 })
       .skip(parsedSkip)
       .limit(parsedLimit)
@@ -159,6 +192,7 @@ router.get('/:id', authenticate, async (req, res) => {
       .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala')
       .populate('serviserID', 'ime prezime email uloga')
       .populate('completedBy', 'ime prezime email')
+      .populate('poslanMajstorId', 'ime prezime email')
       .lean();
 
     if (!repair) {
@@ -215,6 +249,10 @@ router.post('/', authenticate, async (req, res) => {
     }
 
     const normalizedAdditionalTechnicians = await normalizeAdditionalTechnicians(req.body.dodatniServiseri, req.companyId);
+    const normalizedAssignedTechnician = await normalizeAssignedTechnician({
+      poslanMajstorId: req.body.poslanMajstorId,
+      poslanMajstorIme: req.body.poslanMajstorIme,
+    }, req.companyId);
     const normalizedWorkHours = normalizeWorkHours(req.body.radniSati);
     const requestedSignatureType = normalizeWorkOrderSignatureType(req.body.radniNalogPotpisVrsta);
     const isWorkOrderSigned = Boolean(req.body.radniNalogPotpisan);
@@ -226,6 +264,8 @@ router.post('/', authenticate, async (req, res) => {
       dodatniServiseri: normalizedAdditionalTechnicians,
       radniSati: normalizedWorkHours,
       utroseniMaterijal: typeof req.body.utroseniMaterijal === 'string' ? req.body.utroseniMaterijal.trim() : '',
+      poslanMajstorId: normalizedAssignedTechnician.poslanMajstorId,
+      poslanMajstorIme: normalizedAssignedTechnician.poslanMajstorIme,
       status: req.body.status || 'pending',
       trebaloBi: trebFlag,
       datumPrijave: req.body.datumPrijave || now,
@@ -255,6 +295,7 @@ router.post('/', authenticate, async (req, res) => {
     await repair.populate('elevatorId', 'nazivStranke ulica mjesto brojDizala');
     await repair.populate('serviserID', 'ime prezime email');
     await repair.populate('completedBy', 'ime prezime email');
+    await repair.populate('poslanMajstorId', 'ime prezime email');
 
     res.status(201).json({ success: true, message: 'Popravak kreiran', data: repair });
   } catch (error) {
@@ -314,6 +355,10 @@ router.put('/:id', authenticate, async (req, res) => {
 
     const now = new Date();
     const normalizedAdditionalTechnicians = await normalizeAdditionalTechnicians(req.body.dodatniServiseri, req.companyId);
+    const normalizedAssignedTechnician = await normalizeAssignedTechnician({
+      poslanMajstorId: req.body.poslanMajstorId,
+      poslanMajstorIme: req.body.poslanMajstorIme,
+    }, req.companyId);
     const normalizedWorkHours = normalizeWorkHours(req.body.radniSati);
 
     const updatePayload = {
@@ -323,6 +368,8 @@ router.put('/:id', authenticate, async (req, res) => {
       dodatniServiseri: normalizedAdditionalTechnicians,
       radniSati: normalizedWorkHours,
       utroseniMaterijal: typeof req.body.utroseniMaterijal === 'string' ? req.body.utroseniMaterijal.trim() : '',
+      poslanMajstorId: normalizedAssignedTechnician.poslanMajstorId,
+      poslanMajstorIme: normalizedAssignedTechnician.poslanMajstorIme,
       trebaloBi: trebFlag,
       azuriranDatum: now,
       updated_at: now,
@@ -357,6 +404,8 @@ router.put('/:id', authenticate, async (req, res) => {
       .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala')
       .populate('serviserID', 'ime prezime email')
       .populate('completedBy', 'ime prezime email');
+      
+    await repair.populate('poslanMajstorId', 'ime prezime email');
 
     await logAction({
       korisnikId: req.user._id,

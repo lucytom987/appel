@@ -274,8 +274,11 @@ export const repairsAPI = {
       radniSati: data.radniSati || {},
       photos: data.photos || [],
       prijavio: data.prijavio || data.reportedBy,
+      pozivatelj: data.pozivatelj || data.callerName,
       kontaktTelefon: data.kontaktTelefon || data.contactPhone,
       primioPoziv: data.primioPoziv || data.callReceivedBy,
+      poslanMajstorId: data.poslanMajstorId || data.assignedTechnicianId,
+      poslanMajstorIme: data.poslanMajstorIme || data.assignedTechnicianName,
     }),
   update: (id, data) =>
     api.put(`/repairs/${id}`, {
@@ -298,8 +301,11 @@ export const repairsAPI = {
       radniSati: data.radniSati || {},
       photos: data.photos || [],
       prijavio: data.prijavio || data.reportedBy,
+      pozivatelj: data.pozivatelj || data.callerName,
       kontaktTelefon: data.kontaktTelefon || data.contactPhone,
       primioPoziv: data.primioPoziv || data.callReceivedBy,
+      poslanMajstorId: data.poslanMajstorId || data.assignedTechnicianId,
+      poslanMajstorIme: data.poslanMajstorIme || data.assignedTechnicianName,
     }),
   delete: (id) => api.delete(`/repairs/${id}`),
   getStats: () => api.get('/repairs/stats/overview'),

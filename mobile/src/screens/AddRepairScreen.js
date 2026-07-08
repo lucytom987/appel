@@ -15,8 +15,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import { useAuth } from '../context/AuthContext';
-import { repairDB } from '../database/db';
-import { repairsAPI } from '../services/api';
+import { repairDB, userDB } from '../database/db';
+import { repairsAPI, usersAPI } from '../services/api';
 import ms from '../utils/scale';
 
 export default function AddRepairScreen({ navigation, route }) {
@@ -25,6 +25,9 @@ export default function AddRepairScreen({ navigation, route }) {
   const [isOfflineDemo, setIsOfflineDemo] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isTrebaloBi, setIsTrebaloBi] = useState(false);
+  const [korisnici, setKorisnici] = useState([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [showMajstori, setShowMajstori] = useState(false);
 
   // Konvertiraj isOnline u boolean i čekaj da se backend probudi
   const online = Boolean(isOnline && serverAwake);
@@ -45,6 +48,7 @@ export default function AddRepairScreen({ navigation, route }) {
     primioPoziv: '',
     pozivatelj: '',
     pozivateljTelefon: '',
+    poslanMajstorId: null,
   });
 
   // Prefill reporter/contact from logged-in user for convenience
@@ -75,7 +79,43 @@ export default function AddRepairScreen({ navigation, route }) {
     }));
   }, [isTrebaloBi, defaultReporter.name]);
 
-  if (!selectedElevator && elevators.length === 0) {
+  React.useEffect(() => {
+    const fetchUsers = async () => {
+      setLoadingUsers(true);
+      const currentUserId = user?._id || user?.id;
+      const filterOutCurrent = (arr = []) => (Array.isArray(arr) ? arr : []).filter((u) => {
+        const id = u?._id || u?.id;
+        if (!id || String(id) === String(currentUserId)) return false;
+        const role = String(u?.uloga || u?.role || '').toLowerCase();
+        return role === 'serviser' || role === 'technician';
+      });
+
+      try {
+        if (online) {
+          const res = await usersAPI.getLite();
+          const data = res.data?.data || res.data || [];
+          const filtered = filterOutCurrent(data);
+          try {
+            userDB.bulkInsert(filtered);
+          } catch (err) {
+            console.log('Cache users failed', err?.message);
+          }
+          setKorisnici(filtered);
+        } else {
+          setKorisnici(filterOutCurrent(userDB.getAll()));
+        }
+      } catch (e) {
+        console.log('Load users failed', e?.message);
+        setKorisnici(filterOutCurrent(userDB.getAll()));
+      } finally {
+        setLoadingUsers(false);
+      }
+    };
+
+    fetchUsers();
+  }, [online, user]);
+
+  if (!selectedElevator) {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
@@ -109,6 +149,10 @@ export default function AddRepairScreen({ navigation, route }) {
       const receiverName = formData.primioPoziv?.trim() || defaultReporter.name;
       const reporterName = formData.pozivatelj?.trim() || '';
       const reporterPhone = formData.pozivateljTelefon?.trim() || '';
+      const assignedTechnician = korisnici.find((k) => String(k._id || k.id) === String(formData.poslanMajstorId || ''));
+      const assignedTechnicianName = assignedTechnician
+        ? `${assignedTechnician.ime || ''} ${assignedTechnician.prezime || ''}`.trim() || assignedTechnician.email || ''
+        : '';
       const serviserId = user?._id || user?.id;
       const repairData = {
         elevatorId: selectedElevator._id || selectedElevator.id,
@@ -121,9 +165,12 @@ export default function AddRepairScreen({ navigation, route }) {
         radniNalogPotpisan: false,
         popravkaUPotpunosti: false,
         napomene: '',
+        pozivatelj: reporterName,
         prijavio: reporterName,
         kontaktTelefon: reporterPhone,
         primioPoziv: receiverName,
+        poslanMajstorId: formData.poslanMajstorId || null,
+        poslanMajstorIme: assignedTechnicianName,
         trebaloBi: isTrebaloBi,
       };
 
@@ -279,6 +326,53 @@ export default function AddRepairScreen({ navigation, route }) {
           />
         </View>
 
+        <View style={styles.section}>
+          <Text style={styles.label}>Majstor poslan na kvar</Text>
+          <TouchableOpacity style={styles.selectorButton} onPress={() => setShowMajstori((v) => !v)}>
+            <Ionicons name={showMajstori ? 'chevron-up' : 'chevron-down'} size={18} color="#1d4ed8" />
+            <Text style={styles.selectorButtonText}>
+              {formData.poslanMajstorId
+                ? (() => {
+                    const found = korisnici.find((k) => String(k._id || k.id) === String(formData.poslanMajstorId));
+                    return found ? `${found.ime || ''} ${found.prezime || ''}`.trim() || found.email || 'Majstor odabran' : 'Majstor odabran';
+                  })()
+                : 'Odaberi majstora (opcionalno)'}
+            </Text>
+          </TouchableOpacity>
+
+          {showMajstori && (
+            loadingUsers ? (
+              <View style={styles.userRow}>
+                <ActivityIndicator size="small" color="#0ea5e9" />
+                <Text style={styles.userRowText}>Učitavanje...</Text>
+              </View>
+            ) : (
+              <ScrollView style={{ maxHeight: 320, marginTop: 8 }}>
+                {korisnici.map((k) => {
+                  const id = k._id || k.id;
+                  const selected = String(formData.poslanMajstorId || '') === String(id || '');
+                  return (
+                    <TouchableOpacity
+                      key={String(id)}
+                      style={[styles.userRow, selected && styles.userRowSelected]}
+                      onPress={() => {
+                        setFormData((prev) => ({ ...prev, poslanMajstorId: selected ? null : id }));
+                        setShowMajstori(false);
+                      }}
+                    >
+                      <Ionicons name={selected ? 'checkmark-circle' : 'ellipse-outline'} size={20} color={selected ? '#16a34a' : '#94a3b8'} />
+                      <Text style={styles.userRowText}>{(k.ime || '')} {(k.prezime || '')}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+                {korisnici.length === 0 && (
+                  <Text style={{ color: '#94a3b8', marginTop: 6 }}>Nema dostupnih servisera.</Text>
+                )}
+              </ScrollView>
+            )
+          )}
+        </View>
+
         {/* Submit button */}
         <TouchableOpacity
           style={[styles.submitButton, (loading || (!online && !isOfflineDemo)) && styles.submitButtonDisabled]}
@@ -395,6 +489,41 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e5e7eb',
     color: '#1f2937',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 15,
+  },
+  selectorButton: {
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    backgroundColor: '#eff6ff',
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  selectorButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1d4ed8',
+  },
+  userRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 8,
+  },
+  userRowText: {
+    fontSize: 14,
+    color: '#0f172a',
+  },
+  userRowSelected: {
+    backgroundColor: '#f0fdf4',
+    borderRadius: 8,
+    paddingHorizontal: 6,
   },
   readonlyInput: {
     backgroundColor: '#f3f4f6',

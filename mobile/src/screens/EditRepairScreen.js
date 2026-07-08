@@ -15,8 +15,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
-import { elevatorDB, repairDB } from '../database/db';
-import { repairsAPI } from '../services/api';
+import { elevatorDB, repairDB, userDB } from '../database/db';
+import { repairsAPI, usersAPI } from '../services/api';
 import ms from '../utils/scale';
 import { useFocusEffect } from '@react-navigation/native';
 
@@ -139,6 +139,9 @@ export default function EditRepairScreen({ route, navigation }) {
   const [showElevatorPicker, setShowElevatorPicker] = useState(false);
   const [elevatorSearchQuery, setElevatorSearchQuery] = useState('');
   const [saving, setSaving] = useState(false);
+  const [korisnici, setKorisnici] = useState([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [showMajstori, setShowMajstori] = useState(false);
   const online = Boolean(isOnline && serverAwake);
 
   const parseDate = (val) => {
@@ -152,9 +155,49 @@ export default function EditRepairScreen({ route, navigation }) {
     datumPrijave: parseDate(baseRepair.datumPrijave) || new Date(),
     datumPopravka: parseDate(baseRepair.datumPopravka),
     prijavio: baseRepair.prijavio || '',
+    pozivatelj: baseRepair.pozivatelj || baseRepair.Pozivatelj || '',
     kontaktTelefon: baseRepair.kontaktTelefon || '',
     primioPoziv: baseRepair.primioPoziv || formatName(user) || '',
+    poslanMajstorId: typeof baseRepair.poslanMajstorId === 'object'
+      ? (baseRepair.poslanMajstorId?._id || baseRepair.poslanMajstorId?.id)
+      : (baseRepair.poslanMajstorId || null),
   }));
+
+  React.useEffect(() => {
+    const fetchUsers = async () => {
+      setLoadingUsers(true);
+      const currentUserId = user?._id || user?.id;
+      const filterOutCurrent = (arr = []) => (Array.isArray(arr) ? arr : []).filter((u) => {
+        const id = u?._id || u?.id;
+        if (!id || String(id) === String(currentUserId)) return false;
+        const role = String(u?.uloga || u?.role || '').toLowerCase();
+        return role === 'serviser' || role === 'technician';
+      });
+
+      try {
+        if (online) {
+          const res = await usersAPI.getLite();
+          const data = res.data?.data || res.data || [];
+          const filtered = filterOutCurrent(data);
+          try {
+            userDB.bulkInsert(filtered);
+          } catch (err) {
+            console.log('Cache users failed', err?.message);
+          }
+          setKorisnici(filtered);
+        } else {
+          setKorisnici(filterOutCurrent(userDB.getAll()));
+        }
+      } catch (e) {
+        console.log('Load users failed', e?.message);
+        setKorisnici(filterOutCurrent(userDB.getAll()));
+      } finally {
+        setLoadingUsers(false);
+      }
+    };
+
+    fetchUsers();
+  }, [online, user]);
 
   const selectedElevator = useMemo(() => {
     if (!form.elevatorId) return initialElevator || null;
@@ -202,9 +245,15 @@ export default function EditRepairScreen({ route, navigation }) {
       opisKvara: baseRepair.opisKvara,
       opisPopravka: baseRepair.opisPopravka,
       napomene: baseRepair.napomene,
-      prijavio: form.prijavio,
+      pozivatelj: form.pozivatelj,
+      prijavio: form.pozivatelj || form.prijavio,
       kontaktTelefon: form.kontaktTelefon,
       primioPoziv: form.primioPoziv,
+      poslanMajstorId: form.poslanMajstorId || null,
+      poslanMajstorIme: (() => {
+        const selected = korisnici.find((k) => String(k._id || k.id) === String(form.poslanMajstorId || ''));
+        return selected ? `${selected.ime || ''} ${selected.prezime || ''}`.trim() || selected.email || '' : '';
+      })(),
       radniNalogPotpisan: baseRepair.radniNalogPotpisan,
       popravkaUPotpunosti: baseRepair.popravkaUPotpunosti,
     };
@@ -380,8 +429,8 @@ export default function EditRepairScreen({ route, navigation }) {
             <Text style={[styles.label, { marginTop: 12 }]}>Pozivatelj</Text>
             <TextInput
               style={styles.input}
-              value={form.prijavio}
-              onChangeText={(text) => setForm((p) => ({ ...p, prijavio: text }))}
+              value={form.pozivatelj}
+              onChangeText={(text) => setForm((p) => ({ ...p, pozivatelj: text }))}
               placeholder="Ime i prezime pozivatelja"
               placeholderTextColor="#9ca3af"
             />
@@ -393,6 +442,51 @@ export default function EditRepairScreen({ route, navigation }) {
               placeholderTextColor="#9ca3af"
               keyboardType="phone-pad"
             />
+
+            <Text style={[styles.label, { marginTop: 12 }]}>Majstor poslan na kvar</Text>
+            <TouchableOpacity style={styles.selectorButton} onPress={() => setShowMajstori((v) => !v)}>
+              <Ionicons name={showMajstori ? 'chevron-up' : 'chevron-down'} size={18} color="#1d4ed8" />
+              <Text style={styles.selectorButtonText}>
+                {form.poslanMajstorId
+                  ? (() => {
+                      const found = korisnici.find((k) => String(k._id || k.id) === String(form.poslanMajstorId));
+                      return found ? `${found.ime || ''} ${found.prezime || ''}`.trim() || found.email || 'Majstor odabran' : 'Majstor odabran';
+                    })()
+                  : 'Odaberi majstora (opcionalno)'}
+              </Text>
+            </TouchableOpacity>
+
+            {showMajstori && (
+              loadingUsers ? (
+                <View style={styles.userRow}>
+                  <Ionicons name="refresh" size={18} color="#0ea5e9" />
+                  <Text style={styles.userRowText}>Učitavanje...</Text>
+                </View>
+              ) : (
+                <ScrollView style={{ maxHeight: 320, marginTop: 8 }}>
+                  {korisnici.map((k) => {
+                    const id = k._id || k.id;
+                    const selected = String(form.poslanMajstorId || '') === String(id || '');
+                    return (
+                      <TouchableOpacity
+                        key={String(id)}
+                        style={[styles.userRow, selected && styles.userRowSelected]}
+                        onPress={() => {
+                          setForm((prev) => ({ ...prev, poslanMajstorId: selected ? null : id }));
+                          setShowMajstori(false);
+                        }}
+                      >
+                        <Ionicons name={selected ? 'checkmark-circle' : 'ellipse-outline'} size={20} color={selected ? '#16a34a' : '#94a3b8'} />
+                        <Text style={styles.userRowText}>{(k.ime || '')} {(k.prezime || '')}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                  {korisnici.length === 0 && (
+                    <Text style={{ color: '#94a3b8', marginTop: 6 }}>Nema dostupnih servisera.</Text>
+                  )}
+                </ScrollView>
+              )
+            )}
           </View>
 
           {showingSaveHint && (
@@ -502,6 +596,9 @@ const styles = StyleSheet.create({
   dateButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: ms(8), padding: ms(12), gap: ms(10) },
   dateText: { fontSize: ms(16), color: '#1f2937' },
   input: { backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: ms(8), padding: ms(12), fontSize: ms(16), color: '#1f2937' },
+  userRow: { flexDirection: 'row', alignItems: 'center', gap: ms(8), paddingVertical: ms(8) },
+  userRowText: { fontSize: ms(14), color: '#0f172a' },
+  userRowSelected: { backgroundColor: '#f0fdf4', borderRadius: ms(8), paddingHorizontal: ms(6) },
   hintText: { marginTop: ms(10), marginHorizontal: ms(16), fontSize: ms(13), color: '#6b7280' },
   saveButton: { backgroundColor: '#2563eb', marginHorizontal: ms(16), marginTop: ms(16), padding: ms(16), borderRadius: ms(12), flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: ms(8) },
   saveButtonDisabled: { opacity: 0.7 },

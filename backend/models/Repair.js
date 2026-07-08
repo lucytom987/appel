@@ -32,6 +32,10 @@ const repairSchema = new mongoose.Schema({
   // Oznaka za "trebalo bi" stavke (ne hitni kvar)
   trebaloBi: { type: Boolean, default: false },
 
+  // Tok prijave: koji je majstor poslan na kvar
+  poslanMajstorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  poslanMajstorIme: { type: String, default: '' },
+
   radniNalogPotpisan: { type: Boolean, default: false },
   radniNalogPotpisVrsta: {
     type: String,

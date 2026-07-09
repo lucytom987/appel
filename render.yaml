@@ -23,13 +23,13 @@ services:
       - key: PLAY_STORE_URL
         value: https://play.google.com/store/apps/details?id=hr.appel.elevators
       - key: LATEST_APP_VERSION
-        value: 2.0.10
+        value: 2.0.11
       - key: LATEST_APP_VERSION_CODE
-        value: 14
+        value: 15
       - key: MIN_SUPPORTED_APP_VERSION
-        value: 2.0.10
+        value: 2.0.11
       - key: MIN_SUPPORTED_APP_VERSION_CODE
-        value: 14
+        value: 15
 
   - type: web
     name: appel-backend-staging
@@ -55,10 +55,10 @@ services:
       - key: PLAY_STORE_URL
         value: https://play.google.com/store/apps/details?id=hr.appel.elevators
       - key: LATEST_APP_VERSION
-        value: 2.0.10
+        value: 2.0.11
       - key: LATEST_APP_VERSION_CODE
-        value: 14
+        value: 15
       - key: MIN_SUPPORTED_APP_VERSION
-        value: 2.0.10
+        value: 2.0.11
       - key: MIN_SUPPORTED_APP_VERSION_CODE
-        value: 14
+        value: 15

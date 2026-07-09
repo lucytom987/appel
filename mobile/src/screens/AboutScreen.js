@@ -12,7 +12,7 @@ import Constants from 'expo-constants';
 
 export default function AboutScreen({ navigation }) {
   const currentVersion = Constants?.expoConfig?.version || '2.0.11';
-  const currentVersionDate = '08.07.2026';
+  const currentVersionDate = '09.07.2026';
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -54,8 +54,12 @@ export default function AboutScreen({ navigation }) {
 
         {/* What's new */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Novosti (08.07.2026)</Text>
+          <Text style={styles.sectionTitle}>Novosti (09.07.2026)</Text>
           <View style={styles.featuresList}>
+            <View style={styles.featureItem}>
+              <Ionicons name="cloud-upload" size={20} color="#2563eb" />
+              <Text style={styles.featureText}>Objavljena je nova verzija aplikacije 2.0.11 (Google Play upload).</Text>
+            </View>
             <View style={styles.featureItem}>
               <Ionicons name="flash" size={20} color="#2563eb" />
               <Text style={styles.featureText}>Ubrzan je tok "Potpiši i pošalji": odgovor je osjetno brži, a slanje PDF-a i emaila ide u pozadini.</Text>
@@ -182,7 +186,7 @@ export default function AboutScreen({ navigation }) {
             © 2026 APPEL • Elevator Management
           </Text>
           <Text style={styles.footerSubtext}>
-            08.07.2026 • Android
+            09.07.2026 • Android
           </Text>
         </View>
 

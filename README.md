@@ -167,6 +167,6 @@ Proprietary - APPEL Development Team
 
 ---
 
-**Verzija:** 1.2.1  
-**Datum:** Ožujak 2026  
+**Verzija:** 2.0.11  
+**Datum:** 09.07.2026  
 **Status:** Backend ✅ | Mobile ✅ | Google Play Store 🚀

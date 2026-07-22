@@ -138,7 +138,6 @@ export default function EditServiceScreen({ route, navigation }) {
       setLoadingUsers(true);
       const filterOutCurrent = (arr = []) => applyUserPickerFilter(arr, {
         currentUserId: user?._id || user?.id,
-        technicianOnly: true,
         requireActiveAccount: true,
       });
       try {

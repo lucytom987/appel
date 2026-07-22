@@ -489,10 +489,6 @@ export default function RepairDetailsScreen({ route, navigation }) {
         const userId = u?._id || u?.id;
         if (!userId || userId === currentUserId) return false;
 
-        const role = normalizeRole(u?.uloga || u?.role);
-        const isTechnician = role === 'serviser';
-        if (!isTechnician) return false;
-
         const isActive = !(u?.aktivan === false || u?.aktivan === 0 || String(u?.aktivan).toLowerCase() === 'false');
         if (!isActive) return false;
 
@@ -503,7 +499,6 @@ export default function RepairDetailsScreen({ route, navigation }) {
 
       const applyPickerFilter = (arr = []) => applyUserPickerFilter(arr, {
         currentUserId,
-        technicianOnly: true,
         requireActiveAccount: true,
       });
 
@@ -515,9 +510,8 @@ export default function RepairDetailsScreen({ route, navigation }) {
           const filtered = (Array.isArray(data) ? data : []).filter((u) => {
             const userId = u?._id || u?.id;
             if (!userId || userId === currentUserId) return false;
-            const role = normalizeRole(u?.uloga || u?.role);
             const isActive = !(u?.aktivan === false || u?.aktivan === 0 || String(u?.aktivan).toLowerCase() === 'false');
-            return (role === 'serviser' || role === 'technician') && isActive;
+            return isActive;
           });
           const finalFiltered = applyPickerFilter(filtered);
           try {

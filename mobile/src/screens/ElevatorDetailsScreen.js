@@ -150,7 +150,8 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
       setEvents(sortedEvents);
       computeChecklistHistory(sortedServices);
 
-      // Grupiraj dizala na istoj adresi (isti brojUgovora + nazivStranke + ulica + mjesto)
+      // Grupiraj dizala na istoj adresi (ulica + mjesto).
+      // Ovo sprječava da "nestanu" iz grupe nakon editiranja polja poput nazivStranke.
       const normalize = (str) => (str || '').toString().trim().toLowerCase();
       const all = elevatorDB.getAll();
       const currentElevData = freshElevator || rawElevator;
@@ -158,8 +159,7 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
         if (!e) return false;
         const sameAddress = normalize(e.ulica) === normalize(currentElevData.ulica)
           && normalize(e.mjesto) === normalize(currentElevData.mjesto);
-        const sameClient = normalize(e.nazivStranke) === normalize(currentElevData.nazivStranke);
-        return sameAddress && sameClient;
+        return sameAddress;
       }).sort((a,b) => (a?.brojDizala || '').localeCompare(b?.brojDizala || '')) : [];
       setGroupElevators(grouped);
     } catch (error) {

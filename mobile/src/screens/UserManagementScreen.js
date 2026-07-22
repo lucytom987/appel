@@ -270,10 +270,8 @@ const UserManagementScreen = ({ navigation }) => {
   };
 
   const pickerEligibleUsers = users.filter((u) => {
-    const role = String(u?.uloga || u?.role || '').toLowerCase();
-    const isTechnician = role === 'serviser' || role === 'technician';
     const isActive = !(u?.aktivan === false || u?.aktivan === 0 || String(u?.aktivan).toLowerCase() === 'false');
-    return isTechnician && isActive;
+    return isActive;
   });
   const pickerVisibleCount = pickerEligibleUsers.reduce((count, entry) => {
     const id = String(getUserId(entry) || '');

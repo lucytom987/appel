@@ -118,7 +118,6 @@ export default function AddRepairScreen({ navigation, route }) {
       const filterAssignableUsers = (arr = []) => {
         const filtered = applyUserPickerFilter(arr, {
           currentUserId: null,
-          technicianOnly: true,
           requireActiveAccount: true,
         });
 

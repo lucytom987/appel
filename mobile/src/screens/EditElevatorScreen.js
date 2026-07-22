@@ -63,10 +63,9 @@ export default function EditElevatorScreen({ navigation, route }) {
     return all.filter((e) =>
       e &&
       normalize(e.ulica) === normalize(elevator.ulica) &&
-      normalize(e.mjesto) === normalize(elevator.mjesto) &&
-      normalize(e.nazivStranke) === normalize(elevator.nazivStranke)
+      normalize(e.mjesto) === normalize(elevator.mjesto)
     ).sort((a, b) => (a?.brojDizala || '').localeCompare(b?.brojDizala || ''));
-  }, [elevator.ulica, elevator.mjesto, elevator.nazivStranke]);
+  }, [elevator.ulica, elevator.mjesto]);
 
   const [formData, setFormData] = useState({
     // Osnovno

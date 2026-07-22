@@ -170,7 +170,6 @@ export default function EditRepairScreen({ route, navigation }) {
       const currentUserId = user?._id || user?.id;
       const filterOutCurrent = (arr = []) => applyUserPickerFilter(arr, {
         currentUserId,
-        technicianOnly: true,
         requireActiveAccount: true,
       });
 

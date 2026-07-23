@@ -1,4 +1,9 @@
 const mongoose = require('mongoose');
+const {
+  normalizeServiceMonths,
+  normalizeScheduleMode,
+  calculateNextServiceDateByMode,
+} = require('../utils/serviceSchedule');
 
 const elevatorSchema = new mongoose.Schema({
   companyId: { type: mongoose.Schema.Types.ObjectId, ref: 'Company', required: true },
@@ -39,6 +44,15 @@ const elevatorSchema = new mongoose.Schema({
   
   // Servisiranje
   intervalServisa: { type: Number, default: 1 }, // mjeseci
+  serviceScheduleMode: {
+    type: String,
+    enum: ['interval', 'months'],
+    default: 'interval'
+  },
+  serviceMonths: {
+    type: [Number],
+    default: []
+  },
   godisnjiPregled: { type: Date },
   zadnjiServis: Date,
   sljedeciServis: Date,
@@ -67,15 +81,23 @@ elevatorSchema.pre('save', function (next) {
   const now = Date.now();
   this.azuriranDatum = now;
   this.updated_at = now;
+  this.serviceMonths = normalizeServiceMonths(this.serviceMonths);
+  this.serviceScheduleMode = normalizeScheduleMode(this.serviceScheduleMode);
   
   // Automatski izračunaj sljedeći servis ako je postavljen zadnji servis
   if (this.zadnjiServis) {
-    const interval = (typeof this.intervalServisa === 'number' && this.intervalServisa > 0)
-      ? this.intervalServisa
-      : 1;
-    const nextDate = new Date(this.zadnjiServis);
-    nextDate.setMonth(nextDate.getMonth() + interval);
-    this.sljedeciServis = nextDate;
+    this.sljedeciServis = calculateNextServiceDateByMode({
+      referenceDate: this.zadnjiServis,
+      intervalServisa: this.intervalServisa,
+      mode: this.serviceScheduleMode,
+      serviceMonths: this.serviceMonths,
+    });
+  } else if (this.serviceScheduleMode === 'months' && this.serviceMonths.length) {
+    this.sljedeciServis = calculateNextServiceDateByMode({
+      referenceDate: new Date(),
+      mode: 'months',
+      serviceMonths: this.serviceMonths,
+    });
   } else {
     this.sljedeciServis = null;
   }

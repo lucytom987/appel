@@ -3,6 +3,11 @@ const router = express.Router();
 const Elevator = require('../models/Elevator');
 const { authenticate, checkRole } = require('../middleware/auth');
 const { logAction } = require('../services/auditService');
+const {
+  normalizeServiceMonths,
+  normalizeScheduleMode,
+  calculateNextServiceDateByMode,
+} = require('../utils/serviceSchedule');
 
 // @route   GET /api/elevators
 // @desc    Dohvati sva dizala (za offline sync)
@@ -107,8 +112,17 @@ router.get('/:id', authenticate, async (req, res) => {
 // @access  Private
 router.post('/', authenticate, async (req, res) => {
   try {
+    const scheduleMode = normalizeScheduleMode(req.body.serviceScheduleMode);
+    const serviceMonths = normalizeServiceMonths(req.body.serviceMonths);
+
+    if (scheduleMode === 'months' && serviceMonths.length === 0) {
+      return res.status(400).json({ message: 'Za raspored po mjesecima potrebno je odabrati barem jedan mjesec.' });
+    }
+
     const elevator = new Elevator({
       ...req.body,
+      serviceScheduleMode: scheduleMode,
+      serviceMonths,
       companyId: req.companyId,
       kreiranOd: req.user._id,
       updated_by: req.user._id,
@@ -163,13 +177,29 @@ router.put('/:id', authenticate, async (req, res) => {
 
     const now = new Date();
     const updateData = { ...req.body, updated_by: req.user._id, updated_at: now };
-    // Ako je zadnjiServis i/ili intervalServisa zadano, izračunaj sljedeći servis
+    updateData.serviceScheduleMode = normalizeScheduleMode(updateData.serviceScheduleMode ?? oldElevator.serviceScheduleMode);
+    updateData.serviceMonths = normalizeServiceMonths(updateData.serviceMonths ?? oldElevator.serviceMonths);
+
+    if (updateData.serviceScheduleMode === 'months' && updateData.serviceMonths.length === 0) {
+      return res.status(400).json({ message: 'Za raspored po mjesecima potrebno je odabrati barem jedan mjesec.' });
+    }
+
+    // Ako je zadnjiServis i/ili raspored zadan, izračunaj sljedeći servis
     const zadnjiServis = updateData.zadnjiServis ?? oldElevator.zadnjiServis;
     const intervalServisa = updateData.intervalServisa ?? oldElevator.intervalServisa ?? 1;
     if (zadnjiServis) {
-      const nextDate = new Date(zadnjiServis);
-      nextDate.setMonth(nextDate.getMonth() + Number(intervalServisa || 1));
-      updateData.sljedeciServis = nextDate;
+      updateData.sljedeciServis = calculateNextServiceDateByMode({
+        referenceDate: zadnjiServis,
+        intervalServisa: Number(intervalServisa || 1),
+        mode: updateData.serviceScheduleMode,
+        serviceMonths: updateData.serviceMonths,
+      });
+    } else if (updateData.serviceScheduleMode === 'months' && updateData.serviceMonths.length) {
+      updateData.sljedeciServis = calculateNextServiceDateByMode({
+        referenceDate: new Date(),
+        mode: 'months',
+        serviceMonths: updateData.serviceMonths,
+      });
     }
     updateData.azuriranDatum = now;
 

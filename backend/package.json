@@ -7,7 +7,8 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "seed": "node createAdmin.js",
-    "import:elevators": "node scripts/import-elevators.js"
+    "import:elevators": "node scripts/import-elevators.js",
+    "test": "jest --runInBand"
   },
   "engines": {
     "node": ">=18.x"
@@ -39,6 +40,7 @@
     "socket.io": "^4.8.1"
   },
   "devDependencies": {
+    "jest": "^29.7.0",
     "nodemon": "^3.0.1"
   }
 }

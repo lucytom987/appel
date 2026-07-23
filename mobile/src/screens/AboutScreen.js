@@ -11,8 +11,8 @@ import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 
 export default function AboutScreen({ navigation }) {
-  const currentVersion = Constants?.expoConfig?.version || '2.0.12';
-  const currentVersionDate = '22.07.2026';
+  const currentVersion = Constants?.expoConfig?.version || '2.0.13';
+  const currentVersionDate = '23.07.2026';
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -46,7 +46,7 @@ export default function AboutScreen({ navigation }) {
           <Text style={styles.sectionTitle}>O aplikaciji</Text>
           <Text style={styles.description}>
             APPEL je mobilna aplikacija za upravljanje dizalima, servisima i hitnim popravcima.
-            Offline-first pristup omogućuje rad bez mreže, a sinkronizacija se izvršava čim je
+            Offline-first pristup omoguÄ‡uje rad bez mreÅ¾e, a sinkronizacija se izvrÅ¡ava Äim je
             veza dostupna. Fokus je na brzom logiranju intervencija, preglednim listama i
             pouzdanom prikazu lokacija na karti.
           </Text>
@@ -54,19 +54,19 @@ export default function AboutScreen({ navigation }) {
 
         {/* What's new */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Novosti (22.07.2026)</Text>
+          <Text style={styles.sectionTitle}>Novosti (23.07.2026)</Text>
           <View style={styles.featuresList}>
             <View style={styles.featureItem}>
               <Ionicons name="cloud-upload" size={20} color="#2563eb" />
-              <Text style={styles.featureText}>Objavljena je nova verzija aplikacije 2.0.12 (Google Play upload).</Text>
+              <Text style={styles.featureText}>Objavljena je nova verzija aplikacije 2.0.13 (Google Play upload).</Text>
             </View>
             <View style={styles.featureItem}>
               <Ionicons name="flash" size={20} color="#2563eb" />
-              <Text style={styles.featureText}>Ubrzan je tok "Potpiši i pošalji": odgovor je osjetno brži, a slanje PDF-a i emaila ide u pozadini.</Text>
+              <Text style={styles.featureText}>Ubrzan je tok "PotpiÅ¡i i poÅ¡alji": odgovor je osjetno brÅ¾i, a slanje PDF-a i emaila ide u pozadini.</Text>
             </View>
             <View style={styles.featureItem}>
               <Ionicons name="checkmark-done" size={20} color="#2563eb" />
-              <Text style={styles.featureText}>Kod promjene statusa na "Završen" odmah se nudi "Kreiraj radni nalog" bez ručnog spremanja.</Text>
+              <Text style={styles.featureText}>Kod promjene statusa na "ZavrÅ¡en" odmah se nudi "Kreiraj radni nalog" bez ruÄnog spremanja.</Text>
             </View>
             <View style={styles.featureItem}>
               <Ionicons name="save" size={20} color="#2563eb" />
@@ -78,7 +78,7 @@ export default function AboutScreen({ navigation }) {
             </View>
             <View style={styles.featureItem}>
               <Ionicons name="close-circle" size={20} color="#2563eb" />
-              <Text style={styles.featureText}>Ako je radni nalog ručno označen kao potpisan, onemogućeno je dodatno digitalno kreiranje naloga.</Text>
+              <Text style={styles.featureText}>Ako je radni nalog ruÄno oznaÄen kao potpisan, onemoguÄ‡eno je dodatno digitalno kreiranje naloga.</Text>
             </View>
             <View style={styles.featureItem}>
               <Ionicons name="trash" size={20} color="#2563eb" />
@@ -89,15 +89,15 @@ export default function AboutScreen({ navigation }) {
 
         {/* Features */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Glavne značajke</Text>
+          <Text style={styles.sectionTitle}>Glavne znaÄajke</Text>
           <View style={styles.featuresList}>
             <View style={styles.featureItem}>
               <Ionicons name="cloud-offline" size={20} color="#2563eb" />
-              <Text style={styles.featureText}>Offline-first: svi unosi rade bez mreže, sinkronizacija kad je internet dostupan.</Text>
+              <Text style={styles.featureText}>Offline-first: svi unosi rade bez mreÅ¾e, sinkronizacija kad je internet dostupan.</Text>
             </View>
             <View style={styles.featureItem}>
               <Ionicons name="construct" size={20} color="#2563eb" />
-              <Text style={styles.featureText}>Popravci: statusi (prijavljen/završen) i posebna lista "trebalo bi", potpis naloga, opis popravka, prijavio i kontakt.</Text>
+              <Text style={styles.featureText}>Popravci: statusi (prijavljen/zavrÅ¡en) i posebna lista "trebalo bi", potpis naloga, opis popravka, prijavio i kontakt.</Text>
             </View>
             <View style={styles.featureItem}>
               <Ionicons name="briefcase" size={20} color="#2563eb" />
@@ -121,7 +121,7 @@ export default function AboutScreen({ navigation }) {
             </View>
             <View style={styles.featureItem}>
               <Ionicons name="phone-portrait" size={20} color="#2563eb" />
-              <Text style={styles.featureText}>Android optimizacije: SafeArea/KeyboardAvoiding, kompaktniji layouti, brže učitavanje liste i karte.</Text>
+              <Text style={styles.featureText}>Android optimizacije: SafeArea/KeyboardAvoiding, kompaktniji layouti, brÅ¾e uÄitavanje liste i karte.</Text>
             </View>
           </View>
         </View>
@@ -166,7 +166,7 @@ export default function AboutScreen({ navigation }) {
             <View style={styles.creditsHeader}>
               <Ionicons name="person-circle" size={48} color="#2563eb" />
               <View style={styles.creditsInfo}>
-                <Text style={styles.creditsName}>Tomislav Vidaček</Text>
+                <Text style={styles.creditsName}>Tomislav VidaÄek</Text>
                 <Text style={styles.creditsRole}>Made in Croatia</Text>
               </View>
             </View>
@@ -183,10 +183,10 @@ export default function AboutScreen({ navigation }) {
         {/* Footer */}
         <View style={styles.footer}>
           <Text style={styles.footerText}>
-            © 2026 APPEL • Elevator Management
+            Â© 2026 APPEL â€¢ Elevator Management
           </Text>
           <Text style={styles.footerSubtext}>
-            22.07.2026 • Android
+            22.07.2026 â€¢ Android
           </Text>
         </View>
 

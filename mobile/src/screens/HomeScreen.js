@@ -20,6 +20,7 @@ import { elevatorDB, serviceDB, repairDB } from '../database/db';
 import { syncAll, primeFullSync } from '../services/syncService';
 import { messagesAPI } from '../services/api';
 import ms, { rf } from '../utils/scale';
+import { isElevatorDueThisMonth } from '../utils/serviceSchedule';
 
 const DIZALA_CARD_IMAGE = require('../../assets/dizala_card.png');
 const MAP_CARD_IMAGE = require('../../assets/map_card.png');
@@ -201,7 +202,6 @@ export default function HomeScreen({ navigation }) {
 
       // Servisi ovaj mjesec
       const now = new Date();
-      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
       const thisMonth = services.filter(s => {
         // ✅ FIX: Pokušaj oboje - novi 'datum' i stari 'serviceDate' ako migration nije završena
         const dateStr = s.datum || s.serviceDate;
@@ -212,24 +212,6 @@ export default function HomeScreen({ navigation }) {
         return date.getMonth() === now.getMonth() && 
                date.getFullYear() === now.getFullYear();
       });
-
-      // ===== LOGIKA: due = sljedeciServis do kraja mjeseca (uključuje overdue) =====
-      const resolveDueDate = (elevator) => {
-        const nextRaw = elevator?.sljedeciServis;
-        const nextDate = parseAnyDate(nextRaw);
-        if (nextDate) return nextDate;
-
-        const lastRaw = elevator?.zadnjiServis;
-        const lastDate = parseAnyDate(lastRaw);
-        if (lastDate) {
-          const interval = Number(elevator?.intervalServisa || 1);
-          const computed = new Date(lastDate);
-          computed.setMonth(computed.getMonth() + (Number.isFinite(interval) && interval > 0 ? interval : 1));
-          return computed;
-        }
-
-        return null;
-      };
 
       const servicedThisMonthIds = new Set(
         thisMonth
@@ -249,11 +231,7 @@ export default function HomeScreen({ navigation }) {
         if (!elevatorId) return;
         const elevatorKey = String(elevatorId);
 
-        const dueDate = resolveDueDate(elevator);
-        if (!dueDate) return;
-
-        // Due ako je rok do kraja mjeseca (uključuje prethodno propuštene servise)
-        if (dueDate <= endOfMonth) {
+        if (isElevatorDueThisMonth(elevator, now)) {
           dueElevatorIds.add(elevatorKey);
         }
       });

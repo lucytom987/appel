@@ -4,6 +4,12 @@ const Service = require('../models/Service');
 const Elevator = require('../models/Elevator');
 const { authenticate } = require('../middleware/auth');
 const { logAction } = require('../services/auditService');
+const {
+  normalizeServiceMonths,
+  normalizeScheduleMode,
+  calculateNextServiceDateByMode,
+  isElevatorDueThisMonth,
+} = require('../utils/serviceSchedule');
 
 const ALLOWED_CHECKLIST = [
   'lubrication',
@@ -45,7 +51,19 @@ const recalculateElevatorServiceDates = async (elevatorId, companyId) => {
 
   if (latestService?.datum) {
     elevator.zadnjiServis = latestService.datum;
-    elevator.sljedeciServis = calculateNextServiceDate(latestService.datum, elevator.intervalServisa);
+    elevator.sljedeciServis = calculateNextServiceDateByMode({
+      referenceDate: latestService.datum,
+      intervalServisa: elevator.intervalServisa,
+      mode: normalizeScheduleMode(elevator.serviceScheduleMode),
+      serviceMonths: elevator.serviceMonths,
+    });
+  } else if (normalizeScheduleMode(elevator.serviceScheduleMode) === 'months') {
+    elevator.zadnjiServis = null;
+    elevator.sljedeciServis = calculateNextServiceDateByMode({
+      referenceDate: new Date(),
+      mode: 'months',
+      serviceMonths: elevator.serviceMonths,
+    });
   } else {
     elevator.zadnjiServis = null;
     elevator.sljedeciServis = null;
@@ -111,23 +129,7 @@ router.get('/stats/monthly', authenticate, async (req, res) => {
     const currentMonth = month ? parseInt(month, 10) : new Date().getMonth() + 1;
 
     const startDate = new Date(currentYear, currentMonth - 1, 1);
-    const endDate = new Date(currentYear, currentMonth, 0, 23, 59, 59);
-
-    const baseFilter = { companyId: req.companyId, is_deleted: { $ne: true } };
-    const total = await Service.countDocuments({ ...baseFilter, datum: { $gte: startDate, $lte: endDate } });
-
-    const elevators = await Elevator.find({
-      companyId: req.companyId,
-      is_deleted: { $ne: true },
-      status: { $ne: 'neaktivan' },
-    })
-      .select('_id sljedeciServis zadnjiServis intervalServisa')
-      .lean();
-
-    const resolveDueDate = (elevator) => {
-      const nextDate = elevator?.sljedeciServis ? new Date(elevator.sljedeciServis) : null;
-      if (nextDate && !Number.isNaN(nextDate.getTime())) return nextDate;
-
+    const now = new Date();
       const lastDate = elevator?.zadnjiServis ? new Date(elevator.zadnjiServis) : null;
       if (lastDate && !Number.isNaN(lastDate.getTime())) {
         const interval = Number(elevator?.intervalServisa || 1);
@@ -143,10 +145,7 @@ router.get('/stats/monthly', authenticate, async (req, res) => {
 
     const dueElevatorIds = new Set(
       elevators
-        .filter((e) => {
-          const dueDate = resolveDueDate(e);
-          return dueDate && dueDate <= endDate;
-        })
+        .filter((e) => isElevatorDueThisMonth(e, now))
         .map((e) => String(e._id))
     );
 

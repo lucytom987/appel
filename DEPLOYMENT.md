@@ -1,5 +1,21 @@
 # APPEL Backend - Deployment Guide
 
+## One-Command Release (Automatski)
+
+Za full release flow (version bump + app/about/update endpoint vrijednosti + testovi + commit + push + Android build) koristi:
+
+```powershell
+cd C:\Users\vidac\appel
+.\release.cmd -Bump patch -Message "release: opis promjena"
+```
+
+Napomene:
+- `-Bump patch|minor|major` kontrolira semantic verziju.
+- Android `versionCode` i iOS `buildNumber` se automatski povecavaju za `+1`.
+- Render deploy krece automatski nakon `git push` (ako je auto-deploy ukljucen).
+- Ako zelis preskociti build: dodaj `-SkipBuild`.
+- Ako zelis samo provjeru bez izmjena: dodaj `-DryRun`.
+
 ## 🚀 Deploy na Render (BESPLATNO)
 
 ### Korak 1: Pripremi GitHub repository

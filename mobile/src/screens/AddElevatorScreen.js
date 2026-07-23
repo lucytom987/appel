@@ -22,6 +22,22 @@ import { elevatorDB } from '../database/db';
 import { elevatorsAPI } from '../services/api';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import ms from '../utils/scale';
+import { normalizeServiceMonths } from '../utils/serviceSchedule';
+
+const MONTH_OPTIONS = [
+  { value: 1, label: 'Sij' },
+  { value: 2, label: 'Velj' },
+  { value: 3, label: 'Ožu' },
+  { value: 4, label: 'Tra' },
+  { value: 5, label: 'Svi' },
+  { value: 6, label: 'Lip' },
+  { value: 7, label: 'Srp' },
+  { value: 8, label: 'Kol' },
+  { value: 9, label: 'Ruj' },
+  { value: 10, label: 'Lis' },
+  { value: 11, label: 'Stu' },
+  { value: 12, label: 'Pro' },
+];
 
 export default function AddElevatorScreen({ navigation }) {
   const insets = useSafeAreaInsets();
@@ -37,7 +53,7 @@ export default function AddElevatorScreen({ navigation }) {
   const online = Boolean(isOnline && serverAwake);
 
   const [elevators, setElevators] = useState([
-    { id: 1, brojDizala: '', intervalServisa: '1', godisnjiPregled: '' }
+    { id: 1, brojDizala: '', intervalServisa: '1', serviceScheduleMode: 'interval', serviceMonths: [], godisnjiPregled: '' }
   ]);
 
   const [formData, setFormData] = useState({
@@ -69,7 +85,7 @@ export default function AddElevatorScreen({ navigation }) {
 
   const addElevator = () => {
     const newId = elevators.length > 0 ? Math.max(...elevators.map(e => e.id)) + 1 : 1;
-    setElevators([...elevators, { id: newId, brojDizala: '', intervalServisa: '1', godisnjiPregled: '' }]);
+    setElevators([...elevators, { id: newId, brojDizala: '', intervalServisa: '1', serviceScheduleMode: 'interval', serviceMonths: [], godisnjiPregled: '' }]);
   };
 
   // Geocoding - pretvorba adrese u GPS koordinate
@@ -168,6 +184,18 @@ export default function AddElevatorScreen({ navigation }) {
     ));
   };
 
+  const toggleElevatorServiceMonth = (id, month) => {
+    setElevators((prev) => prev.map((e) => {
+      if (e.id !== id) return e;
+      const current = normalizeServiceMonths(e.serviceMonths || []);
+      const exists = current.includes(month);
+      const next = exists
+        ? current.filter((m) => m !== month)
+        : normalizeServiceMonths([...current, month]);
+      return { ...e, serviceMonths: next };
+    }));
+  };
+
   const formatDate = (value) => {
     if (!value) return '';
     const d = new Date(value);
@@ -206,6 +234,14 @@ export default function AddElevatorScreen({ navigation }) {
     const invalidElevator = elevators.find(e => !e.brojDizala.trim());
     if (invalidElevator) {
       Alert.alert('Greška', 'Molim unesite broj za sva dizala');
+      return;
+    }
+
+    const invalidMonthsMode = elevators.find((e) =>
+      (e.serviceScheduleMode || 'interval') === 'months' && normalizeServiceMonths(e.serviceMonths || []).length === 0
+    );
+    if (invalidMonthsMode) {
+      Alert.alert('Greška', 'Za raspored "Po mjesecima" odaberite barem jedan mjesec servisiranja');
       return;
     }
 
@@ -257,6 +293,8 @@ export default function AddElevatorScreen({ navigation }) {
             ulazneSifre: cleanEntryCodes,
           },
           intervalServisa: parseInt(elevator.intervalServisa) || 1,
+          serviceScheduleMode: elevator.serviceScheduleMode === 'months' ? 'months' : 'interval',
+          serviceMonths: normalizeServiceMonths(elevator.serviceMonths || []),
           godisnjiPregled: normalizeDate(elevator.godisnjiPregled),
           napomene: formData.napomene,
           koordinate: {
@@ -453,26 +491,66 @@ export default function AddElevatorScreen({ navigation }) {
               />
               
               <Text style={styles.label}>Interval servisa</Text>
-              <View style={styles.monthSelector}>
-                {[1, 2, 3, 4, 5, 6].map(month => (
-                  <TouchableOpacity
-                    key={month}
-                    style={[
-                      styles.monthButton,
-                      elevator.intervalServisa === month.toString() && styles.monthButtonActive
-                    ]}
-                    onPress={() => updateElevator(elevator.id, 'intervalServisa', month.toString())}
-                  >
-                    <Text style={[
-                      styles.monthButtonText,
-                      elevator.intervalServisa === month.toString() && styles.monthButtonTextActive
-                    ]}>
-                      {month}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+              <View style={styles.scheduleModeRow}>
+                {[
+                  { value: 'interval', label: 'Interval' },
+                  { value: 'months', label: 'Po mjesecima' },
+                ].map((opt) => {
+                  const active = (elevator.serviceScheduleMode || 'interval') === opt.value;
+                  return (
+                    <TouchableOpacity
+                      key={opt.value}
+                      style={[styles.scheduleModeButton, active && styles.scheduleModeButtonActive]}
+                      onPress={() => updateElevator(elevator.id, 'serviceScheduleMode', opt.value)}
+                    >
+                      <Text style={[styles.scheduleModeButtonText, active && styles.scheduleModeButtonTextActive]}>{opt.label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
-              <Text style={styles.hint}>Odaberite broj mjeseci (zadano: 1 mjesec)</Text>
+
+              {(elevator.serviceScheduleMode || 'interval') === 'interval' ? (
+                <>
+                  <View style={styles.monthSelector}>
+                    {[1, 2, 3, 4, 5, 6].map(month => (
+                      <TouchableOpacity
+                        key={month}
+                        style={[
+                          styles.monthButton,
+                          elevator.intervalServisa === month.toString() && styles.monthButtonActive
+                        ]}
+                        onPress={() => updateElevator(elevator.id, 'intervalServisa', month.toString())}
+                      >
+                        <Text style={[
+                          styles.monthButtonText,
+                          elevator.intervalServisa === month.toString() && styles.monthButtonTextActive
+                        ]}>
+                          {month}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  <Text style={styles.hint}>Odaberite broj mjeseci između dva servisa.</Text>
+                </>
+              ) : (
+                <>
+                  <View style={styles.monthsGrid}>
+                    {MONTH_OPTIONS.map((month) => {
+                      const selected = normalizeServiceMonths(elevator.serviceMonths || []).includes(month.value);
+                      return (
+                        <TouchableOpacity
+                          key={month.value}
+                          style={[styles.monthChip, selected && styles.monthChipActive]}
+                          onPress={() => toggleElevatorServiceMonth(elevator.id, month.value)}
+                        >
+                          <Text style={[styles.monthChipText, selected && styles.monthChipTextActive]}>{month.label}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                  <Text style={styles.hint}>Odaberite mjesece kada se servis radi (npr. 3, 6, 9, 12).</Text>
+                </>
+              )}
 
               <Text style={styles.label}>Godišnji pregled</Text>
               <View style={styles.dateRow}>
@@ -814,6 +892,31 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 8,
   },
+  scheduleModeRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 10,
+  },
+  scheduleModeButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#fff',
+  },
+  scheduleModeButtonActive: {
+    borderColor: '#2563eb',
+    backgroundColor: '#2563eb',
+  },
+  scheduleModeButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1f2937',
+  },
+  scheduleModeButtonTextActive: {
+    color: '#fff',
+  },
   monthButton: {
     width: 50,
     height: 44,
@@ -834,6 +937,34 @@ const styles = StyleSheet.create({
     color: '#666',
   },
   monthButtonTextActive: {
+    color: '#fff',
+  },
+  monthsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 8,
+  },
+  monthChip: {
+    width: 58,
+    height: 38,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  monthChipActive: {
+    borderColor: '#2563eb',
+    backgroundColor: '#2563eb',
+  },
+  monthChipText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#334155',
+  },
+  monthChipTextActive: {
     color: '#fff',
   },
   dateRow: {

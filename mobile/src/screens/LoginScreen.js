@@ -14,9 +14,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context/AuthContext';
 import * as SecureStore from 'expo-secure-store';
+import Constants from 'expo-constants';
 import ms from '../utils/scale';
 
-const APP_VERSION = '16.02.2026';
+const APP_VERSION = Constants?.expoConfig?.version || '2.0.13';
 
 export default function LoginScreen({ navigation }) {
   const { login, loading, setUser } = useAuth();
@@ -26,14 +27,14 @@ export default function LoginScreen({ navigation }) {
 
   const handleLogin = async () => {
     if (!email || !lozinka) {
-      Alert.alert('Greška', 'Molimo unesite email i lozinku');
+      Alert.alert('GreÅ¡ka', 'Molimo unesite email i lozinku');
       return;
     }
 
     const result = await login(email, lozinka);
     
     if (!result.success) {
-      Alert.alert('Greška pri prijavi', result.message);
+      Alert.alert('GreÅ¡ka pri prijavi', result.message);
     }
   };
 
@@ -84,7 +85,7 @@ export default function LoginScreen({ navigation }) {
               style={styles.eyeButton}
               onPress={() => setShowPassword(!showPassword)}
             >
-              <Text style={styles.eyeIcon}>{showPassword ? '👁️' : '👁️‍🗨️'}</Text>
+              <Text style={styles.eyeIcon}>{showPassword ? 'ðŸ‘ï¸' : 'ðŸ‘ï¸â€ðŸ—¨ï¸'}</Text>
             </TouchableOpacity>
           </View>
 
@@ -106,14 +107,14 @@ export default function LoginScreen({ navigation }) {
             disabled={loading}
           >
             <Text style={styles.registerLinkText}>
-              Nemate račun? <Text style={styles.registerLinkBold}>Registrirajte se</Text>
+              Nemate raÄun? <Text style={styles.registerLinkBold}>Registrirajte se</Text>
             </Text>
           </TouchableOpacity>
         </View>
 
         {/* Footer */}
         <Text style={styles.footer}>
-          APPEL v{APP_VERSION} • Offline-first
+          APPEL v{APP_VERSION} â€¢ Offline-first
         </Text>
       </View>
       </KeyboardAvoidingView>

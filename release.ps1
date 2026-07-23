@@ -44,10 +44,10 @@ function Write-Utf8NoBom([string]$path, [string]$content) {
 }
 
 function Replace-OrThrow([string]$content, [string]$pattern, [string]$replacement, [string]$label) {
-  $newContent = [regex]::Replace($content, $pattern, $replacement)
-  if ($newContent -eq $content) {
+  if (-not [regex]::IsMatch($content, $pattern)) {
     throw "Pattern not found for $label"
   }
+  $newContent = [regex]::Replace($content, $pattern, $replacement)
   return $newContent
 }
 
@@ -105,7 +105,9 @@ $appJson = Replace-OrThrow $appJson '"versionCode"\s*:\s*\d+' "\"versionCode\": 
 $backendAppRoute = Get-Content -Raw -Path $backendAppRoutePath
 $backendAppRoute = Replace-OrThrow $backendAppRoute "LATEST_APP_VERSION \|\| '[^']+'" "LATEST_APP_VERSION || '$newVersion'" 'backend app latest version fallback'
 $backendAppRoute = Replace-OrThrow $backendAppRoute "MIN_SUPPORTED_APP_VERSION \|\| '[^']+'" "MIN_SUPPORTED_APP_VERSION || '$newVersion'" 'backend app min version fallback'
-$backendAppRoute = Replace-OrThrow $backendAppRoute '(?m)(const latestVersionCode = Number\.isFinite\(Number\(latestVersionCodeRaw\)\)\s*\r?\n\s*\? Number\(latestVersionCodeRaw\)\s*\r?\n\s*:\s*)\d+' "`$1$newVersionCode" 'backend app latest versionCode fallback'
+$backendLatestCodePattern = '(?m)(const latestVersionCode = Number\.isFinite\(Number\(latestVersionCodeRaw\)\)\s*\r?\n\s*\? Number\(latestVersionCodeRaw\)\s*\r?\n\s*:\s*)\d+'
+$backendLatestCodeReplacement = '${1}' + $newVersionCode
+$backendAppRoute = Replace-OrThrow $backendAppRoute $backendLatestCodePattern $backendLatestCodeReplacement 'backend app latest versionCode fallback'
 
 # Ensure minSupportedVersionCode fallback follows latestVersionCode as before.
 $backendAppRoute = [regex]::Replace(
@@ -115,10 +117,10 @@ $backendAppRoute = [regex]::Replace(
 )
 
 $renderYaml = Get-Content -Raw -Path $renderYamlPath
-$renderYaml = Replace-OrThrow $renderYaml '(?m)(- key: LATEST_APP_VERSION\s*\r?\n\s*value:\s*)[^\r\n]+' "`$1$newVersion" 'render latest version env'
-$renderYaml = Replace-OrThrow $renderYaml '(?m)(- key: LATEST_APP_VERSION_CODE\s*\r?\n\s*value:\s*)[^\r\n]+' "`$1$newVersionCode" 'render latest versionCode env'
-$renderYaml = Replace-OrThrow $renderYaml '(?m)(- key: MIN_SUPPORTED_APP_VERSION\s*\r?\n\s*value:\s*)[^\r\n]+' "`$1$newVersion" 'render min version env'
-$renderYaml = Replace-OrThrow $renderYaml '(?m)(- key: MIN_SUPPORTED_APP_VERSION_CODE\s*\r?\n\s*value:\s*)[^\r\n]+' "`$1$newVersionCode" 'render min versionCode env'
+$renderYaml = Replace-OrThrow $renderYaml '(?m)(- key: LATEST_APP_VERSION\s*\r?\n\s*value:\s*)[^\r\n]+' ('${1}' + $newVersion) 'render latest version env'
+$renderYaml = Replace-OrThrow $renderYaml '(?m)(- key: LATEST_APP_VERSION_CODE\s*\r?\n\s*value:\s*)[^\r\n]+' ('${1}' + $newVersionCode) 'render latest versionCode env'
+$renderYaml = Replace-OrThrow $renderYaml '(?m)(- key: MIN_SUPPORTED_APP_VERSION\s*\r?\n\s*value:\s*)[^\r\n]+' ('${1}' + $newVersion) 'render min version env'
+$renderYaml = Replace-OrThrow $renderYaml '(?m)(- key: MIN_SUPPORTED_APP_VERSION_CODE\s*\r?\n\s*value:\s*)[^\r\n]+' ('${1}' + $newVersionCode) 'render min versionCode env'
 
 $aboutScreen = Get-Content -Raw -Path $aboutScreenPath
 $aboutScreen = Replace-OrThrow $aboutScreen "currentVersion = Constants\?\.expoConfig\?\.version \|\| '[^']+'" "currentVersion = Constants?.expoConfig?.version || '$newVersion'" 'About fallback version'

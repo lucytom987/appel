@@ -22,10 +22,14 @@ services:
         value: hr.appel.elevators
       - key: PLAY_STORE_URL
         value: https://play.google.com/store/apps/details?id=hr.appel.elevators
-      $12.0.13
-      $117
-      $12.0.13
-      $117
+      - key: LATEST_APP_VERSION
+        value: 2.0.14
+      - key: LATEST_APP_VERSION_CODE
+        value: 18
+      - key: MIN_SUPPORTED_APP_VERSION
+        value: 2.0.14
+      - key: MIN_SUPPORTED_APP_VERSION_CODE
+        value: 18
 
   - type: web
     name: appel-backend-staging
@@ -50,7 +54,11 @@ services:
         value: hr.appel.elevators.staging
       - key: PLAY_STORE_URL
         value: https://play.google.com/store/apps/details?id=hr.appel.elevators
-      $12.0.13
-      $117
-      $12.0.13
-      $117
+      - key: LATEST_APP_VERSION
+        value: 2.0.14
+      - key: LATEST_APP_VERSION_CODE
+        value: 18
+      - key: MIN_SUPPORTED_APP_VERSION
+        value: 2.0.14
+      - key: MIN_SUPPORTED_APP_VERSION_CODE
+        value: 18

@@ -17,7 +17,7 @@ import * as SecureStore from 'expo-secure-store';
 import Constants from 'expo-constants';
 import ms from '../utils/scale';
 
-const APP_VERSION = Constants?.expoConfig?.version || '2.0.13';
+const APP_VERSION = Constants?.expoConfig?.version || '2.0.14';
 
 export default function LoginScreen({ navigation }) {
   const { login, loading, setUser } = useAuth();
@@ -27,14 +27,14 @@ export default function LoginScreen({ navigation }) {
 
   const handleLogin = async () => {
     if (!email || !lozinka) {
-      Alert.alert('GreÅ¡ka', 'Molimo unesite email i lozinku');
+      Alert.alert('GreÃ…Â¡ka', 'Molimo unesite email i lozinku');
       return;
     }
 
     const result = await login(email, lozinka);
     
     if (!result.success) {
-      Alert.alert('GreÅ¡ka pri prijavi', result.message);
+      Alert.alert('GreÃ…Â¡ka pri prijavi', result.message);
     }
   };
 
@@ -85,7 +85,7 @@ export default function LoginScreen({ navigation }) {
               style={styles.eyeButton}
               onPress={() => setShowPassword(!showPassword)}
             >
-              <Text style={styles.eyeIcon}>{showPassword ? 'ðŸ‘ï¸' : 'ðŸ‘ï¸â€ðŸ—¨ï¸'}</Text>
+              <Text style={styles.eyeIcon}>{showPassword ? 'Ã°Å¸â€˜ÂÃ¯Â¸Â' : 'Ã°Å¸â€˜ÂÃ¯Â¸ÂÃ¢â‚¬ÂÃ°Å¸â€”Â¨Ã¯Â¸Â'}</Text>
             </TouchableOpacity>
           </View>
 
@@ -107,14 +107,14 @@ export default function LoginScreen({ navigation }) {
             disabled={loading}
           >
             <Text style={styles.registerLinkText}>
-              Nemate raÄun? <Text style={styles.registerLinkBold}>Registrirajte se</Text>
+              Nemate raÃ„Âun? <Text style={styles.registerLinkBold}>Registrirajte se</Text>
             </Text>
           </TouchableOpacity>
         </View>
 
         {/* Footer */}
         <Text style={styles.footer}>
-          APPEL v{APP_VERSION} â€¢ Offline-first
+          APPEL v{APP_VERSION} Ã¢â‚¬Â¢ Offline-first
         </Text>
       </View>
       </KeyboardAvoidingView>

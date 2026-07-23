@@ -93,14 +93,14 @@ $todayLabel = (Get-Date).ToString('dd.MM.yyyy')
 Write-Host "Current version: $currentVersion ($currentBuildNumber/$currentVersionCode)"
 Write-Host "New version:     $newVersion ($newBuildNumber/$newVersionCode)"
 
-$appConfig = Replace-OrThrow $appConfig 'version:\s*"\d+\.\d+\.\d+"' "version: \"$newVersion\"" 'app.config.js version'
-$appConfig = Replace-OrThrow $appConfig 'buildNumber:\s*"\d+"' "buildNumber: \"$newBuildNumber\"" 'app.config.js ios buildNumber'
+$appConfig = Replace-OrThrow $appConfig 'version:\s*"\d+\.\d+\.\d+"' ('version: "' + $newVersion + '"') 'app.config.js version'
+$appConfig = Replace-OrThrow $appConfig 'buildNumber:\s*"\d+"' ('buildNumber: "' + $newBuildNumber + '"') 'app.config.js ios buildNumber'
 $appConfig = Replace-OrThrow $appConfig 'versionCode:\s*\d+' "versionCode: $newVersionCode" 'app.config.js android versionCode'
 
 $appJson = Get-Content -Raw -Path $appJsonPath
-$appJson = Replace-OrThrow $appJson '"version"\s*:\s*"\d+\.\d+\.\d+"' "\"version\": \"$newVersion\"" 'app.json version'
-$appJson = Replace-OrThrow $appJson '"buildNumber"\s*:\s*"\d+"' "\"buildNumber\": \"$newBuildNumber\"" 'app.json ios buildNumber'
-$appJson = Replace-OrThrow $appJson '"versionCode"\s*:\s*\d+' "\"versionCode\": $newVersionCode" 'app.json android versionCode'
+$appJson = Replace-OrThrow $appJson '"version"\s*:\s*"\d+\.\d+\.\d+"' ('"version": "' + $newVersion + '"') 'app.json version'
+$appJson = Replace-OrThrow $appJson '"buildNumber"\s*:\s*"\d+"' ('"buildNumber": "' + $newBuildNumber + '"') 'app.json ios buildNumber'
+$appJson = Replace-OrThrow $appJson '"versionCode"\s*:\s*\d+' ('"versionCode": ' + $newVersionCode) 'app.json android versionCode'
 
 $backendAppRoute = Get-Content -Raw -Path $backendAppRoutePath
 $backendAppRoute = Replace-OrThrow $backendAppRoute "LATEST_APP_VERSION \|\| '[^']+'" "LATEST_APP_VERSION || '$newVersion'" 'backend app latest version fallback'

@@ -15,7 +15,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { companyAPI } from '../services/api';
+import * as FileSystem from 'expo-file-system';
+import * as DocumentPicker from 'expo-document-picker';
+import * as Sharing from 'expo-sharing';
+import * as SecureStore from 'expo-secure-store';
+import { companyAPI, API_URL } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { usePhotoUpload } from '../hooks/usePhotoUpload';
 import ms from '../utils/scale';
@@ -28,6 +32,10 @@ const CompanySettingsScreen = ({ navigation }) => {
   const [saving, setSaving] = useState(false);
   const [company, setCompany] = useState(null);
   const [editValues, setEditValues] = useState({});
+  const [backups, setBackups] = useState([]);
+  const [backupLoading, setBackupLoading] = useState(false);
+  const [backupActionLoading, setBackupActionLoading] = useState(false);
+  const [backupNameInput, setBackupNameInput] = useState('manual');
   const { pickAndUploadPhoto, uploading: uploadingLogo, error: logoUploadError, clearError: clearLogoError } = usePhotoUpload();
 
   useEffect(() => {
@@ -54,11 +62,190 @@ const CompanySettingsScreen = ({ navigation }) => {
         web: companyData.web || '',
         logo: companyData.logo || '',
       });
+      await loadBackups();
     } catch (error) {
       console.error('❌ Greška pri dohvaćanju podataka firme:', error);
       Alert.alert('Greška', 'Nije moguće učitati podatke firme');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const formatBackupSize = (bytes) => {
+    const value = Number(bytes || 0);
+    if (!Number.isFinite(value) || value < 1) return '0 KB';
+    if (value < 1024) return `${value} B`;
+    if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+    return `${(value / (1024 * 1024)).toFixed(2)} MB`;
+  };
+
+  const loadBackups = async () => {
+    try {
+      setBackupLoading(true);
+      const response = await companyAPI.listBackups(10);
+      setBackups(response.data?.data || []);
+    } catch (error) {
+      console.error('❌ Greška pri dohvaćanju backupa firme:', error);
+    } finally {
+      setBackupLoading(false);
+    }
+  };
+
+  const handleCreateBackup = () => {
+    const customName = String(backupNameInput || '').trim();
+
+    Alert.alert(
+      'Kreiraj backup',
+      'Želite li kreirati novi backup svih podataka vaše firme?',
+      [
+        { text: 'Odustani', style: 'cancel' },
+        {
+          text: 'Kreiraj',
+          onPress: async () => {
+            try {
+              setBackupActionLoading(true);
+              const response = await companyAPI.createBackup({
+                includeAuditLogs: false,
+                backupName: customName,
+              });
+              Alert.alert('Uspjeh', response.data?.message || 'Backup je kreiran');
+              await loadBackups();
+            } catch (error) {
+              Alert.alert('Greška', error?.response?.data?.message || error.message || 'Kreiranje backupa nije uspjelo');
+            } finally {
+              setBackupActionLoading(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const getDeviceBackupPath = (fileName) => {
+    const safeName = String(fileName || 'backup.json.gz').replace(/[^a-zA-Z0-9._-]/g, '_');
+    const baseDir = FileSystem.documentDirectory || FileSystem.cacheDirectory;
+    return `${baseDir}backups/${safeName}`;
+  };
+
+  const handleDownloadBackup = async (backup) => {
+    if (!backup?._id) return;
+
+    try {
+      setBackupActionLoading(true);
+      const token = await SecureStore.getItemAsync('userToken');
+      if (!token) {
+        Alert.alert('Greška', 'Nedostaje token za autorizaciju');
+        return;
+      }
+
+      const baseDir = FileSystem.documentDirectory || FileSystem.cacheDirectory;
+      const backupDir = `${baseDir}backups`;
+      const dirInfo = await FileSystem.getInfoAsync(backupDir);
+      if (!dirInfo.exists) {
+        await FileSystem.makeDirectoryAsync(backupDir, { intermediates: true });
+      }
+
+      const targetPath = getDeviceBackupPath(backup.fileName || `${backup.backupName || 'backup'}.json.gz`);
+      const downloadUrl = `${API_URL}/company/backup/download/${backup._id}`;
+
+      const result = await FileSystem.downloadAsync(downloadUrl, targetPath, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const canShare = await Sharing.isAvailableAsync();
+      if (canShare) {
+        await Sharing.shareAsync(result.uri, {
+          mimeType: 'application/gzip',
+          dialogTitle: 'Spremi ili podijeli backup',
+        });
+      } else {
+        Alert.alert('Preuzeto', `Backup je spremljen na: ${result.uri}`);
+      }
+    } catch (error) {
+      Alert.alert('Greška', error?.message || 'Preuzimanje backupa nije uspjelo');
+    } finally {
+      setBackupActionLoading(false);
+    }
+  };
+
+  const handleRestoreBackup = (backup) => {
+    if (!backup?._id) return;
+
+    Alert.alert(
+      'Vrati backup',
+      'Ova akcija će prepisati trenutne podatke firme podacima iz odabranog backupa. Nastaviti?',
+      [
+        { text: 'Odustani', style: 'cancel' },
+        {
+          text: 'Vrati backup',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setBackupActionLoading(true);
+              const response = await companyAPI.restoreBackup(backup._id);
+              Alert.alert('Uspjeh', response.data?.message || 'Backup je vraćen');
+              await loadCompanyInfo();
+            } catch (error) {
+              Alert.alert('Greška', error?.response?.data?.message || error.message || 'Restore nije uspio');
+            } finally {
+              setBackupActionLoading(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleRestoreFromFile = async () => {
+    try {
+      const pickResult = await DocumentPicker.getDocumentAsync({
+        copyToCacheDirectory: true,
+        multiple: false,
+        type: ['application/gzip', 'application/octet-stream', '*/*'],
+      });
+
+      if (pickResult.canceled || !pickResult.assets?.length) {
+        return;
+      }
+
+      const picked = pickResult.assets[0];
+      const selectedName = picked.name || 'uploaded-backup.json.gz';
+
+      Alert.alert(
+        'Vrati iz datoteke',
+        `Učitana datoteka: ${selectedName}\n\nOvo će prepisati trenutne podatke firme. Nastaviti?`,
+        [
+          { text: 'Odustani', style: 'cancel' },
+          {
+            text: 'Vrati',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                setBackupActionLoading(true);
+                const fileBase64 = await FileSystem.readAsStringAsync(picked.uri, {
+                  encoding: FileSystem.EncodingType.Base64,
+                });
+
+                const response = await companyAPI.restoreBackupUpload({
+                  fileName: selectedName,
+                  fileBase64,
+                });
+
+                Alert.alert('Uspjeh', response.data?.message || 'Backup iz datoteke je vraćen');
+                await loadCompanyInfo();
+              } catch (error) {
+                Alert.alert('Greška', error?.response?.data?.message || error.message || 'Restore iz datoteke nije uspio');
+              } finally {
+                setBackupActionLoading(false);
+              }
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      Alert.alert('Greška', error?.message || 'Odabir datoteke nije uspio');
     }
   };
 
@@ -332,6 +519,102 @@ const CompanySettingsScreen = ({ navigation }) => {
           </Text>
         </View>
 
+        <View style={styles.section}>
+          <View style={styles.backupHeaderRow}>
+            <Text style={styles.sectionTitle}>Backup i oporavak</Text>
+            <TouchableOpacity
+              style={[styles.refreshBackupsBtn, (backupLoading || backupActionLoading) && styles.buttonDisabled]}
+              onPress={loadBackups}
+              disabled={backupLoading || backupActionLoading}
+            >
+              {backupLoading ? (
+                <ActivityIndicator size="small" color="#2563eb" />
+              ) : (
+                <Ionicons name="refresh" size={16} color="#2563eb" />
+              )}
+              <Text style={styles.refreshBackupsText}>Osvježi</Text>
+            </TouchableOpacity>
+          </View>
+
+          <Text style={styles.backupInfoText}>
+            Kreirajte snapshot podataka firme, preuzmite ga na uređaj i po potrebi kasnije vratite iz datoteke.
+          </Text>
+
+          <Text style={styles.label}>Naziv backupa</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="npr. prije_velikog_updatea"
+            value={backupNameInput}
+            onChangeText={setBackupNameInput}
+            editable={!backupActionLoading}
+            autoCapitalize="none"
+          />
+
+          <TouchableOpacity
+            style={[styles.createBackupBtn, backupActionLoading && styles.buttonDisabled]}
+            onPress={handleCreateBackup}
+            disabled={backupActionLoading}
+          >
+            {backupActionLoading ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Ionicons name="save-outline" size={16} color="#fff" />
+            )}
+            <Text style={styles.createBackupBtnText}>
+              {backupActionLoading ? 'Obrada...' : 'Kreiraj backup sada'}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.uploadRestoreBtn, backupActionLoading && styles.buttonDisabled]}
+            onPress={handleRestoreFromFile}
+            disabled={backupActionLoading}
+          >
+            <Ionicons name="cloud-upload-outline" size={16} color="#1d4ed8" />
+            <Text style={styles.uploadRestoreBtnText}>Upload datoteke i restore</Text>
+          </TouchableOpacity>
+
+          {backups.length === 0 ? (
+            <Text style={styles.noBackupsText}>Još nema spremljenih backupa za ovu firmu.</Text>
+          ) : (
+            backups.map((backup) => (
+              <View key={backup._id} style={styles.backupItem}>
+                <View style={styles.backupItemMain}>
+                  <Text style={styles.backupItemDate}>
+                    {backup.backupName || new Date(backup.createdAt).toLocaleString('hr-HR')}
+                  </Text>
+                  <Text style={styles.backupItemMeta}>
+                    Zapisa: {backup.totalDocuments || 0} • {formatBackupSize(backup.compressedBytes)}
+                  </Text>
+                  <Text style={styles.backupItemMeta}>
+                    Kreiran: {new Date(backup.createdAt).toLocaleString('hr-HR')}
+                  </Text>
+                  <Text style={styles.backupItemMeta}>Datoteka: {backup.fileName || '-'}</Text>
+                </View>
+                <View style={styles.backupButtonsCol}>
+                  <TouchableOpacity
+                    style={[styles.downloadBackupBtn, backupActionLoading && styles.buttonDisabled]}
+                    onPress={() => handleDownloadBackup(backup)}
+                    disabled={backupActionLoading}
+                  >
+                    <Ionicons name="download-outline" size={14} color="#0f766e" />
+                    <Text style={styles.downloadBackupBtnText}>Download</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.restoreBackupBtn, backupActionLoading && styles.buttonDisabled]}
+                    onPress={() => handleRestoreBackup(backup)}
+                    disabled={backupActionLoading}
+                  >
+                    <Ionicons name="reload" size={14} color="#b91c1c" />
+                    <Text style={styles.restoreBackupBtnText}>Vrati</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))
+          )}
+        </View>
+
         <View style={{ height: 20 }} />
       </ScrollView>
 
@@ -603,6 +886,130 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1e40af',
     marginTop: ms(2),
+  },
+  backupHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: ms(10),
+  },
+  refreshBackupsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: ms(6),
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    backgroundColor: '#eff6ff',
+    borderRadius: ms(8),
+    paddingHorizontal: ms(10),
+    paddingVertical: ms(8),
+  },
+  refreshBackupsText: {
+    color: '#2563eb',
+    fontSize: ms(12),
+    fontWeight: '700',
+  },
+  backupInfoText: {
+    color: '#4b5563',
+    fontSize: ms(12),
+    marginBottom: ms(10),
+    lineHeight: ms(17),
+  },
+  createBackupBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: ms(8),
+    backgroundColor: '#0f766e',
+    borderRadius: ms(8),
+    paddingVertical: ms(10),
+    marginBottom: ms(12),
+  },
+  uploadRestoreBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: ms(8),
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    backgroundColor: '#eff6ff',
+    borderRadius: ms(8),
+    paddingVertical: ms(10),
+    marginBottom: ms(12),
+  },
+  uploadRestoreBtnText: {
+    color: '#1d4ed8',
+    fontSize: ms(13),
+    fontWeight: '700',
+  },
+  createBackupBtnText: {
+    color: '#fff',
+    fontSize: ms(13),
+    fontWeight: '700',
+  },
+  noBackupsText: {
+    color: '#6b7280',
+    fontSize: ms(12),
+    fontStyle: 'italic',
+  },
+  backupItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: ms(10),
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: ms(10),
+    padding: ms(10),
+    marginBottom: ms(8),
+    backgroundColor: '#f9fafb',
+  },
+  backupItemMain: {
+    flex: 1,
+  },
+  backupButtonsCol: {
+    gap: ms(6),
+  },
+  backupItemDate: {
+    color: '#111827',
+    fontSize: ms(12),
+    fontWeight: '700',
+    marginBottom: ms(3),
+  },
+  backupItemMeta: {
+    color: '#6b7280',
+    fontSize: ms(11),
+  },
+  restoreBackupBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: ms(4),
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    backgroundColor: '#fff1f2',
+    borderRadius: ms(8),
+    paddingHorizontal: ms(10),
+    paddingVertical: ms(8),
+  },
+  downloadBackupBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: ms(4),
+    borderWidth: 1,
+    borderColor: '#99f6e4',
+    backgroundColor: '#f0fdfa',
+    borderRadius: ms(8),
+    paddingHorizontal: ms(10),
+    paddingVertical: ms(8),
+  },
+  downloadBackupBtnText: {
+    color: '#0f766e',
+    fontSize: ms(12),
+    fontWeight: '700',
+  },
+  restoreBackupBtnText: {
+    color: '#b91c1c',
+    fontSize: ms(12),
+    fontWeight: '700',
   },
 });
 

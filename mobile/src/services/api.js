@@ -218,6 +218,10 @@ export const companyAPI = {
   getInfo: () => api.get('/company'),
   update: (data) => api.put('/company', data),
   checkSetupStatus: () => api.get('/company/setup-status'),
+  listBackups: (limit = 10) => api.get('/company/backup/list', { params: { limit } }),
+  createBackup: (payload = {}) => api.post('/company/backup/create', payload),
+  restoreBackup: (backupId) => api.post(`/company/backup/restore/${backupId}`),
+  restoreBackupUpload: (payload) => api.post('/company/backup/restore-upload', payload),
 };
 
 // Users API - Admin Management
@@ -241,6 +245,11 @@ export const superadminAPI = {
   getUsers: () => api.get('/superadmin/users'),
   getUser: (id) => api.get(`/superadmin/users/${id}`),
   resetPassword: (id, novaLozinka) => api.put(`/superadmin/users/${id}/reset-password`, { novaLozinka }),
+  createAllBackups: (payload = {}) => api.post('/superadmin/backup/all/create', payload),
+  listCompanyBackups: (companyId, limit = 15) => api.get(`/superadmin/backup/company/${companyId}`, { params: { limit } }),
+  createCompanyBackup: (companyId, payload = {}) => api.post(`/superadmin/backup/company/${companyId}/create`, payload),
+  restoreCompanyBackup: (companyId, backupId) => api.post(`/superadmin/backup/company/${companyId}/restore/${backupId}`),
+  restoreCompanyBackupUpload: (companyId, payload) => api.post(`/superadmin/backup/company/${companyId}/restore-upload`, payload),
 };
 
 // Repairs API

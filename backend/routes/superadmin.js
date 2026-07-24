@@ -5,6 +5,15 @@ const User = require('../models/User');
 const Elevator = require('../models/Elevator');
 const Service = require('../models/Service');
 const Repair = require('../models/Repair');
+const BackupSnapshot = require('../models/BackupSnapshot');
+const {
+  createCompanyBackup,
+  listCompanyBackups,
+  getCompanyBackupFile,
+  restoreCompanyBackup,
+  restoreCompanyBackupFromUpload,
+  createBackupsForAllCompanies,
+} = require('../services/backupService');
 
 const router = express.Router();
 
@@ -131,6 +140,7 @@ router.delete('/companies/:id', async (req, res) => {
       Elevator.deleteMany({ companyId: company._id }),
       Service.deleteMany({ companyId: company._id }),
       Repair.deleteMany({ companyId: company._id }),
+      BackupSnapshot.deleteMany({ companyId: company._id }),
     ]);
 
     await Company.findByIdAndDelete(company._id);
@@ -139,6 +149,156 @@ router.delete('/companies/:id', async (req, res) => {
   } catch (error) {
     console.error('SuperAdmin delete company error:', error);
     res.status(500).json({ message: 'Greška pri brisanju firme' });
+  }
+});
+
+// POST /api/superadmin/backup/all/create - Kreiraj backup za sve firme (po firmi odvojeno)
+router.post('/backup/all/create', async (req, res) => {
+  try {
+    const result = await createBackupsForAllCompanies({
+      user: req.user,
+      includeAuditLogs: Boolean(req.body?.includeAuditLogs),
+      reason: req.body?.reason || 'SuperAdmin global backup',
+    });
+
+    const okCount = result.filter((item) => item.ok).length;
+    const failCount = result.length - okCount;
+
+    res.json({
+      success: true,
+      message: `Global backup završen: ${okCount} uspješno, ${failCount} neuspješno`,
+      data: {
+        totalCompanies: result.length,
+        okCount,
+        failCount,
+        items: result,
+      },
+    });
+  } catch (error) {
+    console.error('SuperAdmin global backup error:', error);
+    res.status(500).json({ message: error.message || 'Greška pri globalnom backupu' });
+  }
+});
+
+// GET /api/superadmin/backup/company/:companyId - Lista backupa firme
+router.get('/backup/company/:companyId', async (req, res) => {
+  try {
+    const company = await Company.findById(req.params.companyId).select('_id naziv').lean();
+    if (!company) {
+      return res.status(404).json({ message: 'Firma nije pronađena' });
+    }
+
+    const backups = await listCompanyBackups({
+      companyId: company._id,
+      limit: req.query.limit || 15,
+    });
+
+    return res.json({ success: true, data: backups });
+  } catch (error) {
+    console.error('SuperAdmin company backups error:', error);
+    return res.status(500).json({ message: 'Greška pri dohvaćanju backupa firme' });
+  }
+});
+
+// POST /api/superadmin/backup/company/:companyId/create - Ručni backup pojedine firme
+router.post('/backup/company/:companyId/create', async (req, res) => {
+  try {
+    const company = await Company.findById(req.params.companyId).select('_id naziv').lean();
+    if (!company) {
+      return res.status(404).json({ message: 'Firma nije pronađena' });
+    }
+
+    const backup = await createCompanyBackup({
+      companyId: company._id,
+      user: req.user,
+      source: 'superadmin-company',
+      reason: req.body?.reason || 'SuperAdmin backup firme',
+      customName: req.body?.backupName || req.body?.reason || '',
+      includeAuditLogs: Boolean(req.body?.includeAuditLogs),
+    });
+
+    return res.json({
+      success: true,
+      message: `Backup firme "${company.naziv}" je uspješno kreiran`,
+      data: backup,
+    });
+  } catch (error) {
+    console.error('SuperAdmin create company backup error:', error);
+    return res.status(500).json({ message: error.message || 'Greška pri kreiranju backupa firme' });
+  }
+});
+
+// GET /api/superadmin/backup/company/:companyId/download/:backupId - Download backup datoteke firme
+router.get('/backup/company/:companyId/download/:backupId', async (req, res) => {
+  try {
+    const company = await Company.findById(req.params.companyId).select('_id').lean();
+    if (!company) {
+      return res.status(404).json({ message: 'Firma nije pronađena' });
+    }
+
+    const file = await getCompanyBackupFile({
+      companyId: company._id,
+      backupId: req.params.backupId,
+    });
+
+    res.setHeader('Content-Type', 'application/gzip');
+    res.setHeader('Content-Disposition', `attachment; filename="${file.fileName}"`);
+    res.setHeader('Content-Length', String(file.compressedData.length));
+    return res.send(file.compressedData);
+  } catch (error) {
+    console.error('SuperAdmin company backup download error:', error);
+    return res.status(500).json({ message: error.message || 'Greška pri download-u backupa firme' });
+  }
+});
+
+// POST /api/superadmin/backup/company/:companyId/restore/:backupId - Restore firme iz backupa
+router.post('/backup/company/:companyId/restore/:backupId', async (req, res) => {
+  try {
+    const company = await Company.findById(req.params.companyId).select('_id naziv').lean();
+    if (!company) {
+      return res.status(404).json({ message: 'Firma nije pronađena' });
+    }
+
+    const restored = await restoreCompanyBackup({
+      companyId: company._id,
+      backupId: req.params.backupId,
+      user: req.user,
+    });
+
+    return res.json({
+      success: true,
+      message: `Backup firme "${company.naziv}" je uspješno vraćen`,
+      data: restored,
+    });
+  } catch (error) {
+    console.error('SuperAdmin restore company backup error:', error);
+    return res.status(500).json({ message: error.message || 'Greška pri vraćanju backupa firme' });
+  }
+});
+
+// POST /api/superadmin/backup/company/:companyId/restore-upload - Restore firme iz uploadane datoteke
+router.post('/backup/company/:companyId/restore-upload', async (req, res) => {
+  try {
+    const company = await Company.findById(req.params.companyId).select('_id naziv').lean();
+    if (!company) {
+      return res.status(404).json({ message: 'Firma nije pronađena' });
+    }
+
+    const restored = await restoreCompanyBackupFromUpload({
+      companyId: company._id,
+      fileBase64: req.body?.fileBase64,
+      fileName: req.body?.fileName,
+      user: req.user,
+    });
+
+    return res.json({
+      success: true,
+      message: `Backup firme "${company.naziv}" iz datoteke je uspješno vraćen`,
+      data: restored,
+    });
+  } catch (error) {
+    console.error('SuperAdmin upload restore error:', error);
+    return res.status(500).json({ message: error.message || 'Greška pri vraćanju backupa iz datoteke' });
   }
 });
 

@@ -26,6 +26,33 @@ export default function SuperAdminScreen({ navigation }) {
   const [passwordUserId, setPasswordUserId] = useState(null);
   const [newPassword, setNewPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [globalBackupLoading, setGlobalBackupLoading] = useState(false);
+  const [companyBackupsMap, setCompanyBackupsMap] = useState({});
+  const [companyBackupActionId, setCompanyBackupActionId] = useState(null);
+  const [companyBackupLoadId, setCompanyBackupLoadId] = useState(null);
+
+  const formatBackupSize = (bytes) => {
+    const value = Number(bytes || 0);
+    if (!Number.isFinite(value) || value < 1) return '0 KB';
+    if (value < 1024) return `${value} B`;
+    if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+    return `${(value / (1024 * 1024)).toFixed(2)} MB`;
+  };
+
+  const loadCompanyBackups = async (companyId) => {
+    try {
+      setCompanyBackupLoadId(companyId);
+      const res = await superadminAPI.listCompanyBackups(companyId, 15);
+      setCompanyBackupsMap((prev) => ({
+        ...prev,
+        [companyId]: res.data?.data || [],
+      }));
+    } catch (err) {
+      Alert.alert('Greška', err?.response?.data?.message || 'Nije moguće dohvatiti listu backupa');
+    } finally {
+      setCompanyBackupLoadId(null);
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -69,11 +96,103 @@ export default function SuperAdminScreen({ navigation }) {
     setPasswordUserId(null);
     setNewPassword('');
     try {
-      const res = await superadminAPI.getCompany(companyId);
-      setCompanyDetail(res.data?.data || null);
+      const [detailRes, backupsRes] = await Promise.all([
+        superadminAPI.getCompany(companyId),
+        superadminAPI.listCompanyBackups(companyId, 15),
+      ]);
+      setCompanyDetail(detailRes.data?.data || null);
+      setCompanyBackupsMap((prev) => ({
+        ...prev,
+        [companyId]: backupsRes.data?.data || [],
+      }));
     } catch (err) {
       Alert.alert('Greška', 'Nije moguće dohvatiti detalje firme');
     }
+  };
+
+  const handleCreateGlobalBackup = () => {
+    Alert.alert(
+      'Globalni backup',
+      'Kreirati backup za sve firme? Svaka firma se sprema kao zaseban snapshot za kasniji pojedinačni restore.',
+      [
+        { text: 'Odustani', style: 'cancel' },
+        {
+          text: 'Kreiraj',
+          onPress: async () => {
+            try {
+              setGlobalBackupLoading(true);
+              const res = await superadminAPI.createAllBackups({ includeAuditLogs: false });
+              const data = res.data?.data || {};
+              Alert.alert(
+                'Backup završen',
+                `Uspješno: ${data.okCount || 0}, neuspješno: ${data.failCount || 0}`
+              );
+              await loadData();
+              if (expandedId) {
+                await loadCompanyBackups(expandedId);
+              }
+            } catch (err) {
+              Alert.alert('Greška', err?.response?.data?.message || err.message || 'Globalni backup nije uspio');
+            } finally {
+              setGlobalBackupLoading(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleCreateCompanyBackup = (company) => {
+    Alert.alert(
+      'Backup firme',
+      `Kreirati novi backup firme "${company.naziv}"?`,
+      [
+        { text: 'Odustani', style: 'cancel' },
+        {
+          text: 'Kreiraj',
+          onPress: async () => {
+            try {
+              setCompanyBackupActionId(company._id);
+              const res = await superadminAPI.createCompanyBackup(company._id, { includeAuditLogs: false });
+              Alert.alert('Uspjeh', res.data?.message || 'Backup je kreiran');
+              await loadCompanyBackups(company._id);
+            } catch (err) {
+              Alert.alert('Greška', err?.response?.data?.message || 'Kreiranje backupa nije uspjelo');
+            } finally {
+              setCompanyBackupActionId(null);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleRestoreCompanyBackup = (company, backup) => {
+    Alert.alert(
+      'Vrati backup firme',
+      `Vratiti backup firme "${company.naziv}" iz ${new Date(backup.createdAt).toLocaleString('hr-HR')}?\n\nOvo prepisuje trenutne podatke firme.`,
+      [
+        { text: 'Odustani', style: 'cancel' },
+        {
+          text: 'Vrati',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setCompanyBackupActionId(company._id);
+              const res = await superadminAPI.restoreCompanyBackup(company._id, backup._id);
+              Alert.alert('Uspjeh', res.data?.message || 'Backup je vraćen');
+              const detailRes = await superadminAPI.getCompany(company._id);
+              setCompanyDetail(detailRes.data?.data || null);
+              await loadCompanyBackups(company._id);
+            } catch (err) {
+              Alert.alert('Greška', err?.response?.data?.message || 'Restore backupa nije uspio');
+            } finally {
+              setCompanyBackupActionId(null);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const toggleUserExpand = (userId) => {
@@ -183,6 +302,21 @@ export default function SuperAdminScreen({ navigation }) {
                 <Text style={styles.statLabel}>Popravaka</Text>
               </View>
             </View>
+
+            <TouchableOpacity
+              style={[styles.globalBackupButton, globalBackupLoading && styles.disabledButton]}
+              onPress={handleCreateGlobalBackup}
+              disabled={globalBackupLoading}
+            >
+              {globalBackupLoading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Ionicons name="cloud-upload-outline" size={18} color="#fff" />
+              )}
+              <Text style={styles.globalBackupButtonText}>
+                {globalBackupLoading ? 'Kreiram backup...' : 'Kreiraj backup svih firmi'}
+              </Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -393,6 +527,57 @@ export default function SuperAdminScreen({ navigation }) {
                     ))}
                   </View>
 
+                  <View style={styles.detailSection}>
+                    <View style={styles.backupSectionHeader}>
+                      <Text style={styles.detailTitle}>Backup firme</Text>
+                      <TouchableOpacity
+                        style={[styles.smallSecondaryBtn, companyBackupActionId === company._id && styles.disabledButton]}
+                        onPress={() => loadCompanyBackups(company._id)}
+                        disabled={companyBackupActionId === company._id}
+                      >
+                        {companyBackupLoadId === company._id ? (
+                          <ActivityIndicator size="small" color="#2563eb" />
+                        ) : (
+                          <Ionicons name="refresh" size={14} color="#2563eb" />
+                        )}
+                        <Text style={styles.smallSecondaryBtnText}>Osvježi</Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    <TouchableOpacity
+                      style={[styles.smallPrimaryBtn, companyBackupActionId === company._id && styles.disabledButton]}
+                      onPress={() => handleCreateCompanyBackup(company)}
+                      disabled={companyBackupActionId === company._id}
+                    >
+                      <Ionicons name="save-outline" size={14} color="#fff" />
+                      <Text style={styles.smallPrimaryBtnText}>Kreiraj backup firme</Text>
+                    </TouchableOpacity>
+
+                    {(companyBackupsMap[company._id] || []).length === 0 ? (
+                      <Text style={styles.detailText}>Nema spremljenih backupa za ovu firmu.</Text>
+                    ) : (
+                      (companyBackupsMap[company._id] || []).map((backup) => (
+                        <View key={backup._id} style={styles.backupRow}>
+                          <View style={styles.backupInfoCol}>
+                            <Text style={styles.backupRowDate}>{new Date(backup.createdAt).toLocaleString('hr-HR')}</Text>
+                            <Text style={styles.backupRowMeta}>
+                              Zapisa: {backup.totalDocuments || 0} • {formatBackupSize(backup.compressedBytes)}
+                            </Text>
+                            <Text style={styles.backupRowMeta}>Izvor: {backup.source}</Text>
+                          </View>
+                          <TouchableOpacity
+                            style={[styles.restoreBtn, companyBackupActionId === company._id && styles.disabledButton]}
+                            onPress={() => handleRestoreCompanyBackup(company, backup)}
+                            disabled={companyBackupActionId === company._id}
+                          >
+                            <Ionicons name="reload" size={14} color="#b91c1c" />
+                            <Text style={styles.restoreBtnText}>Vrati</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ))
+                    )}
+                  </View>
+
                   <TouchableOpacity
                     style={styles.deleteButton}
                     onPress={() => handleDeleteCompany(company)}
@@ -480,6 +665,24 @@ const styles = StyleSheet.create({
     color: '#666',
     marginTop: 2,
   },
+  globalBackupButton: {
+    marginTop: 14,
+    backgroundColor: '#0f766e',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  globalBackupButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  disabledButton: {
+    opacity: 0.6,
+  },
   companiesSection: {
     padding: 16,
     paddingTop: 0,
@@ -537,6 +740,84 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#4b5563',
     marginBottom: 3,
+  },
+  backupSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  smallPrimaryBtn: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#1d4ed8',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    marginBottom: 10,
+  },
+  smallPrimaryBtnText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  smallSecondaryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    backgroundColor: '#eff6ff',
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+  },
+  smallSecondaryBtnText: {
+    color: '#2563eb',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  backupRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 8,
+    backgroundColor: '#fff',
+    padding: 10,
+    marginBottom: 8,
+    gap: 8,
+  },
+  backupInfoCol: {
+    flex: 1,
+  },
+  backupRowDate: {
+    color: '#111827',
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  backupRowMeta: {
+    color: '#6b7280',
+    fontSize: 11,
+  },
+  restoreBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    backgroundColor: '#fff1f2',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+  },
+  restoreBtnText: {
+    color: '#b91c1c',
+    fontWeight: '700',
+    fontSize: 12,
   },
   memberCard: {
     backgroundColor: '#fff',

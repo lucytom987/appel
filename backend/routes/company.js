@@ -3,6 +3,13 @@ const router = express.Router();
 const { authenticate, checkRole } = require('../middleware/auth');
 const { logAction } = require('../services/auditService');
 const Company = require('../models/Company');
+const {
+  createCompanyBackup,
+  listCompanyBackups,
+  getCompanyBackupFile,
+  restoreCompanyBackup,
+  restoreCompanyBackupFromUpload,
+} = require('../services/backupService');
 
 const toEmbeddedImageDataUrl = async (value) => {
   const raw = String(value || '').trim();
@@ -122,6 +129,130 @@ router.put('/', authenticate, checkRole(['admin', 'menadzer']), async (req, res)
   } catch (error) {
     console.error('❌ Greška pri ažuriranju firme:', error);
     return res.status(500).json({ message: 'Greška poslužitelja' });
+  }
+});
+
+// GET /api/company/backup/list - Lista zadnjih backupa za firmu
+router.get('/backup/list', authenticate, checkRole(['admin', 'menadzer']), async (req, res) => {
+  try {
+    const backups = await listCompanyBackups({
+      companyId: req.companyId,
+      limit: req.query.limit || 10,
+    });
+
+    return res.json({ success: true, data: backups });
+  } catch (error) {
+    console.error('❌ Greška pri dohvaćanju liste backupa firme:', error);
+    return res.status(500).json({ message: 'Greška pri dohvaćanju backupa' });
+  }
+});
+
+// POST /api/company/backup/create - Kreiraj backup firme
+router.post('/backup/create', authenticate, checkRole(['admin', 'menadzer']), async (req, res) => {
+  try {
+    const backup = await createCompanyBackup({
+      companyId: req.companyId,
+      user: req.user,
+      source: 'company',
+      reason: req.body?.reason || '',
+      customName: req.body?.backupName || '',
+      includeAuditLogs: Boolean(req.body?.includeAuditLogs),
+    });
+
+    await logAction({
+      companyId: req.companyId,
+      korisnikId: req.user._id,
+      akcija: 'UPDATE',
+      entitet: 'Company',
+      entitetId: req.companyId,
+      opis: `Kreiran backup firme (${backup.totalDocuments} zapisa)`
+    });
+
+    return res.json({
+      success: true,
+      message: 'Backup je uspješno kreiran',
+      data: backup,
+    });
+  } catch (error) {
+    console.error('❌ Greška pri kreiranju backupa firme:', error);
+    return res.status(500).json({ message: error.message || 'Greška pri kreiranju backupa' });
+  }
+});
+
+// GET /api/company/backup/download/:backupId - Download backup datoteke
+router.get('/backup/download/:backupId', authenticate, checkRole(['admin', 'menadzer']), async (req, res) => {
+  try {
+    const file = await getCompanyBackupFile({
+      companyId: req.companyId,
+      backupId: req.params.backupId,
+    });
+
+    res.setHeader('Content-Type', 'application/gzip');
+    res.setHeader('Content-Disposition', `attachment; filename="${file.fileName}"`);
+    res.setHeader('Content-Length', String(file.compressedData.length));
+    return res.send(file.compressedData);
+  } catch (error) {
+    console.error('❌ Greška pri download-u backupa firme:', error);
+    return res.status(500).json({ message: error.message || 'Greška pri download-u backupa' });
+  }
+});
+
+// POST /api/company/backup/restore/:backupId - Restore firme iz odabranog backupa
+router.post('/backup/restore/:backupId', authenticate, checkRole(['admin', 'menadzer']), async (req, res) => {
+  try {
+    const restored = await restoreCompanyBackup({
+      companyId: req.companyId,
+      backupId: req.params.backupId,
+      user: req.user,
+    });
+
+    await logAction({
+      companyId: req.companyId,
+      korisnikId: req.user._id,
+      akcija: 'UPDATE',
+      entitet: 'Company',
+      entitetId: req.companyId,
+      opis: `Vraćen backup firme (${restored.totalDocuments} zapisa)`
+    });
+
+    return res.json({
+      success: true,
+      message: 'Backup je uspješno vraćen',
+      data: restored,
+    });
+  } catch (error) {
+    console.error('❌ Greška pri restore-u backupa firme:', error);
+    return res.status(500).json({ message: error.message || 'Greška pri vraćanju backupa' });
+  }
+});
+
+// POST /api/company/backup/restore-upload - Restore firme iz uploadane .json.gz datoteke
+router.post('/backup/restore-upload', authenticate, checkRole(['admin', 'menadzer']), async (req, res) => {
+  try {
+    const restored = await restoreCompanyBackupFromUpload({
+      companyId: req.companyId,
+      fileBase64: req.body?.fileBase64,
+      fileName: req.body?.fileName,
+      user: req.user,
+    });
+
+    await logAction({
+      companyId: req.companyId,
+      korisnikId: req.user._id,
+      akcija: 'UPDATE',
+      entitet: 'Company',
+      entitetId: req.companyId,
+      opis: `Vraćen backup firme iz datoteke (${restored.totalDocuments} zapisa)`
+    });
+
+    return res.json({
+      success: true,
+      message: 'Backup iz datoteke je uspješno vraćen',
+      data: restored,
+    });
+  } catch (error) {
+    console.error('❌ Greška pri restore-u iz datoteke:', error);
+    return res.status(500).json({ message: error.message || 'Greška pri vraćanju backupa iz datoteke' });
   }
 });
 

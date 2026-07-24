@@ -64,8 +64,9 @@ app.use('/api/auth/login', (req, res, next) => {
   next();
 });
 
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ limit: '10mb', extended: true }));
+const jsonBodyLimit = process.env.JSON_BODY_LIMIT || '25mb';
+app.use(express.json({ limit: jsonBodyLimit }));
+app.use(express.urlencoded({ limit: jsonBodyLimit, extended: true }));
 
 // MongoDB Connection
 mongoose.connect(process.env.MONGODB_URI)

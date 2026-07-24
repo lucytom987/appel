@@ -129,17 +129,26 @@ router.get('/stats/monthly', authenticate, async (req, res) => {
     const currentMonth = month ? parseInt(month, 10) : new Date().getMonth() + 1;
 
     const startDate = new Date(currentYear, currentMonth - 1, 1);
-    const now = new Date();
-      const lastDate = elevator?.zadnjiServis ? new Date(elevator.zadnjiServis) : null;
-      if (lastDate && !Number.isNaN(lastDate.getTime())) {
-        const interval = Number(elevator?.intervalServisa || 1);
-        const computed = new Date(lastDate);
-        computed.setMonth(computed.getMonth() + (Number.isFinite(interval) && interval > 0 ? interval : 1));
-        return computed;
-      }
-
-      return null;
+    const endDate = new Date(currentYear, currentMonth, 0, 23, 59, 59, 999);
+    const baseFilter = {
+      companyId: req.companyId,
+      is_deleted: { $ne: true },
     };
+
+    const total = await Service.countDocuments({
+      ...baseFilter,
+      datum: { $gte: startDate, $lte: endDate },
+    });
+
+    const elevators = await Elevator.find({
+      companyId: req.companyId,
+      is_deleted: { $ne: true },
+      status: { $ne: 'neaktivan' },
+    })
+      .select('_id sljedeciServis zadnjiServis intervalServisa serviceScheduleMode serviceMonths')
+      .lean();
+
+    const now = new Date();
 
     const activeElevatorIds = new Set(elevators.map((e) => String(e._id)));
 

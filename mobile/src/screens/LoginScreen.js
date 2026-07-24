@@ -17,7 +17,7 @@ import * as SecureStore from 'expo-secure-store';
 import Constants from 'expo-constants';
 import ms from '../utils/scale';
 
-const APP_VERSION = Constants?.expoConfig?.version || '2.0.14';
+const APP_VERSION = Constants?.expoConfig?.version || '2.0.15';
 
 export default function LoginScreen({ navigation }) {
   const { login, loading, setUser } = useAuth();
@@ -27,14 +27,14 @@ export default function LoginScreen({ navigation }) {
 
   const handleLogin = async () => {
     if (!email || !lozinka) {
-      Alert.alert('GreÃ…Â¡ka', 'Molimo unesite email i lozinku');
+      Alert.alert('GreÃƒâ€¦Ã‚Â¡ka', 'Molimo unesite email i lozinku');
       return;
     }
 
     const result = await login(email, lozinka);
     
     if (!result.success) {
-      Alert.alert('GreÃ…Â¡ka pri prijavi', result.message);
+      Alert.alert('GreÃƒâ€¦Ã‚Â¡ka pri prijavi', result.message);
     }
   };
 
@@ -85,7 +85,7 @@ export default function LoginScreen({ navigation }) {
               style={styles.eyeButton}
               onPress={() => setShowPassword(!showPassword)}
             >
-              <Text style={styles.eyeIcon}>{showPassword ? 'Ã°Å¸â€˜ÂÃ¯Â¸Â' : 'Ã°Å¸â€˜ÂÃ¯Â¸ÂÃ¢â‚¬ÂÃ°Å¸â€”Â¨Ã¯Â¸Â'}</Text>
+              <Text style={styles.eyeIcon}>{showPassword ? 'ÃƒÂ°Ã…Â¸Ã¢â‚¬ËœÃ‚ÂÃƒÂ¯Ã‚Â¸Ã‚Â' : 'ÃƒÂ°Ã…Â¸Ã¢â‚¬ËœÃ‚ÂÃƒÂ¯Ã‚Â¸Ã‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ°Ã…Â¸Ã¢â‚¬â€Ã‚Â¨ÃƒÂ¯Ã‚Â¸Ã‚Â'}</Text>
             </TouchableOpacity>
           </View>
 
@@ -107,14 +107,14 @@ export default function LoginScreen({ navigation }) {
             disabled={loading}
           >
             <Text style={styles.registerLinkText}>
-              Nemate raÃ„Âun? <Text style={styles.registerLinkBold}>Registrirajte se</Text>
+              Nemate raÃƒâ€žÃ‚Âun? <Text style={styles.registerLinkBold}>Registrirajte se</Text>
             </Text>
           </TouchableOpacity>
         </View>
 
         {/* Footer */}
         <Text style={styles.footer}>
-          APPEL v{APP_VERSION} Ã¢â‚¬Â¢ Offline-first
+          APPEL v{APP_VERSION} ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ Offline-first
         </Text>
       </View>
       </KeyboardAvoidingView>

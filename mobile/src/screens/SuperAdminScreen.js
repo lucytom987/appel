@@ -13,7 +13,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
-import { superadminAPI } from '../services/api';
+import * as FileSystem from 'expo-file-system';
+import * as DocumentPicker from 'expo-document-picker';
+import * as Sharing from 'expo-sharing';
+import * as SecureStore from 'expo-secure-store';
+import { superadminAPI, API_URL } from '../services/api';
 
 export default function SuperAdminScreen({ navigation }) {
   const [stats, setStats] = useState(null);
@@ -30,6 +34,7 @@ export default function SuperAdminScreen({ navigation }) {
   const [companyBackupsMap, setCompanyBackupsMap] = useState({});
   const [companyBackupActionId, setCompanyBackupActionId] = useState(null);
   const [companyBackupLoadId, setCompanyBackupLoadId] = useState(null);
+  const [backupNameMap, setBackupNameMap] = useState({});
 
   const formatBackupSize = (bytes) => {
     const value = Number(bytes || 0);
@@ -52,6 +57,21 @@ export default function SuperAdminScreen({ navigation }) {
     } finally {
       setCompanyBackupLoadId(null);
     }
+  };
+
+  const getBackupNameInput = (companyId) => String(backupNameMap[companyId] || 'manual');
+
+  const setBackupNameInput = (companyId, value) => {
+    setBackupNameMap((prev) => ({
+      ...prev,
+      [companyId]: value,
+    }));
+  };
+
+  const getDeviceBackupPath = (fileName) => {
+    const safeName = String(fileName || 'backup.json.gz').replace(/[^a-zA-Z0-9._-]/g, '_');
+    const baseDir = FileSystem.documentDirectory || FileSystem.cacheDirectory;
+    return `${baseDir}backups/${safeName}`;
   };
 
   const loadData = async () => {
@@ -143,6 +163,8 @@ export default function SuperAdminScreen({ navigation }) {
   };
 
   const handleCreateCompanyBackup = (company) => {
+    const customName = getBackupNameInput(company._id).trim();
+
     Alert.alert(
       'Backup firme',
       `Kreirati novi backup firme "${company.naziv}"?`,
@@ -153,7 +175,10 @@ export default function SuperAdminScreen({ navigation }) {
           onPress: async () => {
             try {
               setCompanyBackupActionId(company._id);
-              const res = await superadminAPI.createCompanyBackup(company._id, { includeAuditLogs: false });
+              const res = await superadminAPI.createCompanyBackup(company._id, {
+                includeAuditLogs: false,
+                backupName: customName,
+              });
               Alert.alert('Uspjeh', res.data?.message || 'Backup je kreiran');
               await loadCompanyBackups(company._id);
             } catch (err) {
@@ -165,6 +190,100 @@ export default function SuperAdminScreen({ navigation }) {
         },
       ]
     );
+  };
+
+  const handleDownloadCompanyBackup = async (company, backup) => {
+    try {
+      setCompanyBackupActionId(company._id);
+      const token = await SecureStore.getItemAsync('userToken');
+      if (!token) {
+        Alert.alert('Greška', 'Nedostaje token za autorizaciju');
+        return;
+      }
+
+      const baseDir = FileSystem.documentDirectory || FileSystem.cacheDirectory;
+      const backupDir = `${baseDir}backups`;
+      const dirInfo = await FileSystem.getInfoAsync(backupDir);
+      if (!dirInfo.exists) {
+        await FileSystem.makeDirectoryAsync(backupDir, { intermediates: true });
+      }
+
+      const targetPath = getDeviceBackupPath(backup.fileName || `${backup.backupName || 'backup'}.json.gz`);
+      const downloadUrl = `${API_URL}/superadmin/backup/company/${company._id}/download/${backup._id}`;
+
+      const result = await FileSystem.downloadAsync(downloadUrl, targetPath, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const canShare = await Sharing.isAvailableAsync();
+      if (canShare) {
+        await Sharing.shareAsync(result.uri, {
+          mimeType: 'application/gzip',
+          dialogTitle: 'Spremi ili podijeli backup firme',
+        });
+      } else {
+        Alert.alert('Preuzeto', `Backup je spremljen na: ${result.uri}`);
+      }
+    } catch (err) {
+      Alert.alert('Greška', err?.message || 'Preuzimanje backupa nije uspjelo');
+    } finally {
+      setCompanyBackupActionId(null);
+    }
+  };
+
+  const handleRestoreCompanyFromFile = async (company) => {
+    try {
+      const pickResult = await DocumentPicker.getDocumentAsync({
+        copyToCacheDirectory: true,
+        multiple: false,
+        type: ['application/gzip', 'application/octet-stream', '*/*'],
+      });
+
+      if (pickResult.canceled || !pickResult.assets?.length) {
+        return;
+      }
+
+      const picked = pickResult.assets[0];
+      const selectedName = picked.name || 'uploaded-backup.json.gz';
+
+      Alert.alert(
+        'Restore iz datoteke',
+        `Firma: ${company.naziv}\nDatoteka: ${selectedName}\n\nOvo prepisuje trenutne podatke firme. Nastaviti?`,
+        [
+          { text: 'Odustani', style: 'cancel' },
+          {
+            text: 'Vrati',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                setCompanyBackupActionId(company._id);
+                const fileBase64 = await FileSystem.readAsStringAsync(picked.uri, {
+                  encoding: FileSystem.EncodingType.Base64,
+                });
+
+                const res = await superadminAPI.restoreCompanyBackupUpload(company._id, {
+                  fileName: selectedName,
+                  fileBase64,
+                });
+
+                Alert.alert('Uspjeh', res.data?.message || 'Backup iz datoteke je vraćen');
+                const detailRes = await superadminAPI.getCompany(company._id);
+                setCompanyDetail(detailRes.data?.data || null);
+                await loadCompanyBackups(company._id);
+              } catch (err) {
+                Alert.alert('Greška', err?.response?.data?.message || err?.message || 'Restore iz datoteke nije uspio');
+              } finally {
+                setCompanyBackupActionId(null);
+              }
+            },
+          },
+        ]
+      );
+    } catch (err) {
+      Alert.alert('Greška', err?.message || 'Odabir datoteke nije uspio');
+    }
   };
 
   const handleRestoreCompanyBackup = (company, backup) => {
@@ -544,6 +663,16 @@ export default function SuperAdminScreen({ navigation }) {
                       </TouchableOpacity>
                     </View>
 
+                    <Text style={styles.detailText}>Naziv backupa</Text>
+                    <TextInput
+                      style={styles.backupNameInput}
+                      placeholder="npr. prije_migracije"
+                      value={getBackupNameInput(company._id)}
+                      onChangeText={(value) => setBackupNameInput(company._id, value)}
+                      editable={companyBackupActionId !== company._id}
+                      autoCapitalize="none"
+                    />
+
                     <TouchableOpacity
                       style={[styles.smallPrimaryBtn, companyBackupActionId === company._id && styles.disabledButton]}
                       onPress={() => handleCreateCompanyBackup(company)}
@@ -553,26 +682,47 @@ export default function SuperAdminScreen({ navigation }) {
                       <Text style={styles.smallPrimaryBtnText}>Kreiraj backup firme</Text>
                     </TouchableOpacity>
 
+                    <TouchableOpacity
+                      style={[styles.smallSecondaryActionBtn, companyBackupActionId === company._id && styles.disabledButton]}
+                      onPress={() => handleRestoreCompanyFromFile(company)}
+                      disabled={companyBackupActionId === company._id}
+                    >
+                      <Ionicons name="cloud-upload-outline" size={14} color="#1d4ed8" />
+                      <Text style={styles.smallSecondaryActionBtnText}>Upload datoteke i restore</Text>
+                    </TouchableOpacity>
+
                     {(companyBackupsMap[company._id] || []).length === 0 ? (
                       <Text style={styles.detailText}>Nema spremljenih backupa za ovu firmu.</Text>
                     ) : (
                       (companyBackupsMap[company._id] || []).map((backup) => (
                         <View key={backup._id} style={styles.backupRow}>
                           <View style={styles.backupInfoCol}>
-                            <Text style={styles.backupRowDate}>{new Date(backup.createdAt).toLocaleString('hr-HR')}</Text>
+                            <Text style={styles.backupRowDate}>{backup.backupName || new Date(backup.createdAt).toLocaleString('hr-HR')}</Text>
                             <Text style={styles.backupRowMeta}>
                               Zapisa: {backup.totalDocuments || 0} • {formatBackupSize(backup.compressedBytes)}
                             </Text>
-                            <Text style={styles.backupRowMeta}>Izvor: {backup.source}</Text>
+                            <Text style={styles.backupRowMeta}>Kreiran: {new Date(backup.createdAt).toLocaleString('hr-HR')}</Text>
+                            <Text style={styles.backupRowMeta}>Datoteka: {backup.fileName || '-'}</Text>
                           </View>
-                          <TouchableOpacity
-                            style={[styles.restoreBtn, companyBackupActionId === company._id && styles.disabledButton]}
-                            onPress={() => handleRestoreCompanyBackup(company, backup)}
-                            disabled={companyBackupActionId === company._id}
-                          >
-                            <Ionicons name="reload" size={14} color="#b91c1c" />
-                            <Text style={styles.restoreBtnText}>Vrati</Text>
-                          </TouchableOpacity>
+                          <View style={styles.backupActionCol}>
+                            <TouchableOpacity
+                              style={[styles.downloadBtn, companyBackupActionId === company._id && styles.disabledButton]}
+                              onPress={() => handleDownloadCompanyBackup(company, backup)}
+                              disabled={companyBackupActionId === company._id}
+                            >
+                              <Ionicons name="download-outline" size={14} color="#0f766e" />
+                              <Text style={styles.downloadBtnText}>Download</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                              style={[styles.restoreBtn, companyBackupActionId === company._id && styles.disabledButton]}
+                              onPress={() => handleRestoreCompanyBackup(company, backup)}
+                              disabled={companyBackupActionId === company._id}
+                            >
+                              <Ionicons name="reload" size={14} color="#b91c1c" />
+                              <Text style={styles.restoreBtnText}>Vrati</Text>
+                            </TouchableOpacity>
+                          </View>
                         </View>
                       ))
                     )}
@@ -741,6 +891,17 @@ const styles = StyleSheet.create({
     color: '#4b5563',
     marginBottom: 3,
   },
+  backupNameInput: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    fontSize: 13,
+    color: '#111827',
+    backgroundColor: '#fff',
+    marginBottom: 10,
+  },
   backupSectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -760,6 +921,24 @@ const styles = StyleSheet.create({
   },
   smallPrimaryBtnText: {
     color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  smallSecondaryActionBtn: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    backgroundColor: '#eff6ff',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    marginBottom: 10,
+  },
+  smallSecondaryActionBtnText: {
+    color: '#1d4ed8',
     fontSize: 12,
     fontWeight: '700',
   },
@@ -793,6 +972,9 @@ const styles = StyleSheet.create({
   backupInfoCol: {
     flex: 1,
   },
+  backupActionCol: {
+    gap: 6,
+  },
   backupRowDate: {
     color: '#111827',
     fontSize: 12,
@@ -813,6 +995,22 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 10,
     borderRadius: 8,
+  },
+  downloadBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderWidth: 1,
+    borderColor: '#99f6e4',
+    backgroundColor: '#f0fdfa',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+  },
+  downloadBtnText: {
+    color: '#0f766e',
+    fontWeight: '700',
+    fontSize: 12,
   },
   restoreBtnText: {
     color: '#b91c1c',

@@ -11,8 +11,8 @@ import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 
 export default function AboutScreen({ navigation }) {
-  const currentVersion = Constants?.expoConfig?.version || '2.0.15';
-  const currentVersionDate = '24.07.2026';
+  const currentVersion = Constants?.expoConfig?.version || '2.0.16';
+  const currentVersionDate = '25.07.2026';
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -46,7 +46,7 @@ export default function AboutScreen({ navigation }) {
           <Text style={styles.sectionTitle}>O aplikaciji</Text>
           <Text style={styles.description}>
             APPEL je mobilna aplikacija za upravljanje dizalima, servisima i hitnim popravcima.
-            Offline-first pristup omoguÃƒâ€žÃ¢â‚¬Â¡uje rad bez mreÃƒâ€¦Ã‚Â¾e, a sinkronizacija se izvrÃƒâ€¦Ã‚Â¡ava Ãƒâ€žÃ‚Âim je
+            Offline-first pristup omoguÃƒÆ’Ã¢â‚¬Å¾ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¡uje rad bez mreÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¾e, a sinkronizacija se izvrÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ava ÃƒÆ’Ã¢â‚¬Å¾Ãƒâ€šÃ‚Âim je
             veza dostupna. Fokus je na brzom logiranju intervencija, preglednim listama i
             pouzdanom prikazu lokacija na karti.
           </Text>
@@ -54,19 +54,19 @@ export default function AboutScreen({ navigation }) {
 
         {/* What's new */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Novosti (24.07.2026)</Text>
+          <Text style={styles.sectionTitle}>Novosti (25.07.2026)</Text>
           <View style={styles.featuresList}>
             <View style={styles.featureItem}>
               <Ionicons name="cloud-upload" size={20} color="#2563eb" />
-              <Text style={styles.featureText}>Objavljena je nova verzija aplikacije 2.0.15 (Google Play upload).</Text>
+              <Text style={styles.featureText}>Objavljena je nova verzija aplikacije 2.0.16 (Google Play upload).</Text>
             </View>
             <View style={styles.featureItem}>
               <Ionicons name="flash" size={20} color="#2563eb" />
-              <Text style={styles.featureText}>Ubrzan je tok "PotpiÃƒâ€¦Ã‚Â¡i i poÃƒâ€¦Ã‚Â¡alji": odgovor je osjetno brÃƒâ€¦Ã‚Â¾i, a slanje PDF-a i emaila ide u pozadini.</Text>
+              <Text style={styles.featureText}>Ubrzan je tok "PotpiÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡i i poÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡alji": odgovor je osjetno brÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¾i, a slanje PDF-a i emaila ide u pozadini.</Text>
             </View>
             <View style={styles.featureItem}>
               <Ionicons name="checkmark-done" size={20} color="#2563eb" />
-              <Text style={styles.featureText}>Kod promjene statusa na "ZavrÃƒâ€¦Ã‚Â¡en" odmah se nudi "Kreiraj radni nalog" bez ruÃƒâ€žÃ‚Ânog spremanja.</Text>
+              <Text style={styles.featureText}>Kod promjene statusa na "ZavrÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡en" odmah se nudi "Kreiraj radni nalog" bez ruÃƒÆ’Ã¢â‚¬Å¾Ãƒâ€šÃ‚Ânog spremanja.</Text>
             </View>
             <View style={styles.featureItem}>
               <Ionicons name="save" size={20} color="#2563eb" />
@@ -78,7 +78,7 @@ export default function AboutScreen({ navigation }) {
             </View>
             <View style={styles.featureItem}>
               <Ionicons name="close-circle" size={20} color="#2563eb" />
-              <Text style={styles.featureText}>Ako je radni nalog ruÃƒâ€žÃ‚Âno oznaÃƒâ€žÃ‚Âen kao potpisan, onemoguÃƒâ€žÃ¢â‚¬Â¡eno je dodatno digitalno kreiranje naloga.</Text>
+              <Text style={styles.featureText}>Ako je radni nalog ruÃƒÆ’Ã¢â‚¬Å¾Ãƒâ€šÃ‚Âno oznaÃƒÆ’Ã¢â‚¬Å¾Ãƒâ€šÃ‚Âen kao potpisan, onemoguÃƒÆ’Ã¢â‚¬Å¾ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¡eno je dodatno digitalno kreiranje naloga.</Text>
             </View>
             <View style={styles.featureItem}>
               <Ionicons name="trash" size={20} color="#2563eb" />
@@ -89,15 +89,15 @@ export default function AboutScreen({ navigation }) {
 
         {/* Features */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Glavne znaÃƒâ€žÃ‚Âajke</Text>
+          <Text style={styles.sectionTitle}>Glavne znaÃƒÆ’Ã¢â‚¬Å¾Ãƒâ€šÃ‚Âajke</Text>
           <View style={styles.featuresList}>
             <View style={styles.featureItem}>
               <Ionicons name="cloud-offline" size={20} color="#2563eb" />
-              <Text style={styles.featureText}>Offline-first: svi unosi rade bez mreÃƒâ€¦Ã‚Â¾e, sinkronizacija kad je internet dostupan.</Text>
+              <Text style={styles.featureText}>Offline-first: svi unosi rade bez mreÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¾e, sinkronizacija kad je internet dostupan.</Text>
             </View>
             <View style={styles.featureItem}>
               <Ionicons name="construct" size={20} color="#2563eb" />
-              <Text style={styles.featureText}>Popravci: statusi (prijavljen/zavrÃƒâ€¦Ã‚Â¡en) i posebna lista "trebalo bi", potpis naloga, opis popravka, prijavio i kontakt.</Text>
+              <Text style={styles.featureText}>Popravci: statusi (prijavljen/zavrÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡en) i posebna lista "trebalo bi", potpis naloga, opis popravka, prijavio i kontakt.</Text>
             </View>
             <View style={styles.featureItem}>
               <Ionicons name="briefcase" size={20} color="#2563eb" />
@@ -121,7 +121,7 @@ export default function AboutScreen({ navigation }) {
             </View>
             <View style={styles.featureItem}>
               <Ionicons name="phone-portrait" size={20} color="#2563eb" />
-              <Text style={styles.featureText}>Android optimizacije: SafeArea/KeyboardAvoiding, kompaktniji layouti, brÃƒâ€¦Ã‚Â¾e uÃƒâ€žÃ‚Âitavanje liste i karte.</Text>
+              <Text style={styles.featureText}>Android optimizacije: SafeArea/KeyboardAvoiding, kompaktniji layouti, brÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¾e uÃƒÆ’Ã¢â‚¬Å¾Ãƒâ€šÃ‚Âitavanje liste i karte.</Text>
             </View>
           </View>
         </View>
@@ -166,7 +166,7 @@ export default function AboutScreen({ navigation }) {
             <View style={styles.creditsHeader}>
               <Ionicons name="person-circle" size={48} color="#2563eb" />
               <View style={styles.creditsInfo}>
-                <Text style={styles.creditsName}>Tomislav VidaÃƒâ€žÃ‚Âek</Text>
+                <Text style={styles.creditsName}>Tomislav VidaÃƒÆ’Ã¢â‚¬Å¾Ãƒâ€šÃ‚Âek</Text>
                 <Text style={styles.creditsRole}>Made in Croatia</Text>
               </View>
             </View>
@@ -183,10 +183,10 @@ export default function AboutScreen({ navigation }) {
         {/* Footer */}
         <View style={styles.footer}>
           <Text style={styles.footerText}>
-            Ãƒâ€šÃ‚Â© 2026 APPEL ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ Elevator Management
+            ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â© 2026 APPEL ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Elevator Management
           </Text>
           <Text style={styles.footerSubtext}>
-            22.07.2026 ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ Android
+            22.07.2026 ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Android
           </Text>
         </View>
 

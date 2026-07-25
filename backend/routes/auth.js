@@ -13,6 +13,24 @@ const SUPER_ADMIN_EMAILS = (process.env.SUPER_ADMIN_EMAILS || 'vidacek.tomek@gma
   .map(e => e.trim().toLowerCase());
 const isSuperAdmin = (email) => email && SUPER_ADMIN_EMAILS.includes(email.toLowerCase());
 
+const isTrue = (value, fallback = false) => {
+  if (value === undefined || value === null || value === '') return fallback;
+  return String(value).trim().toLowerCase() === 'true';
+};
+
+const isPublicRegistrationEnabled = () => {
+  const defaultEnabled = (process.env.NODE_ENV || '').toLowerCase() !== 'production';
+  return isTrue(process.env.PUBLIC_REGISTER_ENABLED, defaultEnabled);
+};
+
+const getClientIp = (req) => {
+  const forwardedFor = req.header('x-forwarded-for');
+  if (forwardedFor) {
+    return String(forwardedFor).split(',')[0].trim();
+  }
+  return req.ip;
+};
+
 // Helper za generiranje access/refresh tokena
 const generateTokens = (userId) => {
   const accessToken = jwt.sign(
@@ -160,57 +178,95 @@ router.post('/register', authenticate, async (req, res) => {
 // POST /api/auth/public-register - Registracija nove stranke (javni endpoint)
 router.post('/public-register', async (req, res) => {
   try {
-    const { ime, prezime, email, lozinka, nazivFirme } = req.body;
+    if (!isPublicRegistrationEnabled()) {
+      return res.status(403).json({
+        message: 'Javna registracija firmi je trenutno onemogucena. Javite se administratoru.',
+      });
+    }
 
-    if (!ime || !prezime || !email || !lozinka || !nazivFirme) {
+    const requiredRegistrationKey = String(process.env.PUBLIC_REGISTER_KEY || '').trim();
+    if (requiredRegistrationKey) {
+      const providedRegistrationKey = String(
+        req.body?.registrationKey || req.header('x-registration-key') || ''
+      ).trim();
+
+      if (!providedRegistrationKey || providedRegistrationKey !== requiredRegistrationKey) {
+        return res.status(403).json({
+          message: 'Registracija nije dozvoljena bez valjanog registracijskog kljuca.',
+        });
+      }
+    }
+
+    const { ime, prezime, email, lozinka, nazivFirme } = req.body;
+    const imeTrimmed = String(ime || '').trim();
+    const prezimeTrimmed = String(prezime || '').trim();
+    const nazivFirmeTrimmed = String(nazivFirme || '').trim();
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+
+    if (!imeTrimmed || !prezimeTrimmed || !normalizedEmail || !lozinka || !nazivFirmeTrimmed) {
       return res.status(400).json({ message: 'Sva polja su obavezna (ime, prezime, email, lozinka, nazivFirme)' });
+    }
+
+    if (imeTrimmed.length > 80 || prezimeTrimmed.length > 80 || nazivFirmeTrimmed.length > 140) {
+      return res.status(400).json({ message: 'Ime, prezime ili naziv firme su predugacki' });
+    }
+
+    const basicEmailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail);
+    if (!basicEmailOk) {
+      return res.status(400).json({ message: 'Email nije ispravnog formata' });
     }
 
     if (lozinka.length < 6) {
       return res.status(400).json({ message: 'Lozinka mora imati najmanje 6 znakova' });
     }
 
-    // Kreiraj novu firmu
-    const novaFirma = new Company({ naziv: nazivFirme });
-    await novaFirma.save();
-
-    // Provjeri postoji li korisnik s tim emailom u novoj firmi (ne bi trebalo, ali za svaki slučaj)
-    const postojeciKorisnik = await User.findOne({ email, companyId: novaFirma._id });
-    if (postojeciKorisnik) {
-      await Company.findByIdAndDelete(novaFirma._id);
+    const postojeciEmail = await User.findOne({ email: normalizedEmail }).select('_id').lean();
+    if (postojeciEmail) {
       return res.status(400).json({ message: 'Korisnik s tim emailom već postoji' });
     }
 
-    // Kreiraj admin korisnika
-    const adminKorisnik = new User({
-      companyId: novaFirma._id,
-      ime,
-      prezime,
-      email,
-      lozinka,
-      uloga: 'admin',
-      aktivan: true,
-    });
-    await adminKorisnik.save();
+    let novaFirma;
+    try {
+      // Kreiraj novu firmu
+      novaFirma = new Company({ naziv: nazivFirmeTrimmed });
+      await novaFirma.save();
 
-    const { accessToken, refreshToken } = generateTokens(adminKorisnik._id);
+      // Kreiraj admin korisnika
+      const adminKorisnik = new User({
+        companyId: novaFirma._id,
+        ime: imeTrimmed,
+        prezime: prezimeTrimmed,
+        email: normalizedEmail,
+        lozinka,
+        uloga: 'admin',
+        aktivan: true,
+      });
+      await adminKorisnik.save();
 
-    await logAction({
-      korisnikId: adminKorisnik._id,
-      akcija: 'CREATE',
-      entitet: 'Company',
-      entitetId: novaFirma._id,
-      entitetNaziv: nazivFirme,
-      noveVrijednosti: { firma: novaFirma.toJSON(), korisnik: adminKorisnik.toJSON() },
-      ipAdresa: req.ip,
-      opis: `Nova registracija: ${email} za firmu "${nazivFirme}"`,
-    });
+      const { accessToken, refreshToken } = generateTokens(adminKorisnik._id);
 
-    res.status(201).json({
-      token: accessToken,
-      refreshToken,
-      korisnik: adminKorisnik.toJSON(),
-    });
+      await logAction({
+        korisnikId: adminKorisnik._id,
+        akcija: 'CREATE',
+        entitet: 'Company',
+        entitetId: novaFirma._id,
+        entitetNaziv: nazivFirmeTrimmed,
+        noveVrijednosti: { firma: novaFirma.toJSON(), korisnik: adminKorisnik.toJSON() },
+        ipAdresa: getClientIp(req),
+        opis: `Nova registracija: ${normalizedEmail} za firmu "${nazivFirmeTrimmed}"`,
+      });
+
+      res.status(201).json({
+        token: accessToken,
+        refreshToken,
+        korisnik: adminKorisnik.toJSON(),
+      });
+    } catch (error) {
+      if (novaFirma?._id) {
+        await Company.findByIdAndDelete(novaFirma._id).catch(() => null);
+      }
+      throw error;
+    }
   } catch (error) {
     console.error('Public register greška:', error);
     if (error.code === 11000) {

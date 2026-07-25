@@ -27,14 +27,14 @@ export default function LoginScreen({ navigation }) {
 
   const handleLogin = async () => {
     if (!email || !lozinka) {
-      Alert.alert('GreÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ka', 'Molimo unesite email i lozinku');
+      Alert.alert('Greska', 'Molimo unesite email i lozinku');
       return;
     }
 
     const result = await login(email, lozinka);
     
     if (!result.success) {
-      Alert.alert('GreÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ka pri prijavi', result.message);
+      Alert.alert('Greska pri prijavi', result.message);
     }
   };
 
@@ -85,7 +85,7 @@ export default function LoginScreen({ navigation }) {
               style={styles.eyeButton}
               onPress={() => setShowPassword(!showPassword)}
             >
-              <Text style={styles.eyeIcon}>{showPassword ? 'ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸ÃƒÂ¢Ã¢â€šÂ¬Ã‹Å“Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¯Ãƒâ€šÃ‚Â¸Ãƒâ€šÃ‚Â' : 'ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸ÃƒÂ¢Ã¢â€šÂ¬Ã‹Å“Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¯Ãƒâ€šÃ‚Â¸Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬ÂÃƒâ€šÃ‚Â¨ÃƒÆ’Ã‚Â¯Ãƒâ€šÃ‚Â¸Ãƒâ€šÃ‚Â'}</Text>
+              <Text style={styles.eyeIcon}>{showPassword ? 'Hide' : 'Show'}</Text>
             </TouchableOpacity>
           </View>
 
@@ -107,14 +107,14 @@ export default function LoginScreen({ navigation }) {
             disabled={loading}
           >
             <Text style={styles.registerLinkText}>
-              Nemate raÃƒÆ’Ã¢â‚¬Å¾Ãƒâ€šÃ‚Âun? <Text style={styles.registerLinkBold}>Registrirajte se</Text>
+              Nemate racun? <Text style={styles.registerLinkBold}>Registrirajte se</Text>
             </Text>
           </TouchableOpacity>
         </View>
 
         {/* Footer */}
         <Text style={styles.footer}>
-          APPEL v{APP_VERSION} ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ Offline-first
+          APPEL v{APP_VERSION} | Offline-first
         </Text>
       </View>
       </KeyboardAvoidingView>

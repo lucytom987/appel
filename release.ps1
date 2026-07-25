@@ -43,6 +43,11 @@ function Write-Utf8NoBom([string]$path, [string]$content) {
   [System.IO.File]::WriteAllText($path, $content, $enc)
 }
 
+function Read-Utf8NoBom([string]$path) {
+  $enc = New-Object System.Text.UTF8Encoding($false)
+  return [System.IO.File]::ReadAllText($path, $enc)
+}
+
 function Replace-OrThrow([string]$content, [string]$pattern, [string]$replacement, [string]$label) {
   if (-not [regex]::IsMatch($content, $pattern)) {
     throw "Pattern not found for $label"
@@ -69,7 +74,7 @@ $renderYamlPath = Join-Path $repoRoot 'render.yaml'
 $aboutScreenPath = Join-Path $repoRoot 'mobile/src/screens/AboutScreen.js'
 $loginScreenPath = Join-Path $repoRoot 'mobile/src/screens/LoginScreen.js'
 
-$appConfig = Get-Content -Raw -Path $appConfigPath
+$appConfig = Read-Utf8NoBom $appConfigPath
 if ($appConfig -notmatch 'version:\s*"(\d+\.\d+\.\d+)"') {
   throw 'Could not read version from mobile/app.config.js'
 }
@@ -97,12 +102,12 @@ $appConfig = Replace-OrThrow $appConfig 'version:\s*"\d+\.\d+\.\d+"' ('version: 
 $appConfig = Replace-OrThrow $appConfig 'buildNumber:\s*"\d+"' ('buildNumber: "' + $newBuildNumber + '"') 'app.config.js ios buildNumber'
 $appConfig = Replace-OrThrow $appConfig 'versionCode:\s*\d+' "versionCode: $newVersionCode" 'app.config.js android versionCode'
 
-$appJson = Get-Content -Raw -Path $appJsonPath
+$appJson = Read-Utf8NoBom $appJsonPath
 $appJson = Replace-OrThrow $appJson '"version"\s*:\s*"\d+\.\d+\.\d+"' ('"version": "' + $newVersion + '"') 'app.json version'
 $appJson = Replace-OrThrow $appJson '"buildNumber"\s*:\s*"\d+"' ('"buildNumber": "' + $newBuildNumber + '"') 'app.json ios buildNumber'
 $appJson = Replace-OrThrow $appJson '"versionCode"\s*:\s*\d+' ('"versionCode": ' + $newVersionCode) 'app.json android versionCode'
 
-$backendAppRoute = Get-Content -Raw -Path $backendAppRoutePath
+$backendAppRoute = Read-Utf8NoBom $backendAppRoutePath
 $backendAppRoute = Replace-OrThrow $backendAppRoute "LATEST_APP_VERSION \|\| '[^']+'" "LATEST_APP_VERSION || '$newVersion'" 'backend app latest version fallback'
 $backendAppRoute = Replace-OrThrow $backendAppRoute "MIN_SUPPORTED_APP_VERSION \|\| '[^']+'" "MIN_SUPPORTED_APP_VERSION || '$newVersion'" 'backend app min version fallback'
 $backendLatestCodePattern = '(?m)(const latestVersionCode = Number\.isFinite\(Number\(latestVersionCodeRaw\)\)\s*\r?\n\s*\? Number\(latestVersionCodeRaw\)\s*\r?\n\s*:\s*)\d+'
@@ -116,19 +121,19 @@ $backendAppRoute = [regex]::Replace(
   "const minSupportedVersionCode = Number.isFinite(Number(minSupportedVersionCodeRaw))`n    ? Number(minSupportedVersionCodeRaw)`n    : latestVersionCode;"
 )
 
-$renderYaml = Get-Content -Raw -Path $renderYamlPath
+$renderYaml = Read-Utf8NoBom $renderYamlPath
 $renderYaml = Replace-OrThrow $renderYaml '(?m)(- key: LATEST_APP_VERSION\s*\r?\n\s*value:\s*)[^\r\n]+' ('${1}' + $newVersion) 'render latest version env'
 $renderYaml = Replace-OrThrow $renderYaml '(?m)(- key: LATEST_APP_VERSION_CODE\s*\r?\n\s*value:\s*)[^\r\n]+' ('${1}' + $newVersionCode) 'render latest versionCode env'
 $renderYaml = Replace-OrThrow $renderYaml '(?m)(- key: MIN_SUPPORTED_APP_VERSION\s*\r?\n\s*value:\s*)[^\r\n]+' ('${1}' + $newVersion) 'render min version env'
 $renderYaml = Replace-OrThrow $renderYaml '(?m)(- key: MIN_SUPPORTED_APP_VERSION_CODE\s*\r?\n\s*value:\s*)[^\r\n]+' ('${1}' + $newVersionCode) 'render min versionCode env'
 
-$aboutScreen = Get-Content -Raw -Path $aboutScreenPath
+$aboutScreen = Read-Utf8NoBom $aboutScreenPath
 $aboutScreen = Replace-OrThrow $aboutScreen "currentVersion = Constants\?\.expoConfig\?\.version \|\| '[^']+'" "currentVersion = Constants?.expoConfig?.version || '$newVersion'" 'About fallback version'
 $aboutScreen = Replace-OrThrow $aboutScreen "currentVersionDate = '[^']+'" "currentVersionDate = '$todayLabel'" 'About version date'
 $aboutScreen = Replace-IfFound $aboutScreen 'Novosti \([^\)]+\)' "Novosti ($todayLabel)" 'About news date'
 $aboutScreen = Replace-IfFound $aboutScreen 'nova verzija aplikacije [0-9]+\.[0-9]+\.[0-9]+' "nova verzija aplikacije $newVersion" 'About news version text'
 
-$loginScreen = Get-Content -Raw -Path $loginScreenPath
+$loginScreen = Read-Utf8NoBom $loginScreenPath
 if ($loginScreen -notmatch "import Constants from 'expo-constants';") {
   $loginScreen = Replace-OrThrow $loginScreen "import \* as SecureStore from 'expo-secure-store';" "import * as SecureStore from 'expo-secure-store';`nimport Constants from 'expo-constants';" 'Login constants import'
 }

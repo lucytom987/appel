@@ -1,4 +1,5 @@
 const express = require('express');
+const crypto = require('crypto');
 const { authenticate } = require('../middleware/auth');
 const Company = require('../models/Company');
 const User = require('../models/User');
@@ -6,6 +7,7 @@ const Elevator = require('../models/Elevator');
 const Service = require('../models/Service');
 const Repair = require('../models/Repair');
 const BackupSnapshot = require('../models/BackupSnapshot');
+const { logAction } = require('../services/auditService');
 const {
   createCompanyBackup,
   listCompanyBackups,
@@ -16,6 +18,24 @@ const {
 } = require('../services/backupService');
 
 const router = express.Router();
+
+const randomTempPassword = (length = 14) => {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%';
+  const bytes = crypto.randomBytes(length);
+  let out = '';
+  for (let i = 0; i < length; i += 1) {
+    out += chars[bytes[i] % chars.length];
+  }
+  return out;
+};
+
+const getClientIp = (req) => {
+  const forwardedFor = req.header('x-forwarded-for');
+  if (forwardedFor) {
+    return String(forwardedFor).split(',')[0].trim();
+  }
+  return req.ip;
+};
 
 // Hardkodirani super admin emailovi - isti kao u auth.js
 const SUPER_ADMIN_EMAILS = (process.env.SUPER_ADMIN_EMAILS || 'vidacek.tomek@gmail.com,vidacek@appel.com')
@@ -32,6 +52,124 @@ const requireSuperAdmin = async (req, res, next) => {
 
 // Sve rute zahtijevaju auth + superAdmin
 router.use(authenticate, requireSuperAdmin);
+
+// POST /api/superadmin/companies/create-managed - SuperAdmin kreira firmu i admin login
+router.post('/companies/create-managed', async (req, res) => {
+  try {
+    const naziv = String(req.body?.naziv || '').trim();
+    const adresa = String(req.body?.adresa || '').trim();
+    const oib = String(req.body?.oib || '').trim();
+    const emailFirme = String(req.body?.emailFirme || '').trim().toLowerCase();
+
+    const adminIme = String(req.body?.adminIme || '').trim();
+    const adminPrezime = String(req.body?.adminPrezime || '').trim();
+    const adminEmail = String(req.body?.adminEmail || '').trim().toLowerCase();
+    const adminTelefon = String(req.body?.adminTelefon || '').trim();
+
+    if (!naziv || !adminIme || !adminPrezime || !adminEmail) {
+      return res.status(400).json({
+        message: 'Obavezna polja su naziv firme, ime/prezime admina i admin email',
+      });
+    }
+
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailPattern.test(adminEmail)) {
+      return res.status(400).json({ message: 'Admin email nije ispravnog formata' });
+    }
+
+    if (emailFirme && !emailPattern.test(emailFirme)) {
+      return res.status(400).json({ message: 'Email firme nije ispravnog formata' });
+    }
+
+    const existingAdminEmail = await User.findOne({ email: adminEmail }).select('_id').lean();
+    if (existingAdminEmail) {
+      return res.status(409).json({ message: 'Korisnik s tim admin emailom već postoji' });
+    }
+
+    const tempPassword = randomTempPassword();
+
+    let company;
+    try {
+      company = new Company({
+        naziv,
+        adresa: adresa || undefined,
+        oib: oib || undefined,
+        email: emailFirme || undefined,
+      });
+      await company.save();
+
+      const adminUser = new User({
+        companyId: company._id,
+        ime: adminIme,
+        prezime: adminPrezime,
+        email: adminEmail,
+        lozinka: tempPassword,
+        telefon: adminTelefon || undefined,
+        uloga: 'admin',
+        aktivan: true,
+        mustChangePassword: true,
+        onboardingStatus: 'pending_setup',
+        privremenaLozinka: tempPassword,
+      });
+      await adminUser.save();
+
+      await logAction({
+        companyId: company._id,
+        korisnikId: req.user._id,
+        akcija: 'CREATE',
+        entitet: 'Company',
+        entitetId: company._id,
+        entitetNaziv: company.naziv,
+        ipAdresa: getClientIp(req),
+        opis: `SuperAdmin je kreirao novu firmu i admin login (${adminEmail})`,
+      });
+
+      await logAction({
+        companyId: company._id,
+        korisnikId: req.user._id,
+        akcija: 'CREATE',
+        entitet: 'User',
+        entitetId: adminUser._id,
+        entitetNaziv: `${adminUser.ime} ${adminUser.prezime}`,
+        ipAdresa: getClientIp(req),
+        opis: 'Kreiran admin korisnik sa privremenom lozinkom i obaveznim onboarding flow-om',
+      });
+
+      return res.status(201).json({
+        success: true,
+        message: 'Firma i admin login su uspješno kreirani',
+        data: {
+          company: {
+            _id: company._id,
+            naziv: company.naziv,
+            email: company.email || null,
+          },
+          adminUser: {
+            _id: adminUser._id,
+            ime: adminUser.ime,
+            prezime: adminUser.prezime,
+            email: adminUser.email,
+            uloga: adminUser.uloga,
+            mustChangePassword: true,
+            onboardingStatus: adminUser.onboardingStatus,
+          },
+          credentials: {
+            email: adminUser.email,
+            temporaryPassword: tempPassword,
+          },
+        },
+      });
+    } catch (error) {
+      if (company?._id) {
+        await Company.findByIdAndDelete(company._id).catch(() => null);
+      }
+      throw error;
+    }
+  } catch (error) {
+    console.error('SuperAdmin create-managed company error:', error);
+    return res.status(500).json({ message: 'Greška pri kreiranju firme i admin računa' });
+  }
+});
 
 // GET /api/superadmin/companies - Lista svih firmi
 router.get('/companies', async (req, res) => {

@@ -170,6 +170,7 @@ export const authAPI = {
   login: (email, lozinka) => api.post('/auth/login', { email, lozinka }),
   register: (data) => api.post('/auth/register', data),
   publicRegister: (data) => api.post('/auth/public-register', data),
+  completeFirstLogin: (novaLozinka) => api.post('/auth/complete-first-login', { novaLozinka }),
   getMe: () => api.get('/auth/me'),
 };
 
@@ -239,6 +240,7 @@ export const usersAPI = {
 // SuperAdmin API - Platform owner
 export const superadminAPI = {
   getCompanies: () => api.get('/superadmin/companies'),
+  createManagedCompany: (payload) => api.post('/superadmin/companies/create-managed', payload),
   getCompany: (id) => api.get(`/superadmin/companies/${id}`),
   getStats: () => api.get('/superadmin/stats'),
   deleteCompany: (id) => api.delete(`/superadmin/companies/${id}`),

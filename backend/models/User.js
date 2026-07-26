@@ -14,6 +14,12 @@ const userSchema = new mongoose.Schema({
     default: 'serviser'
   },
   telefon: String,
+  mustChangePassword: { type: Boolean, default: false },
+  onboardingStatus: {
+    type: String,
+    enum: ['active', 'pending_setup'],
+    default: 'active',
+  },
   aktivan: { type: Boolean, default: true },
   kreiranDatum: { type: Date, default: Date.now },
   azuriranDatum: { type: Date, default: Date.now }

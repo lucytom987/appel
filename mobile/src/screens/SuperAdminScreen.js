@@ -35,6 +35,18 @@ export default function SuperAdminScreen({ navigation }) {
   const [companyBackupActionId, setCompanyBackupActionId] = useState(null);
   const [companyBackupLoadId, setCompanyBackupLoadId] = useState(null);
   const [backupNameMap, setBackupNameMap] = useState({});
+  const [creatingCompany, setCreatingCompany] = useState(false);
+  const [createFormExpanded, setCreateFormExpanded] = useState(false);
+  const [newCompanyForm, setNewCompanyForm] = useState({
+    naziv: '',
+    adresa: '',
+    oib: '',
+    emailFirme: '',
+    adminIme: '',
+    adminPrezime: '',
+    adminEmail: '',
+    adminTelefon: '',
+  });
 
   const formatBackupSize = (bytes) => {
     const value = Number(bytes || 0);
@@ -42,6 +54,32 @@ export default function SuperAdminScreen({ navigation }) {
     if (value < 1024) return `${value} B`;
     if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
     return `${(value / (1024 * 1024)).toFixed(2)} MB`;
+  };
+
+  const formatCollectionCounts = (collectionCounts) => {
+    if (!collectionCounts || typeof collectionCounts !== 'object') return '';
+
+    const labels = {
+      users: 'Korisnici',
+      elevators: 'Dizala',
+      services: 'Servisi',
+      repairs: 'Popravci',
+      events: 'Događaji',
+      chatRooms: 'Chat sobe',
+      messages: 'Poruke',
+      simCards: 'SIM',
+      workOrderCounters: 'Brojači RN',
+      workOrders: 'Radni nalozi',
+      serviceWorkOrders: 'Servisni nalozi',
+      auditLogs: 'Audit',
+    };
+
+    const parts = Object.entries(collectionCounts)
+      .filter(([, count]) => Number(count) > 0)
+      .map(([key, count]) => `${labels[key] || key}: ${count}`);
+
+    if (!parts.length) return 'Detalji: nema zapisa u kolekcijama';
+    return `Detalji: ${parts.join(' • ')}`;
   };
 
   const loadCompanyBackups = async (companyId) => {
@@ -86,6 +124,63 @@ export default function SuperAdminScreen({ navigation }) {
       Alert.alert('Greška', err.message || 'Nije moguće dohvatiti podatke');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const updateNewCompanyField = (field, value) => {
+    setNewCompanyForm((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
+
+  const resetNewCompanyForm = () => {
+    setNewCompanyForm({
+      naziv: '',
+      adresa: '',
+      oib: '',
+      emailFirme: '',
+      adminIme: '',
+      adminPrezime: '',
+      adminEmail: '',
+      adminTelefon: '',
+    });
+  };
+
+  const handleCreateManagedCompany = async () => {
+    const payload = {
+      naziv: String(newCompanyForm.naziv || '').trim(),
+      adresa: String(newCompanyForm.adresa || '').trim(),
+      oib: String(newCompanyForm.oib || '').trim(),
+      emailFirme: String(newCompanyForm.emailFirme || '').trim(),
+      adminIme: String(newCompanyForm.adminIme || '').trim(),
+      adminPrezime: String(newCompanyForm.adminPrezime || '').trim(),
+      adminEmail: String(newCompanyForm.adminEmail || '').trim().toLowerCase(),
+      adminTelefon: String(newCompanyForm.adminTelefon || '').trim(),
+    };
+
+    if (!payload.naziv || !payload.adminIme || !payload.adminPrezime || !payload.adminEmail) {
+      Alert.alert('Greška', 'Unesite naziv firme te ime, prezime i email admin korisnika');
+      return;
+    }
+
+    try {
+      setCreatingCompany(true);
+      const res = await superadminAPI.createManagedCompany(payload);
+      const credentials = res?.data?.data?.credentials || {};
+
+      Alert.alert(
+        'Firma kreirana',
+        `Login: ${credentials.email || payload.adminEmail}\nPrivremena lozinka: ${credentials.temporaryPassword || '-'}\n\nKorisnik mora promijeniti lozinku na prvoj prijavi.`
+      );
+
+      resetNewCompanyForm();
+      setCreateFormExpanded(false);
+      await loadData();
+    } catch (err) {
+      Alert.alert('Greška', err?.response?.data?.message || err?.message || 'Kreiranje firme nije uspjelo');
+    } finally {
+      setCreatingCompany(false);
     }
   };
 
@@ -330,23 +425,36 @@ export default function SuperAdminScreen({ navigation }) {
 
   const handleDeleteCompany = (company) => {
     Alert.alert(
-      'Obriši firmu',
-      `Jeste li sigurni da želite obrisati firmu "${company.naziv}" i SVE njene podatke?\n\nOvo se ne može poništiti!`,
+      'Obriši firmu - 1/2',
+      `Jeste li sigurni da želite pokrenuti brisanje firme "${company.naziv}" i SVIH njenih podataka?\n\nOvo je trajna radnja.`,
       [
         { text: 'Odustani', style: 'cancel' },
         {
-          text: 'Obriši',
+          text: 'Nastavi',
           style: 'destructive',
-          onPress: async () => {
-            try {
-              await superadminAPI.deleteCompany(company._id);
-              Alert.alert('Uspjeh', `Firma "${company.naziv}" je obrisana`);
-              setExpandedId(null);
-              setCompanyDetail(null);
-              loadData();
-            } catch (err) {
-              Alert.alert('Greška', err.message || 'Brisanje nije uspjelo');
-            }
+          onPress: () => {
+            Alert.alert(
+              'Potvrda brisanja - 2/2',
+              `Zadnji korak: stvarno obrisati firmu "${company.naziv}"?\n\nBrisanjem će se ukloniti svi korisnici i podaci te firme.`,
+              [
+                { text: 'Ne, vrati nazad', style: 'cancel' },
+                {
+                  text: 'DA, OBRIŠI TRAJNO',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      await superadminAPI.deleteCompany(company._id);
+                      Alert.alert('Uspjeh', `Firma "${company.naziv}" je obrisana`);
+                      setExpandedId(null);
+                      setCompanyDetail(null);
+                      loadData();
+                    } catch (err) {
+                      Alert.alert('Greška', err.message || 'Brisanje nije uspjelo');
+                    }
+                  },
+                },
+              ]
+            );
           },
         },
       ]
@@ -438,6 +546,109 @@ export default function SuperAdminScreen({ navigation }) {
             </TouchableOpacity>
           </View>
         )}
+
+        <View style={styles.createSection}>
+          <View style={styles.createHeaderRow}>
+            <Text style={styles.sectionTitle}>Kreiranje nove firme</Text>
+            <TouchableOpacity
+              style={styles.expandToggleBtn}
+              onPress={() => setCreateFormExpanded((prev) => !prev)}
+              disabled={creatingCompany}
+            >
+              <Ionicons
+                name={createFormExpanded ? 'chevron-up' : 'chevron-down'}
+                size={16}
+                color="#1d4ed8"
+              />
+              <Text style={styles.expandToggleText}>
+                {createFormExpanded ? 'Sakrij formu' : 'Kreiraj novu firmu'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {createFormExpanded && (
+            <>
+              <TextInput
+                style={styles.createInput}
+                placeholder="Naziv firme *"
+                value={newCompanyForm.naziv}
+                onChangeText={(v) => updateNewCompanyField('naziv', v)}
+                editable={!creatingCompany}
+              />
+              <TextInput
+                style={styles.createInput}
+                placeholder="Adresa"
+                value={newCompanyForm.adresa}
+                onChangeText={(v) => updateNewCompanyField('adresa', v)}
+                editable={!creatingCompany}
+              />
+              <TextInput
+                style={styles.createInput}
+                placeholder="OIB"
+                value={newCompanyForm.oib}
+                onChangeText={(v) => updateNewCompanyField('oib', v)}
+                editable={!creatingCompany}
+              />
+              <TextInput
+                style={styles.createInput}
+                placeholder="Email firme"
+                value={newCompanyForm.emailFirme}
+                onChangeText={(v) => updateNewCompanyField('emailFirme', v)}
+                autoCapitalize="none"
+                keyboardType="email-address"
+                editable={!creatingCompany}
+              />
+
+              <Text style={styles.createSubTitle}>Admin korisnik</Text>
+              <TextInput
+                style={styles.createInput}
+                placeholder="Ime admina *"
+                value={newCompanyForm.adminIme}
+                onChangeText={(v) => updateNewCompanyField('adminIme', v)}
+                editable={!creatingCompany}
+              />
+              <TextInput
+                style={styles.createInput}
+                placeholder="Prezime admina *"
+                value={newCompanyForm.adminPrezime}
+                onChangeText={(v) => updateNewCompanyField('adminPrezime', v)}
+                editable={!creatingCompany}
+              />
+              <TextInput
+                style={styles.createInput}
+                placeholder="Admin email *"
+                value={newCompanyForm.adminEmail}
+                onChangeText={(v) => updateNewCompanyField('adminEmail', v)}
+                autoCapitalize="none"
+                keyboardType="email-address"
+                editable={!creatingCompany}
+              />
+              <TextInput
+                style={styles.createInput}
+                placeholder="Telefon admina"
+                value={newCompanyForm.adminTelefon}
+                onChangeText={(v) => updateNewCompanyField('adminTelefon', v)}
+                keyboardType="phone-pad"
+                editable={!creatingCompany}
+              />
+
+              <TouchableOpacity
+                style={[styles.createButton, creatingCompany && styles.disabledButton]}
+                onPress={handleCreateManagedCompany}
+                disabled={creatingCompany}
+              >
+                {creatingCompany ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Ionicons name="person-add" size={16} color="#fff" />
+                )}
+                <Text style={styles.createButtonText}>
+                  {creatingCompany ? 'Kreiram firmu...' : 'Kreiraj firmu i admin login'}
+                </Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
 
         {/* Firme */}
         <View style={styles.companiesSection}>
@@ -703,6 +914,9 @@ export default function SuperAdminScreen({ navigation }) {
                             </Text>
                             <Text style={styles.backupRowMeta}>Kreiran: {new Date(backup.createdAt).toLocaleString('hr-HR')}</Text>
                             <Text style={styles.backupRowMeta}>Datoteka: {backup.fileName || '-'}</Text>
+                            {!!backup.collectionCounts && (
+                              <Text style={styles.backupRowMeta}>{formatCollectionCounts(backup.collectionCounts)}</Text>
+                            )}
                           </View>
                           <View style={styles.backupActionCol}>
                             <TouchableOpacity
@@ -832,6 +1046,71 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.6,
+  },
+  createSection: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  createHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+    gap: 8,
+  },
+  expandToggleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    borderRadius: 8,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+  },
+  expandToggleText: {
+    color: '#1d4ed8',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  createSubTitle: {
+    fontSize: 14,
+    color: '#374151',
+    fontWeight: '700',
+    marginBottom: 8,
+    marginTop: 4,
+  },
+  createInput: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    fontSize: 13,
+    color: '#111827',
+    marginBottom: 9,
+  },
+  createButton: {
+    marginTop: 4,
+    backgroundColor: '#1d4ed8',
+    borderRadius: 8,
+    paddingVertical: 11,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+  },
+  createButtonText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '700',
   },
   companiesSection: {
     padding: 16,

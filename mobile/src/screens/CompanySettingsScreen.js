@@ -79,6 +79,32 @@ const CompanySettingsScreen = ({ navigation }) => {
     return `${(value / (1024 * 1024)).toFixed(2)} MB`;
   };
 
+  const formatCollectionCounts = (collectionCounts) => {
+    if (!collectionCounts || typeof collectionCounts !== 'object') return '';
+
+    const labels = {
+      users: 'Korisnici',
+      elevators: 'Dizala',
+      services: 'Servisi',
+      repairs: 'Popravci',
+      events: 'Događaji',
+      chatRooms: 'Chat sobe',
+      messages: 'Poruke',
+      simCards: 'SIM',
+      workOrderCounters: 'Brojači RN',
+      workOrders: 'Radni nalozi',
+      serviceWorkOrders: 'Servisni nalozi',
+      auditLogs: 'Audit',
+    };
+
+    const parts = Object.entries(collectionCounts)
+      .filter(([, count]) => Number(count) > 0)
+      .map(([key, count]) => `${labels[key] || key}: ${count}`);
+
+    if (!parts.length) return 'Detalji: nema zapisa u kolekcijama';
+    return `Detalji: ${parts.join(' • ')}`;
+  };
+
   const loadBackups = async () => {
     try {
       setBackupLoading(true);
@@ -174,24 +200,37 @@ const CompanySettingsScreen = ({ navigation }) => {
     if (!backup?._id) return;
 
     Alert.alert(
-      'Vrati backup',
-      'Ova akcija će prepisati trenutne podatke firme podacima iz odabranog backupa. Nastaviti?',
+      'Vrati backup - 1/2',
+      `Pokrenuti vraćanje backupa "${backup.backupName || '-'}"?\n\nOva akcija će prepisati trenutne podatke firme.`,
       [
         { text: 'Odustani', style: 'cancel' },
         {
-          text: 'Vrati backup',
+          text: 'Nastavi',
           style: 'destructive',
-          onPress: async () => {
-            try {
-              setBackupActionLoading(true);
-              const response = await companyAPI.restoreBackup(backup._id);
-              Alert.alert('Uspjeh', response.data?.message || 'Backup je vraćen');
-              await loadCompanyInfo();
-            } catch (error) {
-              Alert.alert('Greška', error?.response?.data?.message || error.message || 'Restore nije uspio');
-            } finally {
-              setBackupActionLoading(false);
-            }
+          onPress: () => {
+            Alert.alert(
+              'Potvrda vraćanja - 2/2',
+              'Zadnji korak: potvrdi vraćanje odabranog backupa.\n\nTrenutni podaci će biti prepisani.',
+              [
+                { text: 'Ne, vrati nazad', style: 'cancel' },
+                {
+                  text: 'DA, VRATI BACKUP',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      setBackupActionLoading(true);
+                      const response = await companyAPI.restoreBackup(backup._id);
+                      Alert.alert('Uspjeh', response.data?.message || 'Backup je vraćen');
+                      await loadCompanyInfo();
+                    } catch (error) {
+                      Alert.alert('Greška', error?.response?.data?.message || error.message || 'Restore nije uspio');
+                    } finally {
+                      setBackupActionLoading(false);
+                    }
+                  },
+                },
+              ]
+            );
           },
         },
       ]
@@ -590,6 +629,9 @@ const CompanySettingsScreen = ({ navigation }) => {
                     Kreiran: {new Date(backup.createdAt).toLocaleString('hr-HR')}
                   </Text>
                   <Text style={styles.backupItemMeta}>Datoteka: {backup.fileName || '-'}</Text>
+                  {!!backup.collectionCounts && (
+                    <Text style={styles.backupItemMeta}>{formatCollectionCounts(backup.collectionCounts)}</Text>
+                  )}
                 </View>
                 <View style={styles.backupButtonsCol}>
                   <TouchableOpacity

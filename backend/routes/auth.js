@@ -283,6 +283,53 @@ router.get('/me', authenticate, (req, res) => {
   res.json(data);
 });
 
+// POST /api/auth/complete-first-login - Postavi novu lozinku nakon prvog logina
+router.post('/complete-first-login', authenticate, async (req, res) => {
+  try {
+    const novaLozinka = String(req.body?.novaLozinka || '');
+
+    if (!novaLozinka || novaLozinka.length < 8) {
+      return res.status(400).json({ message: 'Nova lozinka mora imati najmanje 8 znakova' });
+    }
+
+    const user = await User.findById(req.user._id);
+    if (!user || !user.aktivan) {
+      return res.status(404).json({ message: 'Korisnik nije pronađen' });
+    }
+
+    user.lozinka = novaLozinka;
+    user.mustChangePassword = false;
+    if (user.onboardingStatus === 'pending_setup') {
+      user.onboardingStatus = 'active';
+    }
+    user.privremenaLozinka = null;
+    await user.save();
+
+    await logAction({
+      companyId: user.companyId,
+      korisnikId: user._id,
+      akcija: 'UPDATE',
+      entitet: 'User',
+      entitetId: user._id,
+      entitetNaziv: `${user.ime} ${user.prezime}`,
+      ipAdresa: getClientIp(req),
+      opis: 'Korisnik je postavio novu lozinku nakon prvog logina',
+    });
+
+    const korisnikData = user.toJSON();
+    korisnikData.superAdmin = isSuperAdmin(user.email);
+
+    return res.json({
+      success: true,
+      message: 'Lozinka je uspješno ažurirana',
+      korisnik: korisnikData,
+    });
+  } catch (error) {
+    console.error('Complete first login greška:', error);
+    return res.status(500).json({ message: 'Greška pri ažuriranju lozinke' });
+  }
+});
+
 // Export isSuperAdmin za korištenje u drugim rutama
 router.isSuperAdmin = isSuperAdmin;
 

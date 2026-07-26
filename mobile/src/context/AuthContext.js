@@ -20,6 +20,7 @@ export const AuthProvider = ({ children }) => {
   const [isOnline, setIsOnline] = useState(false);
   const [serverAwake, setServerAwake] = useState(null); // null = nepoznato, false = spava, true = spreman
   const [companySetupRequired, setCompanySetupRequired] = useState(false); // Trebam li popuniti podatke firme?
+  const [firstLoginRequired, setFirstLoginRequired] = useState(false);
   const serverProbeRef = useRef(null);
   const userRef = useRef(null);
 
@@ -121,7 +122,11 @@ export const AuthProvider = ({ children }) => {
       });
 
       if (token && userData) {
-        setUser(JSON.parse(userData));
+        const parsedUser = JSON.parse(userData);
+        setUser(parsedUser);
+        setFirstLoginRequired(
+          Boolean(parsedUser?.mustChangePassword) || parsedUser?.onboardingStatus === 'pending_setup'
+        );
 
         try {
           const localElevators = elevatorDB.getAll?.() || [];
@@ -189,6 +194,9 @@ export const AuthProvider = ({ children }) => {
       await SecureStore.setItemAsync('userData', JSON.stringify(korisnik));
 
       setUser(korisnik);
+      setFirstLoginRequired(
+        Boolean(korisnik?.mustChangePassword) || korisnik?.onboardingStatus === 'pending_setup'
+      );
 
       // Ako je admin, provjeri je li firma "setup"
       if (korisnik.uloga === 'admin') {
@@ -244,54 +252,37 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const register = async (data) => {
+  const completeFirstLogin = async (novaLozinka) => {
     try {
       setLoading(true);
-      console.log('Pokušavam registraciju...', data.email);
+      const response = await authAPI.completeFirstLogin(novaLozinka);
+      const updatedUser = response?.data?.korisnik;
 
-      let response;
-      try {
-        response = await authAPI.publicRegister(data);
-      } catch (err) {
-        const status = err.response?.status || err.status;
-        const networkProblem = !err.response && !err.status || status === 502 || status === 503;
-        if (networkProblem) {
-          setLoading(false);
-          return { success: false, message: 'Server trenutno nije dostupan. Pokušajte ponovo.' };
-        }
-        setLoading(false);
-        return {
-          success: false,
-          message: err.response?.data?.message || err.message || 'Greška pri registraciji',
-        };
+      if (!updatedUser) {
+        throw new Error('Neispravan odgovor servera');
       }
 
-      const { token, refreshToken, korisnik } = response.data;
-      if (!token || !korisnik) {
-        throw new Error('Nevaljan registracijski odgovor');
-      }
-
-      await SecureStore.setItemAsync('userToken', token);
-      if (refreshToken) {
-        await SecureStore.setItemAsync('userRefreshToken', refreshToken);
-      }
-      await SecureStore.setItemAsync('userData', JSON.stringify(korisnik));
-
-      setUser(korisnik);
-      setCompanySetupRequired(true); // Nova firma uvijek treba setup
+      await SecureStore.setItemAsync('userData', JSON.stringify(updatedUser));
+      setUser(updatedUser);
+      setFirstLoginRequired(false);
       setLoading(false);
 
-      wakeBackendAndSync(true);
-
-      return { success: true };
+      return { success: true, message: response?.data?.message || 'Lozinka je ažurirana' };
     } catch (error) {
-      console.error('Register greška:', error);
+      console.error('Complete first login greška:', error);
       setLoading(false);
       return {
         success: false,
-        message: error.response?.data?.message || error.message || 'Greška pri registraciji',
+        message: error?.response?.data?.message || error?.message || 'Greška pri postavljanju lozinke',
       };
     }
+  };
+
+  const register = async () => {
+    return {
+      success: false,
+      message: 'Samostalna registracija je onemogućena. Račun kreira SuperAdmin.',
+    };
   };
 
   const logout = async () => {
@@ -305,6 +296,7 @@ export const AuthProvider = ({ children }) => {
       resetDatabase();
       setUser(null);
       setCompanySetupRequired(false);
+      setFirstLoginRequired(false);
       setServerAwake(null);
     } catch (error) {
       console.error('Logout greska:', error);
@@ -321,8 +313,10 @@ export const AuthProvider = ({ children }) => {
     serverAwake,
     companySetupRequired,
     setCompanySetupRequired,
+    firstLoginRequired,
     login,
     register,
+    completeFirstLogin,
     logout,
   };
 

@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext';
 
 // Screens
 import LoginScreen from '../screens/LoginScreen';
-import RegisterScreen from '../screens/RegisterScreen';
+import FirstLoginPasswordScreen from '../screens/FirstLoginPasswordScreen';
 import HomeScreen from '../screens/HomeScreen';
 import ElevatorsListScreen from '../screens/ElevatorsListScreen';
 import ElevatorDetailsScreen from '../screens/ElevatorDetailsScreen';
@@ -36,7 +36,7 @@ const Stack = createNativeStackNavigator();
 
 // Glavni navigation
 export default function Navigation() {
-  const { user, loading, companySetupRequired } = useAuth();
+  const { user, loading, companySetupRequired, firstLoginRequired } = useAuth();
 
   if (loading) {
     return (
@@ -51,8 +51,18 @@ export default function Navigation() {
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {user ? (
           <>
-            {/* Ako je admin i nije setup - prikaži FORCED CompanySettings ekran */}
-            {companySetupRequired ? (
+            {/* Prvo prisili promjenu lozinke za onboarding sigurnost */}
+            {firstLoginRequired ? (
+              <Stack.Screen
+                name="FirstLoginPassword"
+                component={FirstLoginPasswordScreen}
+                options={{
+                  headerShown: false,
+                  gestureEnabled: false,
+                  animationEnabled: true,
+                }}
+              />
+            ) : companySetupRequired ? (
               <Stack.Screen 
                 name="CompanySetup" 
                 component={CompanySettingsScreen}
@@ -94,7 +104,6 @@ export default function Navigation() {
         ) : (
           <>
             <Stack.Screen name="Login" component={LoginScreen} />
-            <Stack.Screen name="Register" component={RegisterScreen} />
           </>
         )}
       </Stack.Navigator>

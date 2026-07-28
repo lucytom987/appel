@@ -20,24 +20,45 @@ import { useFocusEffect } from '@react-navigation/native';
 import ms from '../utils/scale';
 
 export default function EditTrebaloBiScreen({ route, navigation }) {
-  const { repair } = route.params || {};
+  const { repair, returnTo } = route.params || {};
   const { user, isOnline, serverAwake } = useAuth();
   const userRole = ((user?.uloga || user?.role || '') || '').toLowerCase();
   const canDelete = userRole === 'admin' || userRole === 'menadzer' || userRole === 'manager';
 
+  const goBackToOrigin = useCallback(() => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+    navigation.navigate('Repairs', { activeList: returnTo || 'trebalo' });
+  }, [navigation, returnTo]);
+
+  const goBackAfterDelete = useCallback(() => {
+    if (typeof navigation.pop === 'function') {
+      try {
+        navigation.pop(2);
+        return;
+      } catch (e) {
+        // fallback below
+      }
+    }
+
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+    navigation.navigate('Repairs', { activeList: returnTo || 'trebalo' });
+  }, [navigation, returnTo]);
+
   useFocusEffect(
     useCallback(() => {
       const onBack = () => {
-        if (navigation.canGoBack()) {
-          navigation.goBack();
-          return true;
-        }
-        navigation.navigate('TrebaloBiDetails', { repair });
+        goBackToOrigin();
         return true;
       };
       const sub = BackHandler.addEventListener('hardwareBackPress', onBack);
       return () => sub.remove();
-    }, [navigation, repair])
+    }, [goBackToOrigin])
   );
 
   const baseRepair = useMemo(() => {
@@ -89,7 +110,7 @@ export default function EditTrebaloBiScreen({ route, navigation }) {
             }
             repairDB.delete(id);
             Alert.alert('Obrisano', 'Stavka je uklonjena', [
-              { text: 'OK', onPress: () => navigation.navigate('Repairs') },
+              { text: 'OK', onPress: goBackAfterDelete },
             ]);
           } catch (e) {
             Alert.alert('Greska', e?.message || 'Brisanje nije uspjelo');
@@ -133,14 +154,12 @@ export default function EditTrebaloBiScreen({ route, navigation }) {
       } else {
         repairDB.update(id, merged);
       }
-      Alert.alert('Spremljeno', 'Promjene su spremljene', [
-        { text: 'OK', onPress: () => navigation.navigate('TrebaloBiDetails', { repair: merged }) },
-      ]);
+      Alert.alert('Spremljeno', 'Promjene su spremljene', [{ text: 'OK', onPress: goBackToOrigin }]);
     } catch (e) {
       console.log('Greska pri spremanju "trebalo bi":', e?.message);
       repairDB.update(id, merged);
       Alert.alert('Spremanje lokalno', 'Promjene su snimljene lokalno i cekaju sync.', [
-        { text: 'OK', onPress: () => navigation.navigate('TrebaloBiDetails', { repair: merged }) },
+        { text: 'OK', onPress: goBackToOrigin },
       ]);
     } finally {
       setSaving(false);
@@ -150,7 +169,7 @@ export default function EditTrebaloBiScreen({ route, navigation }) {
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.navigate('TrebaloBiDetails', { repair })}>
+        <TouchableOpacity onPress={goBackToOrigin}>
           <Ionicons name="arrow-back" size={24} color="#1f2937" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Uredi "trebalo bi"</Text>

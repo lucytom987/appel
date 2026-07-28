@@ -1068,7 +1068,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
         </TouchableOpacity>
         <Text style={styles.headerTitle} numberOfLines={1}>{`Popravak "${elevator?.brojDizala || 'Dizalo'}"`}</Text>
         <TouchableOpacity
-          onPress={() => navigation.navigate('EditRepair', { repair: repairData })}
+          onPress={() => navigation.navigate('EditRepair', { repair: repairData, returnTo, filter })}
           disabled={isRepairLocked}
           style={isRepairLocked && styles.disabledAction}
         >

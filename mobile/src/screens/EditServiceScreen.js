@@ -18,8 +18,8 @@ import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
-import { elevatorDB, serviceDB, userDB } from '../database/db';
-import { servicesAPI, usersAPI } from '../services/api';
+import { elevatorDB, serviceDB, userDB, repairDB } from '../database/db';
+import { servicesAPI, usersAPI, repairsAPI } from '../services/api';
 import ms from '../utils/scale';
 import { applyUserPickerFilter } from '../utils/userPickerFilters';
 
@@ -48,7 +48,6 @@ export default function EditServiceScreen({ route, navigation }) {
   const { user, isOnline, serverAwake } = useAuth();
   const insets = useSafeAreaInsets();
   const scrollViewRef = useRef(null);
-  const napomeneInputRef = useRef(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -115,11 +114,12 @@ export default function EditServiceScreen({ route, navigation }) {
   const [form, setForm] = useState(() => ({
     serviceDate: parseDate(freshService.datum) || new Date(),
     nextServiceDate: parseDate(freshService.sljedeciServis) || new Date(),
-    napomene: freshService.napomene || '',
     utroseniMaterijal: freshService.utroseniMaterijal || '',
     kolegaId: Array.isArray(freshService.dodatniServiseri) && freshService.dodatniServiseri.length
       ? (freshService.dodatniServiseri[0]?._id || freshService.dodatniServiseri[0]?.id || freshService.dodatniServiseri[0])
       : null,
+    createTrebaloBi: false,
+    trebaloBiText: '',
   }));
 
   const [checklistState, setChecklistState] = useState(initialChecklist);
@@ -230,7 +230,7 @@ export default function EditServiceScreen({ route, navigation }) {
       elevatorId,
       serviserID: freshService.serviserID || user?._id,
       datum: form.serviceDate?.toISOString?.() || freshService.datum,
-      napomene: form.napomene,
+      napomene: '',
       utroseniMaterijal: form.utroseniMaterijal,
       imaNedostataka: freshService.imaNedostataka || false,
       nedostaci: freshService.nedostaci || [],
@@ -238,6 +238,29 @@ export default function EditServiceScreen({ route, navigation }) {
       dodatniServiseri: form.kolegaId ? [form.kolegaId] : [],
       checklist: buildChecklistPayload(),
     };
+
+    const trebaloBiText = String(form.trebaloBiText || '').trim();
+    const shouldCreateTrebaloBi = Boolean(form.createTrebaloBi && trebaloBiText);
+    const reporterName = `${user?.ime || user?.firstName || ''} ${user?.prezime || user?.lastName || ''}`.trim()
+      || user?.name
+      || '';
+    const trebaloBiPayload = shouldCreateTrebaloBi
+      ? {
+          elevatorId,
+          serviserID: user?._id || user?.id,
+          datumPrijave: new Date().toISOString(),
+          datumPopravka: null,
+          opisKvara: trebaloBiText,
+          opisPopravka: '',
+          status: 'pending',
+          radniNalogPotpisan: false,
+          popravkaUPotpunosti: false,
+          napomene: '',
+          prijavio: reporterName,
+          primioPoziv: reporterName,
+          trebaloBi: true,
+        }
+      : null;
 
     const mergedLocal = {
       ...freshService,
@@ -253,21 +276,48 @@ export default function EditServiceScreen({ route, navigation }) {
         const res = await servicesAPI.update(serviceId, payload);
         const updated = res.data?.data || res.data || {};
         serviceDB.update(serviceId, { ...mergedLocal, ...updated, synced: 1, sync_status: 'synced' });
+
+        if (trebaloBiPayload) {
+          try {
+            const repairRes = await repairsAPI.create(trebaloBiPayload);
+            const createdRepair = repairRes?.data?.data || repairRes?.data || {};
+            repairDB.insert({
+              id: createdRepair._id || createdRepair.id,
+              ...createdRepair,
+              trebaloBi: true,
+              synced: 1,
+            });
+          } catch (trebaloErr) {
+            console.log('Online create TrebaloBi failed, saving local', trebaloErr?.message || trebaloErr);
+            const localRepairId = `local_trebalo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            repairDB.insert({ id: localRepairId, ...trebaloBiPayload, synced: 0 });
+          }
+        }
       } else {
         serviceDB.update(serviceId, mergedLocal);
+        if (trebaloBiPayload) {
+          const localRepairId = `local_trebalo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          repairDB.insert({ id: localRepairId, ...trebaloBiPayload, synced: 0 });
+        }
       }
 
       const updatedLocal = { ...freshService, ...payload };
       onSave?.(updatedLocal);
-      Alert.alert('Spremljeno', 'Servis je ažuriran', [
+      const trebaloBiMsg = trebaloBiPayload ? '\nDodana je nova "Trebalo bi" stavka.' : '';
+      Alert.alert('Spremljeno', `Servis je ažuriran.${trebaloBiMsg}`, [
         { text: 'OK', onPress: () => navigation.goBack() },
       ]);
     } catch (e) {
       console.log('Update service fallback lokalno', e?.message);
       serviceDB.update(serviceId, mergedLocal);
+      if (trebaloBiPayload) {
+        const localRepairId = `local_trebalo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        repairDB.insert({ id: localRepairId, ...trebaloBiPayload, synced: 0 });
+      }
       const updatedLocal = { ...freshService, ...payload };
       onSave?.(updatedLocal);
-      Alert.alert('Spremanje lokalno', 'Promjene su spremljene offline i čekaju sync.', [
+      const trebaloBiMsg = trebaloBiPayload ? '\n"Trebalo bi" stavka spremljena je lokalno.' : '';
+      Alert.alert('Spremanje lokalno', `Promjene su spremljene offline i čekaju sync.${trebaloBiMsg}`, [
         { text: 'OK', onPress: () => navigation.goBack() },
       ]);
     } finally {
@@ -276,19 +326,6 @@ export default function EditServiceScreen({ route, navigation }) {
   };
 
   const formatDate = (date) => date ? date.toLocaleDateString('hr-HR') : 'Nije postavljeno';
-
-  const handleNapomeneInputFocus = () => {
-    // Scrollaj do napomena polja kada se fokusira
-    setTimeout(() => {
-      napomeneInputRef.current?.measureLayout?.(
-        scrollViewRef.current,
-        (x, y) => {
-          scrollViewRef.current?.scrollTo({ y: y - 100, animated: true });
-        },
-        () => {}
-      );
-    }, 100);
-  };
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -429,16 +466,28 @@ export default function EditServiceScreen({ route, navigation }) {
           </View>
 
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Napomene</Text>
-            <TextInput
-              ref={napomeneInputRef}
-              style={styles.textArea}
-              multiline
-              placeholder="Napomene"
-              value={form.napomene}
-              onChangeText={(t) => setForm((prev) => ({ ...prev, napomene: t }))}
-              onFocus={handleNapomeneInputFocus}
-            />
+            <Text style={styles.sectionTitle}>Trebalo bi (opcionalno)</Text>
+            <TouchableOpacity
+              style={styles.trebaloBiToggle}
+              onPress={() => setForm((prev) => ({ ...prev, createTrebaloBi: !prev.createTrebaloBi }))}
+            >
+              <Ionicons
+                name={form.createTrebaloBi ? 'checkbox' : 'square-outline'}
+                size={22}
+                color={form.createTrebaloBi ? '#f59e0b' : '#9ca3af'}
+              />
+              <Text style={styles.trebaloBiToggleText}>Dodaj novu "Trebalo bi" stavku</Text>
+            </TouchableOpacity>
+
+            {form.createTrebaloBi && (
+              <TextInput
+                style={[styles.textArea, { marginTop: 10 }]}
+                multiline
+                placeholder="Što treba napraviti / nabaviti..."
+                value={form.trebaloBiText}
+                onChangeText={(t) => setForm((prev) => ({ ...prev, trebaloBiText: t }))}
+              />
+            )}
           </View>
 
           <View style={styles.card}>
@@ -513,6 +562,8 @@ const styles = StyleSheet.create({
   statusBadgeOk: { backgroundColor: '#dcfce7', borderColor: '#22c55e' },
   statusBadgeFail: { backgroundColor: '#fee2e2', borderColor: '#ef4444' },
   statusBadgeText: { fontSize: 12, color: '#111827', fontWeight: '600' },
+  trebaloBiToggle: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
+  trebaloBiToggleText: { fontSize: 14, color: '#92400e', fontWeight: '700' },
   textArea: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, padding: 12, minHeight: 100, textAlignVertical: 'top', color: '#0f172a' },
   saveBtn: { marginTop: 16, backgroundColor: '#2563eb', paddingVertical: 14, alignItems: 'center', borderRadius: 10, marginHorizontal: 16 },
   saveBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },

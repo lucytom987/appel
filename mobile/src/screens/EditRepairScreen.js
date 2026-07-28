@@ -37,7 +37,7 @@ function normalize(value) {
     .replace(/đ/g, 'd');
 }
 
-const confirmDelete = (baseRepair, navigation, setSaving, online, canDelete) => {
+const confirmDelete = (baseRepair, navigation, setSaving, online, canDelete, onDeleteDone) => {
   if (!canDelete) {
     Alert.alert('Nedovoljno prava', 'Samo administratori ili menadžeri mogu brisati popravke.');
     return;
@@ -61,7 +61,7 @@ const confirmDelete = (baseRepair, navigation, setSaving, online, canDelete) => 
               await repairsAPI.delete(id);
               repairDB.delete(id);
               Alert.alert('Obrisano', 'Popravak je obrisan', [
-                { text: 'OK', onPress: () => navigation.navigate('Repairs') },
+                { text: 'OK', onPress: onDeleteDone },
               ]);
               return;
             } catch (err) {
@@ -69,7 +69,7 @@ const confirmDelete = (baseRepair, navigation, setSaving, online, canDelete) => 
               if (status === 404) {
                 repairDB.delete(id);
                 Alert.alert('Info', 'Popravak je već obrisan na serveru. Uklonjeno lokalno.', [
-                  { text: 'OK', onPress: () => navigation.navigate('Repairs') },
+                  { text: 'OK', onPress: onDeleteDone },
                 ]);
                 return;
               }
@@ -79,7 +79,7 @@ const confirmDelete = (baseRepair, navigation, setSaving, online, canDelete) => 
           // Offline ili mrežna greška – označi za brisanje lokalno
           repairDB.delete(id);
           Alert.alert('Spremljeno lokalno', 'Popravak je označen za brisanje i čeka sync.', [
-            { text: 'OK', onPress: () => navigation.navigate('Repairs') },
+            { text: 'OK', onPress: onDeleteDone },
           ]);
         } catch (e) {
           Alert.alert('Greska', e?.message || 'Brisanje nije uspjelo');
@@ -92,25 +92,46 @@ const confirmDelete = (baseRepair, navigation, setSaving, online, canDelete) => 
 };
 
 export default function EditRepairScreen({ route, navigation }) {
-  const { repair } = route.params;
+  const { repair, returnTo = 'repairs', filter } = route.params || {};
   const { user, isOnline, serverAwake } = useAuth();
   const userRole = ((user?.uloga || user?.role || '') || '').toLowerCase();
   const canDelete = userRole === 'admin' || userRole === 'menadzer' || userRole === 'manager';
+
+  const goBackToOrigin = useCallback(() => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+    navigation.navigate('Repairs', { activeList: returnTo, filter });
+  }, [navigation, returnTo, filter]);
+
+  const goBackAfterDelete = useCallback(() => {
+    if (typeof navigation.pop === 'function') {
+      try {
+        navigation.pop(2);
+        return;
+      } catch (e) {
+        // fallback below
+      }
+    }
+
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+    navigation.navigate('Repairs', { activeList: returnTo, filter });
+  }, [navigation, returnTo, filter]);
 
   // Hardverski back vraća na detalje popravka
   useFocusEffect(
     useCallback(() => {
       const onBack = () => {
-        if (navigation.canGoBack()) {
-          navigation.goBack();
-          return true;
-        }
-        navigation.navigate('Repairs');
+        goBackToOrigin();
         return true;
       };
       const sub = BackHandler.addEventListener('hardwareBackPress', onBack);
       return () => sub.remove();
-    }, [navigation, repair])
+    }, [goBackToOrigin])
   );
 
   // Učitaj svježi zapis ako postoji u lokalnoj bazi
@@ -296,7 +317,7 @@ export default function EditRepairScreen({ route, navigation }) {
     } finally {
       setSaving(false);
       Alert.alert('Spremljeno', 'Podaci o popravku su ažurirani', [
-        { text: 'OK', onPress: () => navigation.navigate('Repairs') },
+        { text: 'OK', onPress: goBackToOrigin },
       ]);
     }
   };
@@ -305,13 +326,7 @@ export default function EditRepairScreen({ route, navigation }) {
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <View style={styles.header}>
         <TouchableOpacity
-          onPress={() => {
-            if (navigation.canGoBack()) {
-              navigation.goBack();
-            } else {
-              navigation.navigate('Repairs');
-            }
-          }}
+          onPress={goBackToOrigin}
         >
           <Ionicons name="arrow-back" size={24} color="#1f2937" />
         </TouchableOpacity>
@@ -512,7 +527,7 @@ export default function EditRepairScreen({ route, navigation }) {
 
         <TouchableOpacity
           style={styles.deleteButton}
-          onPress={() => confirmDelete(baseRepair, navigation, setSaving, online, canDelete)}
+          onPress={() => confirmDelete(baseRepair, navigation, setSaving, online, canDelete, goBackAfterDelete)}
           disabled={saving}
         >
             <Ionicons name="trash" size={20} color="#b91c1c" />

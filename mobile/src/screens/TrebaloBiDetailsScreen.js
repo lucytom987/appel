@@ -17,9 +17,21 @@ export default function TrebaloBiDetailsScreen({ route, navigation }) {
   const { repair, returnTo } = route.params || {};
   const [data, setData] = useState(repair || {});
   const [saving, setSaving] = useState(false);
+  const repairId = repair?._id || repair?.id;
+
+  const reloadFromLocal = useCallback(() => {
+    if (!repairId) return;
+    try {
+      const fresh = repairDB.getById(repairId);
+      if (fresh) setData((prev) => ({ ...prev, ...fresh }));
+    } catch (e) {
+      console.log('Ne mogu ucitati "trebalo bi" iz baze:', e?.message);
+    }
+  }, [repairId]);
 
   useFocusEffect(
     useCallback(() => {
+      reloadFromLocal();
       const onBack = () => {
         if (navigation.canGoBack()) {
           navigation.goBack();
@@ -30,20 +42,13 @@ export default function TrebaloBiDetailsScreen({ route, navigation }) {
       };
       const sub = BackHandler.addEventListener('hardwareBackPress', onBack);
       return () => sub.remove();
-    }, [navigation])
+    }, [navigation, returnTo, reloadFromLocal])
   );
 
-  // Load fresh copy from local DB if available
+  // inicijalni fallback load
   useEffect(() => {
-    const id = repair?._id || repair?.id;
-    if (!id) return;
-    try {
-      const fresh = repairDB.getById(id);
-      if (fresh) setData((prev) => ({ ...prev, ...fresh }));
-    } catch (e) {
-      console.log('Ne mogu ucitati "trebalo bi" iz baze:', e?.message);
-    }
-  }, [repair]);
+    reloadFromLocal();
+  }, [reloadFromLocal]);
 
   const elevatorId = (typeof data.elevatorId === 'object' && data.elevatorId !== null)
     ? (data.elevatorId._id || data.elevatorId.id)
@@ -162,7 +167,7 @@ export default function TrebaloBiDetailsScreen({ route, navigation }) {
         <View style={styles.buttonRow}>
           <TouchableOpacity
             style={[styles.button, styles.editButton]}
-            onPress={() => navigation.navigate('EditTrebaloBi', { repair: data })}
+            onPress={() => navigation.navigate('EditTrebaloBi', { repair: data, returnTo })}
           >
             <Ionicons name="create-outline" size={18} color="#2563eb" />
             <Text style={styles.editText}>Uredi</Text>

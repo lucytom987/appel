@@ -17,8 +17,8 @@ import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as SecureStore from 'expo-secure-store';
 import { useAuth } from '../context/AuthContext';
-import { serviceDB, elevatorDB, userDB } from '../database/db';
-import { servicesAPI, serviceWorkOrdersAPI, usersAPI } from '../services/api';
+import { serviceDB, elevatorDB, userDB, repairDB } from '../database/db';
+import { servicesAPI, serviceWorkOrdersAPI, usersAPI, repairsAPI } from '../services/api';
 import { usePhotoUpload } from '../hooks/usePhotoUpload';
 import ms from '../utils/scale';
 import { applyUserPickerFilter } from '../utils/userPickerFilters';
@@ -50,6 +50,7 @@ export default function AddServiceScreen({ navigation, route }) {
   const [applyToAll, setApplyToAll] = useState(false);
   const [includeElevators, setIncludeElevators] = useState({});
   const [perElevatorChecklist, setPerElevatorChecklist] = useState({});
+  const [perElevatorTrebaloBi, setPerElevatorTrebaloBi] = useState({});
   const [korisnici, setKorisnici] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [showKolege, setShowKolege] = useState(false);
@@ -117,6 +118,7 @@ export default function AddServiceScreen({ navigation, route }) {
     // inicijalno uključi sva dizala i setiraj prazne checkliste
     const initInclude = {};
     const initChecklist = {};
+    const initTrebaloBi = {};
     elevatorsOnAddress.forEach((e) => {
       initInclude[e._id || e.id] = true;
       initChecklist[e._id || e.id] = {
@@ -130,9 +132,14 @@ export default function AddServiceScreen({ navigation, route }) {
         brakeCheck: false,
         cableInspection: false,
       };
+      initTrebaloBi[e._id || e.id] = {
+        enabled: false,
+        text: '',
+      };
     });
     setIncludeElevators(initInclude);
     setPerElevatorChecklist(initChecklist);
+    setPerElevatorTrebaloBi(initTrebaloBi);
   }, [elevatorsOnAddress]);
 
   // Izračunaj interval servisa u mjesecima (default 1 ako nije postavljen)
@@ -142,7 +149,6 @@ export default function AddServiceScreen({ navigation, route }) {
 
   const [formData, setFormData] = useState({
     serviceDate: new Date(),
-    napomene: '',
     utroseniMaterijal: '',
     nextServiceDate: (() => {
       const d = new Date();
@@ -244,6 +250,32 @@ export default function AddServiceScreen({ navigation, route }) {
     }));
   };
 
+  const toggleTrebaloBiForElevator = (elevatorId) => {
+    setPerElevatorTrebaloBi((prev) => {
+      const current = prev[elevatorId] || { enabled: false, text: '' };
+      return {
+        ...prev,
+        [elevatorId]: {
+          ...current,
+          enabled: !current.enabled,
+        },
+      };
+    });
+  };
+
+  const setTrebaloBiTextForElevator = (elevatorId, text) => {
+    setPerElevatorTrebaloBi((prev) => {
+      const current = prev[elevatorId] || { enabled: false, text: '' };
+      return {
+        ...prev,
+        [elevatorId]: {
+          ...current,
+          text,
+        },
+      };
+    });
+  };
+
   // Funkcija koja pronalazi duplikate servisa na adresi za isti datum
   const findDuplicateServices = () => {
     const serviceDate = formData.serviceDate.toISOString().split('T')[0]; // DD-MM-YYYY format
@@ -314,8 +346,11 @@ export default function AddServiceScreen({ navigation, route }) {
       if (!targets.length) {
         throw new Error('Odaberite barem jedno dizalo');
       }
+
       let successCount = 0;
       let failCount = 0;
+      let trebaloBiCount = 0;
+      let trebaloBiLocalCount = 0;
 
       const buildChecklistPayload = (cid) => {
         const state = perElevatorChecklist[cid] || baseChecklist;
@@ -333,13 +368,50 @@ export default function AddServiceScreen({ navigation, route }) {
       const serviceDataBase = {
         serviserID: user._id,
         datum: formData.serviceDate.toISOString(),
-        napomene: formData.napomene,
+        napomene: '',
         utroseniMaterijal: formData.utroseniMaterijal,
         imaNedostataka: false,
         nedostaci: [],
         sljedeciServis: formData.nextServiceDate.toISOString(),
         dodatniServiseri: formData.kolegaId ? [formData.kolegaId] : [],
         notePhotos: notePhotos,
+      };
+
+      const buildServicePayload = (target) => {
+        const targetId = target._id || target.id;
+
+        return {
+          ...serviceDataBase,
+          checklist: buildChecklistPayload(targetId),
+          elevatorId: targetId,
+        };
+      };
+
+      const buildTrebaloBiPayload = (target) => {
+        const targetId = target._id || target.id;
+        const cfg = perElevatorTrebaloBi[targetId] || { enabled: false, text: '' };
+        const note = String(cfg.text || '').trim();
+        if (!cfg.enabled || !note) return null;
+
+        const reporterName = `${user?.ime || user?.firstName || ''} ${user?.prezime || user?.lastName || ''}`.trim()
+          || user?.name
+          || '';
+
+        return {
+          elevatorId: targetId,
+          serviserID: user?._id || user?.id,
+          datumPrijave: new Date().toISOString(),
+          datumPopravka: null,
+          opisKvara: note,
+          opisPopravka: '',
+          status: 'pending',
+          radniNalogPotpisan: false,
+          popravkaUPotpunosti: false,
+          napomene: '',
+          prijavio: reporterName,
+          primioPoziv: reporterName,
+          trebaloBi: true,
+        };
       };
 
       // Provjeri je li offline korisnik (demo korisnik)
@@ -350,8 +422,16 @@ export default function AddServiceScreen({ navigation, route }) {
         console.log('📱 Demo/offline korisnik - dodajem servise lokalno bez API poziva');
         targets.forEach((target, idx) => {
           const localId = 'local_' + Date.now() + '_' + idx + '_' + Math.random().toString(36).substr(2, 9);
-          const payload = { ...serviceDataBase, checklist: buildChecklistPayload(target._id || target.id), elevatorId: target._id || target.id };
+          const payload = buildServicePayload(target);
           serviceDB.insert({ id: localId, ...payload, synced: 0 });
+
+          const trebaloBiPayload = buildTrebaloBiPayload(target);
+          if (trebaloBiPayload) {
+            const localRepairId = `local_trebalo_${Date.now()}_${idx}_${Math.random().toString(36).substr(2, 9)}`;
+            repairDB.insert({ id: localRepairId, ...trebaloBiPayload, synced: 0 });
+            trebaloBiLocalCount++;
+          }
+
           try {
             const elev = elevatorDB.getById(target._id || target.id);
             if (elev) {
@@ -361,13 +441,18 @@ export default function AddServiceScreen({ navigation, route }) {
           successCount++;
         });
 
-        Alert.alert('Uspjeh', `Servisi dodani lokalno za ${successCount}/${targets.length} dizala (sinkronizacija kad budete online)`, [
+        const extra = trebaloBiLocalCount > 0
+          ? `\nDodano "trebalo bi" stavki: ${trebaloBiLocalCount} (lokalno).`
+          : '';
+        Alert.alert('Uspjeh', `Servisi dodani lokalno za ${successCount}/${targets.length} dizala (sinkronizacija kad budete online)${extra}`, [
           { text: 'OK', onPress: () => navigation.navigate('Home') }
         ]);
       } else {
         const createdOnlineServiceIds = [];
-        for (const target of targets) {
-          const payload = { ...serviceDataBase, checklist: buildChecklistPayload(target._id || target.id), elevatorId: target._id || target.id };
+        for (let idx = 0; idx < targets.length; idx += 1) {
+          const target = targets[idx];
+          const payload = buildServicePayload(target);
+          const trebaloBiPayload = buildTrebaloBiPayload(target);
           try {
             const response = await servicesAPI.create(payload);
             const created = response.data?.data || response.data;
@@ -390,6 +475,25 @@ export default function AddServiceScreen({ navigation, route }) {
               synced: 1,
             });
 
+            if (trebaloBiPayload) {
+              try {
+                const repairRes = await repairsAPI.create(trebaloBiPayload);
+                const createdRepair = repairRes?.data?.data || repairRes?.data || {};
+                repairDB.insert({
+                  id: createdRepair._id || createdRepair.id,
+                  ...createdRepair,
+                  trebaloBi: true,
+                  synced: 1,
+                });
+                trebaloBiCount++;
+              } catch (trebaloErr) {
+                console.log('Trebalo bi online create failed, saving local:', trebaloErr?.message || trebaloErr);
+                const localRepairId = `local_trebalo_${Date.now()}_${idx}_${Math.random().toString(36).substr(2, 9)}`;
+                repairDB.insert({ id: localRepairId, ...trebaloBiPayload, synced: 0 });
+                trebaloBiLocalCount++;
+              }
+            }
+
             if (createdId) createdOnlineServiceIds.push(String(createdId));
 
             try {
@@ -407,6 +511,11 @@ export default function AddServiceScreen({ navigation, route }) {
             }
             const localId = 'local_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
             serviceDB.insert({ id: localId, ...payload, synced: 0 });
+            if (trebaloBiPayload) {
+              const localRepairId = `local_trebalo_${Date.now()}_${idx}_${Math.random().toString(36).substr(2, 9)}`;
+              repairDB.insert({ id: localRepairId, ...trebaloBiPayload, synced: 0 });
+              trebaloBiLocalCount++;
+            }
             try {
               const elev = elevatorDB.getById(payload.elevatorId);
               if (elev) {
@@ -418,9 +527,13 @@ export default function AddServiceScreen({ navigation, route }) {
         }
 
         const baseTitle = failCount === 0 ? 'Uspjeh' : 'Djelomični uspjeh';
-        const baseMessage = failCount === 0
+        const serviceMessage = failCount === 0
           ? `Servisi logirani za ${successCount}/${targets.length} dizala.`
           : `Logirano ${successCount}/${targets.length}, ${failCount} spremljeno lokalno (sync kasnije).`;
+        const trebaloMessage = (trebaloBiCount || trebaloBiLocalCount)
+          ? `\n"Trebalo bi" stavke: online ${trebaloBiCount}, lokalno ${trebaloBiLocalCount}.`
+          : '';
+        const baseMessage = `${serviceMessage}${trebaloMessage}`;
 
         if (createdOnlineServiceIds.length === 1) {
           const serviceIdForWorkOrder = createdOnlineServiceIds[0];
@@ -656,25 +769,37 @@ export default function AddServiceScreen({ navigation, route }) {
                         </View>
                       </View>
                     ))}
+
+                    <View style={styles.trebaloBiWrap}>
+                      <TouchableOpacity
+                        style={styles.trebaloBiToggle}
+                        onPress={() => toggleTrebaloBiForElevator(cid)}
+                      >
+                        <Ionicons
+                          name={perElevatorTrebaloBi[cid]?.enabled ? 'checkbox' : 'square-outline'}
+                          size={22}
+                          color={perElevatorTrebaloBi[cid]?.enabled ? '#f59e0b' : '#9ca3af'}
+                        />
+                        <Text style={styles.trebaloBiToggleText}>Dodaj "Trebalo bi" stavku</Text>
+                      </TouchableOpacity>
+
+                      {perElevatorTrebaloBi[cid]?.enabled && (
+                        <TextInput
+                          style={[styles.input, styles.trebaloBiInput]}
+                          placeholder="Što treba napraviti / nabaviti..."
+                          value={perElevatorTrebaloBi[cid]?.text || ''}
+                          onChangeText={(text) => setTrebaloBiTextForElevator(cid, text)}
+                          multiline
+                          numberOfLines={3}
+                          textAlignVertical="top"
+                        />
+                      )}
+                    </View>
                   </View>
                 )}
               </View>
             );
           })}
-        </View>
-
-        {/* Napomene */}
-        <View style={styles.section}>
-          <Text style={styles.label}>Napomene</Text>
-          <TextInput
-            style={[styles.input, styles.textArea]}
-            value={formData.napomene}
-            onChangeText={(text) => setFormData(prev => ({ ...prev, napomene: text }))}
-            placeholder="Dodatne napomene..."
-            multiline
-            numberOfLines={3}
-            textAlignVertical="top"
-          />
         </View>
 
         <View style={styles.section}>
@@ -944,6 +1069,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+  },
+  trebaloBiWrap: {
+    marginTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+    paddingTop: 10,
+  },
+  trebaloBiToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  trebaloBiToggleText: {
+    fontSize: 14,
+    color: '#92400e',
+    fontWeight: '700',
+  },
+  trebaloBiInput: {
+    marginTop: 8,
+    minHeight: 90,
   },
   checkbox: {
     width: 24,

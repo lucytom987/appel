@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { repairDB, elevatorDB, userDB } from '../database/db';
+import { repairDB, elevatorDB, userDB, serviceDB } from '../database/db';
 import { syncAll } from '../services/syncService';
 import { useAuth } from '../context/AuthContext';
 import { workOrdersAPI } from '../services/api';
@@ -185,6 +185,46 @@ export default function RepairsListScreen({ navigation, route }) {
 
     const repairsOnly = periodFiltered.filter((r) => !r.trebaloBi);
     const trebalo = periodFiltered.filter((r) => r.trebaloBi);
+
+    // U "Trebalo bi" listu dodaj i servisne napomene kako bi sve bilo na jednom mjestu.
+    const serviceNoteItems = (serviceDB.getAll?.() || [])
+      .filter((service) => service && typeof service === 'object')
+      .filter((service) => !service.is_deleted)
+      .map((service) => {
+        const note = safeText(service.napomene || service.notes, '').trim();
+        if (!note) return null;
+
+        const rawElevatorId = typeof service.elevatorId === 'object' && service.elevatorId !== null
+          ? service.elevatorId._id || service.elevatorId.id
+          : service.elevatorId;
+        const elevator = rawElevatorId ? elevatorDB.getById(rawElevatorId) : null;
+
+        if (!elevator || elevator.is_deleted || elevator.status === 'neaktivan') {
+          return null;
+        }
+
+        const serviceDate = service.datum || service.serviceDate || service.kreiranDatum || service.azuriranDatum;
+
+        return {
+          id: `service_note_${service._id || service.id}`,
+          _id: `service_note_${service._id || service.id}`,
+          elevatorId: rawElevatorId,
+          opisKvara: note,
+          napomene: note,
+          status: 'pending',
+          trebaloBi: true,
+          isServiceNote: true,
+          sourceServiceId: service._id || service.id,
+          datumPrijave: serviceDate,
+          synced: service.synced === 0 ? 0 : 1,
+        };
+      })
+      .filter(Boolean)
+      .filter((item) => isInSelectedPeriod(item));
+
+    const mergedTrebalo = [...trebalo, ...serviceNoteItems].sort(
+      (a, b) => new Date(b.datumPrijave || b.kreiranDatum || 0) - new Date(a.datumPrijave || a.kreiranDatum || 0)
+    );
     const nepotpisani = periodFiltered.filter((r) => !r.trebaloBi && !r.radniNalogPotpisan);
 
     let filtered = repairsOnly;
@@ -197,7 +237,7 @@ export default function RepairsListScreen({ navigation, route }) {
     }
 
     setFilteredRepairs(filtered);
-    setTrebaloBiList(trebalo);
+    setTrebaloBiList(mergedTrebalo);
   }, [repairs, filter, isInSelectedPeriod, periodFilter]);
 
   useEffect(() => {
@@ -263,6 +303,7 @@ export default function RepairsListScreen({ navigation, route }) {
 
     const display = buildElevatorDisplay(elevator);
 
+    const isServiceNote = Boolean(item.isServiceNote);
     const opisKvara = safeText(item.opisKvara, 'Bez opisa');
     const isSynced = Boolean(item.synced);
 
@@ -352,14 +393,27 @@ export default function RepairsListScreen({ navigation, route }) {
     return (
       <TouchableOpacity
         style={[styles.repairCard, { borderColor: getStatusColor(item) }]}
-        onPress={() => navigation.navigate(
-          isTrebalo ? 'TrebaloBiDetails' : 'RepairDetails',
-          {
-            repair: item,
-            returnTo: isTrebalo ? 'trebalo' : 'repairs',
-            filter,
+        onPress={() => {
+          if (isServiceNote) {
+            const service = serviceDB.getById?.(item.sourceServiceId);
+            if (service) {
+              navigation.navigate('ServiceDetails', { service });
+              return;
+            }
+
+            navigation.navigate('ElevatorDetails', { elevator });
+            return;
           }
-        )}
+
+          navigation.navigate(
+            isTrebalo ? 'TrebaloBiDetails' : 'RepairDetails',
+            {
+              repair: item,
+              returnTo: isTrebalo ? 'trebalo' : 'repairs',
+              filter,
+            }
+          );
+        }}
         activeOpacity={0.8}
       >
         <View style={styles.repairContent}>
@@ -369,9 +423,17 @@ export default function RepairsListScreen({ navigation, route }) {
             </View>
             <View style={styles.iconRow}>
               <Ionicons
-                name={isTrebalo ? (isResolvedTrebalo ? 'checkbox' : 'square-outline') : (item.radniNalogPotpisan ? 'document-text-outline' : 'document-outline')}
+                name={isServiceNote
+                  ? 'reader-outline'
+                  : (isTrebalo
+                    ? (isResolvedTrebalo ? 'checkbox' : 'square-outline')
+                    : (item.radniNalogPotpisan ? 'document-text-outline' : 'document-outline'))}
                 size={18}
-                color={isTrebalo ? (isResolvedTrebalo ? '#16a34a' : '#f59e0b') : (item.radniNalogPotpisan ? '#16a34a' : '#ef4444')}
+                color={isServiceNote
+                  ? '#2563eb'
+                  : (isTrebalo
+                    ? (isResolvedTrebalo ? '#16a34a' : '#f59e0b')
+                    : (item.radniNalogPotpisan ? '#16a34a' : '#ef4444'))}
                 style={{ marginRight: 8 }}
               />
               <Ionicons
@@ -382,11 +444,15 @@ export default function RepairsListScreen({ navigation, route }) {
             </View>
           </View>
 
+          {isServiceNote ? (
+            <Text style={styles.serviceNoteLabel}>Servisna napomena</Text>
+          ) : null}
+
           <Text style={styles.repairDescription} numberOfLines={3}>
             {opisKvara}
           </Text>
 
-          {reporterLabel && reportedDateLabel ? (
+          {!isServiceNote && reporterLabel && reportedDateLabel ? (
             <TouchableOpacity style={styles.reporterRow} onPress={openFlowPopup} activeOpacity={0.75}>
               <Ionicons name="person-add-outline" size={15} color="#dc2626" />
               <Text style={styles.reporterText}>{reporterLabel} • {reportedDateLabel}</Text>
@@ -394,7 +460,7 @@ export default function RepairsListScreen({ navigation, route }) {
             </TouchableOpacity>
           ) : null}
 
-          {completedByLabel ? (
+          {!isServiceNote && completedByLabel ? (
             <TouchableOpacity style={styles.completedByRow} onPress={openFlowPopup} activeOpacity={0.75}>
               <Ionicons name="person-circle-outline" size={15} color="#1d4ed8" />
               <Text style={styles.completedByText}>Odradio: {completedByLabel}</Text>
@@ -824,6 +890,17 @@ const styles = StyleSheet.create({
     color: '#4b5563',
     lineHeight: 20,
     marginTop: 4,
+  },
+  serviceNoteLabel: {
+    marginTop: 4,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#1d4ed8',
+    backgroundColor: '#e0ecff',
   },
   reporterRow: {
     flexDirection: 'row',

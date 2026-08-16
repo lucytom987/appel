@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -22,6 +22,19 @@ import { servicesAPI, serviceWorkOrdersAPI, usersAPI, repairsAPI } from '../serv
 import { usePhotoUpload } from '../hooks/usePhotoUpload';
 import ms from '../utils/scale';
 import { applyUserPickerFilter } from '../utils/userPickerFilters';
+
+const wait = (msDelay) => new Promise((resolve) => setTimeout(resolve, msDelay));
+
+const isTransientRequestError = (err) => {
+  if (!err) return false;
+  if (err.queued) return false; // već je queue-ano u interceptoru
+
+  const status = Number(err.status || err.response?.status || 0);
+  if (status >= 500) return true;
+
+  const message = String(err.message || '').toLowerCase();
+  return message.includes('network') || message.includes('timeout') || message.includes('socket');
+};
 
 export default function AddServiceScreen({ navigation, route }) {
   const { elevator } = route.params || {};
@@ -54,6 +67,7 @@ export default function AddServiceScreen({ navigation, route }) {
   const [korisnici, setKorisnici] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [showKolege, setShowKolege] = useState(false);
+  const requestSessionIdRef = useRef(`svcSession_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`);
 
   // Konvertiraj isOnline u boolean i traži backend da je budan
   const online = Boolean(isOnline && serverAwake);
@@ -67,30 +81,36 @@ export default function AddServiceScreen({ navigation, route }) {
 
   React.useEffect(() => {
     const fetchUsers = async () => {
-      setLoadingUsers(true);
       const filterOutCurrent = (arr = []) => applyUserPickerFilter(arr, {
         currentUserId: user?._id || user?.id,
         requireActiveAccount: true,
       });
+
+      // Prikaži lokalni cache odmah da "Dodaj kolegu" ne bude blokiran spinnerom.
+      const localUsers = filterOutCurrent(userDB.getAll());
+      setKorisnici(localUsers);
+
+      if (!online) {
+        setLoadingUsers(false);
+        return;
+      }
+
+      // Spinner samo ako nemamo ništa u cacheu.
+      setLoadingUsers(localUsers.length === 0);
+
       try {
-        if (online) {
-          const res = await usersAPI.getLite();
-          const data = res.data?.data || res.data || [];
-          const filtered = filterOutCurrent(data);
-          try {
-            userDB.bulkInsert(filtered);
-          } catch (cacheErr) {
-            console.log('Cache users failed', cacheErr?.message);
-          }
-          setKorisnici(filtered);
-        } else {
-          const localUsers = filterOutCurrent(userDB.getAll());
-          setKorisnici(localUsers);
+        const res = await usersAPI.getLiteCached();
+        const data = res.data?.data || res.data || [];
+        const filtered = filterOutCurrent(data);
+        try {
+          userDB.bulkInsert(filtered);
+        } catch (cacheErr) {
+          console.log('Cache users failed', cacheErr?.message);
         }
+        setKorisnici(filtered);
       } catch (e) {
         console.log('Load users failed', e?.message);
-        const localUsers = filterOutCurrent(userDB.getAll());
-        setKorisnici(localUsers);
+        // Zadrži već prikazane lokalne korisnike
       } finally {
         setLoadingUsers(false);
       }
@@ -349,6 +369,7 @@ export default function AddServiceScreen({ navigation, route }) {
 
       let successCount = 0;
       let failCount = 0;
+      let queuedCount = 0;
       let trebaloBiCount = 0;
       let trebaloBiLocalCount = 0;
 
@@ -379,11 +400,16 @@ export default function AddServiceScreen({ navigation, route }) {
 
       const buildServicePayload = (target) => {
         const targetId = target._id || target.id;
+        const serviceDateKey = (formData.serviceDate instanceof Date
+          ? formData.serviceDate.toISOString().split('T')[0]
+          : String(formData.serviceDate || '').split('T')[0]) || 'no_date';
+        const clientRequestId = `${requestSessionIdRef.current}_${String(targetId)}_${serviceDateKey}`;
 
         return {
           ...serviceDataBase,
           checklist: buildChecklistPayload(targetId),
           elevatorId: targetId,
+          clientRequestId,
         };
       };
 
@@ -449,31 +475,109 @@ export default function AddServiceScreen({ navigation, route }) {
         ]);
       } else {
         const createdOnlineServiceIds = [];
+        const payloads = targets.map((target) => buildServicePayload(target));
+        const payloadByRequestId = payloads.reduce((acc, payload) => {
+          if (payload.clientRequestId) {
+            acc[payload.clientRequestId] = payload;
+          }
+          return acc;
+        }, {});
+
+        const upsertLocalServiceFromServer = (created, fallbackPayload) => {
+          const createdId = created?._id || created?.id;
+          const payload = payloadByRequestId[created?.clientRequestId] || fallbackPayload;
+          if (!createdId || !payload) return null;
+
+          serviceDB.insert({
+            id: createdId,
+            elevatorId: created.elevatorId || created.elevator || payload.elevatorId,
+            serviserID: created.serviserID || created.performedBy || payload.serviserID,
+            dodatniServiseri: created.dodatniServiseri || payload.dodatniServiseri || [],
+            datum: created.datum || created.serviceDate || payload.datum,
+            checklist: created.checklist || payload.checklist,
+            imaNedostataka: created.imaNedostataka ?? payload.imaNedostataka,
+            nedostaci: created.nedostaci || payload.nedostaci,
+            notePhotos: created.notePhotos || payload.notePhotos || [],
+            napomene: created.napomene ?? created.notes ?? payload.napomene,
+            utroseniMaterijal: created.utroseniMaterijal ?? payload.utroseniMaterijal,
+            sljedeciServis: created.sljedeciServis || created.nextServiceDate || payload.sljedeciServis,
+            kreiranDatum: created.kreiranDatum || new Date().toISOString(),
+            azuriranDatum: created.azuriranDatum || new Date().toISOString(),
+            synced: 1,
+          });
+
+          return String(createdId);
+        };
+
+        const createServiceOnlineWithRetry = async (payload, maxAttempts = 3) => {
+          let lastErr;
+          for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+            try {
+              return await servicesAPI.create(payload);
+            } catch (err) {
+              lastErr = err;
+              if (!isTransientRequestError(err) || attempt === maxAttempts) {
+                throw err;
+              }
+              // Kratki backoff smanjuje šansu da batch zapne na Render cold-startu / kratkom dropu mreže
+              await wait(500 * attempt);
+            }
+          }
+          throw lastErr;
+        };
+
+        const createServicesBatchWithRetry = async (items, maxAttempts = 2) => {
+          let lastErr;
+          for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+            try {
+              return await servicesAPI.createBatch(items);
+            } catch (err) {
+              lastErr = err;
+              if (!isTransientRequestError(err) || attempt === maxAttempts) {
+                throw err;
+              }
+              await wait(700 * attempt);
+            }
+          }
+          throw lastErr;
+        };
+
+        let batchHandled = false;
+        const batchCreatedRequestIds = new Set();
+        if (payloads.length > 1) {
+          try {
+            const batchResponse = await createServicesBatchWithRetry(payloads);
+            const batchItems = batchResponse?.data?.data || [];
+            batchItems.forEach((created) => {
+              if (created?.clientRequestId) {
+                batchCreatedRequestIds.add(String(created.clientRequestId));
+              }
+              const insertedId = upsertLocalServiceFromServer(created);
+              if (insertedId) {
+                createdOnlineServiceIds.push(insertedId);
+                successCount += 1;
+              }
+            });
+            batchHandled = batchItems.length > 0;
+          } catch (batchErr) {
+            console.log('Batch create fallback to single requests:', batchErr?.message || batchErr);
+          }
+        }
+
         for (let idx = 0; idx < targets.length; idx += 1) {
           const target = targets[idx];
-          const payload = buildServicePayload(target);
+          const payload = payloads[idx];
           const trebaloBiPayload = buildTrebaloBiPayload(target);
+
+          const payloadReqId = String(payload?.clientRequestId || '');
+          const needsSingleCreate = !batchHandled || !batchCreatedRequestIds.has(payloadReqId);
+
+          if (needsSingleCreate) {
           try {
-            const response = await servicesAPI.create(payload);
+            const response = await createServiceOnlineWithRetry(payload);
             const created = response.data?.data || response.data;
-            const createdId = created._id || created.id;
-            serviceDB.insert({
-              id: createdId,
-              elevatorId: created.elevatorId || created.elevator || payload.elevatorId,
-              serviserID: created.serviserID || created.performedBy || payload.serviserID,
-              dodatniServiseri: created.dodatniServiseri || payload.dodatniServiseri || [],
-              datum: created.datum || created.serviceDate || payload.datum,
-              checklist: created.checklist || payload.checklist,
-              imaNedostataka: created.imaNedostataka ?? payload.imaNedostataka,
-              nedostaci: created.nedostaci || payload.nedostaci,
-              notePhotos: created.notePhotos || payload.notePhotos || [],
-              napomene: created.napomene ?? created.notes ?? payload.napomene,
-              utroseniMaterijal: created.utroseniMaterijal ?? payload.utroseniMaterijal,
-              sljedeciServis: created.sljedeciServis || created.nextServiceDate || payload.sljedeciServis,
-              kreiranDatum: created.kreiranDatum || new Date().toISOString(),
-              azuriranDatum: created.azuriranDatum || new Date().toISOString(),
-              synced: 1,
-            });
+            const insertedId = upsertLocalServiceFromServer(created, payload);
+            if (insertedId) createdOnlineServiceIds.push(insertedId);
 
             if (trebaloBiPayload) {
               try {
@@ -494,8 +598,6 @@ export default function AddServiceScreen({ navigation, route }) {
               }
             }
 
-            if (createdId) createdOnlineServiceIds.push(String(createdId));
-
             try {
               const elev = elevatorDB.getById(payload.elevatorId);
               if (elev) {
@@ -508,6 +610,10 @@ export default function AddServiceScreen({ navigation, route }) {
             console.error('Greška pri slanju na backend:', error);
             if (error.response?.status === 401) {
               throw new Error('Vaša prijava je istekla. Molim prijavite se ponovno.');
+            }
+            if (error.queued) {
+              queuedCount++;
+              continue;
             }
             const localId = 'local_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
             serviceDB.insert({ id: localId, ...payload, synced: 0 });
@@ -524,16 +630,52 @@ export default function AddServiceScreen({ navigation, route }) {
             } catch {}
             failCount++;
           }
+          }
+
+          if (batchHandled && trebaloBiPayload) {
+            try {
+              const repairRes = await repairsAPI.create(trebaloBiPayload);
+              const createdRepair = repairRes?.data?.data || repairRes?.data || {};
+              repairDB.insert({
+                id: createdRepair._id || createdRepair.id,
+                ...createdRepair,
+                trebaloBi: true,
+                synced: 1,
+              });
+              trebaloBiCount++;
+            } catch (trebaloErr) {
+              if (trebaloErr?.queued) {
+                queuedCount++;
+                continue;
+              }
+              console.log('Trebalo bi online create failed, saving local:', trebaloErr?.message || trebaloErr);
+              const localRepairId = `local_trebalo_${Date.now()}_${idx}_${Math.random().toString(36).substr(2, 9)}`;
+              repairDB.insert({ id: localRepairId, ...trebaloBiPayload, synced: 0 });
+              trebaloBiLocalCount++;
+            }
+          }
+
+          if (batchHandled) {
+            try {
+              const elev = elevatorDB.getById(payload.elevatorId);
+              if (elev) {
+                elevatorDB.update(elev.id, { ...elev, zadnjiServis: payload.datum, sljedeciServis: payload.sljedeciServis });
+              }
+            } catch {}
+          }
         }
 
         const baseTitle = failCount === 0 ? 'Uspjeh' : 'Djelomični uspjeh';
         const serviceMessage = failCount === 0
           ? `Servisi logirani za ${successCount}/${targets.length} dizala.`
           : `Logirano ${successCount}/${targets.length}, ${failCount} spremljeno lokalno (sync kasnije).`;
+        const queuedMessage = queuedCount > 0
+          ? `\nU queue dodano: ${queuedCount} zahtjeva.`
+          : '';
         const trebaloMessage = (trebaloBiCount || trebaloBiLocalCount)
           ? `\n"Trebalo bi" stavke: online ${trebaloBiCount}, lokalno ${trebaloBiLocalCount}.`
           : '';
-        const baseMessage = `${serviceMessage}${trebaloMessage}`;
+        const baseMessage = `${serviceMessage}${queuedMessage}${trebaloMessage}`;
 
         if (createdOnlineServiceIds.length === 1) {
           const serviceIdForWorkOrder = createdOnlineServiceIds[0];
@@ -620,13 +762,16 @@ export default function AddServiceScreen({ navigation, route }) {
             </TouchableOpacity>
 
             {showKolege && (
-              loadingUsers ? (
+              (loadingUsers && korisnici.length === 0) ? (
                 <View style={styles.userRow}>
                   <ActivityIndicator size="small" color="#0ea5e9" />
                   <Text style={styles.userRowText}>Učitavanje...</Text>
                 </View>
               ) : (
                 <ScrollView style={{ maxHeight: 320, marginTop: 8 }}>
+                  {loadingUsers && korisnici.length > 0 && (
+                    <Text style={{ color: '#6b7280', marginBottom: 8 }}>Osvježavam listu...</Text>
+                  )}
                   {korisnici.map((k) => {
                     const id = k._id || k.id;
                     const selected = formData.kolegaId === id;

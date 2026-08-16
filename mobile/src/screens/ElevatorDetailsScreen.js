@@ -880,7 +880,7 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
         animationType="slide"
         onRequestClose={() => setGroupModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
+        <View style={[styles.modalOverlay, { paddingBottom: Math.max((insets?.bottom || 0) + 12, 32) }]}>
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Dizala na adresi ({groupElevators.length})</Text>
@@ -888,7 +888,7 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
                 <Ionicons name="close" size={22} color="#0f172a" />
               </TouchableOpacity>
             </View>
-            <ScrollView style={{ maxHeight: 420 }}>
+            <ScrollView style={{ maxHeight: 420 }} contentContainerStyle={{ paddingBottom: 18 }}>
               {groupElevators.map((e) => {
                 const active = e.id === elevator.id || e._id === elevator.id;
                 return (
@@ -927,7 +927,7 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
         animationType="slide"
         onRequestClose={() => setSimModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
+        <View style={[styles.modalOverlay, { paddingBottom: Math.max((insets?.bottom || 0) + 12, 32) }]}>
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>SIM kartica</Text>

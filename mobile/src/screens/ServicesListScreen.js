@@ -14,13 +14,14 @@ import {
   RefreshControl,
   Modal,
   ScrollView,
+  Alert,
   useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Print from 'expo-print';
 import { serviceDB, elevatorDB, userDB } from '../database/db';
-import { syncAll } from '../services/syncService';
+import { syncAll, getSyncRateLimitUntil, getSyncRateLimitMessage } from '../services/syncService';
 import { useAuth } from '../context/AuthContext';
 import { usersAPI } from '../services/api';
 
@@ -307,7 +308,7 @@ export default function ServicesListScreen({ navigation }) {
     try {
       const online = Boolean(isOnline && serverAwake);
       if (!online) return;
-      const res = await usersAPI.getLite();
+      const res = await usersAPI.getLiteCached();
       const data = res?.data?.data || res?.data || [];
       if (Array.isArray(data) && data.length) {
         try {
@@ -593,7 +594,10 @@ export default function ServicesListScreen({ navigation }) {
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await syncAll();
+      const synced = await syncAll();
+      if (!synced && Date.now() < getSyncRateLimitUntil()) {
+        Alert.alert('Sinkronizacija pauzirana', getSyncRateLimitMessage());
+      }
       loadServices();
       refreshAnnualOccurrences();
     } catch (e) {
@@ -907,6 +911,10 @@ export default function ServicesListScreen({ navigation }) {
         data={dedupedServices}
         renderItem={renderServiceItem}
         keyExtractor={keyExtractor}
+        initialNumToRender={12}
+        maxToRenderPerBatch={10}
+        windowSize={7}
+        removeClippedSubviews
         contentContainerStyle={[
           styles.listContent,
           isSmallScreen && styles.listContentCompact,

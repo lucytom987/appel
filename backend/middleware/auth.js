@@ -25,6 +25,9 @@ const auth = async (req, res, next) => {
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    if (decoded?.type === 'refresh') {
+      return res.status(401).json({ message: 'Neispravan token za pristup API-ju' });
+    }
     const user = await User.findById(decoded.userId);
 
     if (!user || !user.aktivan) {

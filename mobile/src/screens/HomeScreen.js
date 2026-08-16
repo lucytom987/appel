@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   ImageBackground,
   Platform,
   BackHandler,
+  Alert,
   useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -17,7 +18,7 @@ import { useAuth } from '../context/AuthContext';
 import { useFocusEffect } from '@react-navigation/native';
 import * as SecureStore from 'expo-secure-store';
 import { elevatorDB, serviceDB, repairDB } from '../database/db';
-import { syncAll, primeFullSync } from '../services/syncService';
+import { syncAll, primeFullSync, getSyncRateLimitUntil, getSyncRateLimitMessage } from '../services/syncService';
 import { messagesAPI } from '../services/api';
 import ms, { rf } from '../utils/scale';
 import { isElevatorDueThisMonth } from '../utils/serviceSchedule';
@@ -31,6 +32,9 @@ export default function HomeScreen({ navigation }) {
   const { user, isOnline, serverAwake, logout } = useAuth();
   const [offlineDemo, setOfflineDemo] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const unreadFetchInProgressRef = useRef(false);
+  const lastUnreadFetchAtRef = useRef(0);
+  const unreadRateLimitedUntilRef = useRef(0);
 
   useEffect(() => {
     (async () => {
@@ -68,6 +72,22 @@ export default function HomeScreen({ navigation }) {
       setUnreadCount(0);
       return;
     }
+
+    if (Date.now() < unreadRateLimitedUntilRef.current) {
+      return;
+    }
+
+    const now = Date.now();
+    if (unreadFetchInProgressRef.current) {
+      return;
+    }
+    if (now - lastUnreadFetchAtRef.current < 2000) {
+      return;
+    }
+
+    unreadFetchInProgressRef.current = true;
+    lastUnreadFetchAtRef.current = now;
+
     try {
       const res = await messagesAPI.getUnreadCount();
       // Backend šalje { success, count, data } gdje su count i data jednaki
@@ -76,6 +96,12 @@ export default function HomeScreen({ navigation }) {
       setUnreadCount(Number(count) || 0);
     } catch (e) {
       console.log('Unread count fetch failed', e?.message || e);
+      const status = Number(e?.status || e?.response?.status || 0);
+      if (status === 429) {
+        unreadRateLimitedUntilRef.current = Date.now() + (15 * 60 * 1000);
+      }
+    } finally {
+      unreadFetchInProgressRef.current = false;
     }
   }, [online]);
 
@@ -328,7 +354,10 @@ export default function HomeScreen({ navigation }) {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await syncAll();
+    const synced = await syncAll();
+    if (!synced && Date.now() < getSyncRateLimitUntil()) {
+      Alert.alert('Sinkronizacija pauzirana', getSyncRateLimitMessage());
+    }
     loadStats();
     await fetchUnread();
     setRefreshing(false);

@@ -7,6 +7,8 @@ const { authenticate, checkRole } = require('../middleware/auth');
 router.get('/', authenticate, async (req, res) => {
   try {
     const { userId, action, entityType, startDate, endDate, limit = 100, skip = 0 } = req.query;
+    const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 0, 1), 100);
+    const parsedSkip = Math.max(parseInt(skip, 10) || 0, 0);
 
     const filter = { companyId: req.companyId };
     if (userId) filter.korisnikId = userId;
@@ -21,8 +23,8 @@ router.get('/', authenticate, async (req, res) => {
     const logs = await AuditLog.find(filter)
       .populate('korisnikId', 'ime prezime email uloga')
       .sort({ kreiranDatum: -1 })
-      .limit(parseInt(limit, 10))
-      .skip(parseInt(skip, 10))
+      .limit(parsedLimit)
+      .skip(parsedSkip)
       .lean();
 
     const total = await AuditLog.countDocuments(filter);
@@ -38,13 +40,15 @@ router.get('/', authenticate, async (req, res) => {
 router.get('/user/:userId', authenticate, async (req, res) => {
   try {
     const { limit = 50, skip = 0 } = req.query;
+    const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 0, 1), 100);
+    const parsedSkip = Math.max(parseInt(skip, 10) || 0, 0);
     const filter = { companyId: req.companyId, korisnikId: req.params.userId };
 
     const logs = await AuditLog.find(filter)
       .populate('korisnikId', 'ime prezime email uloga')
       .sort({ kreiranDatum: -1 })
-      .limit(parseInt(limit, 10))
-      .skip(parseInt(skip, 10))
+      .limit(parsedLimit)
+      .skip(parsedSkip)
       .lean();
 
     const total = await AuditLog.countDocuments(filter);

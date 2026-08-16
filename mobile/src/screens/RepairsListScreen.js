@@ -9,11 +9,13 @@ import {
   BackHandler,
   Modal,
   ActivityIndicator,
+  Alert,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { repairDB, elevatorDB, userDB, serviceDB } from '../database/db';
-import { syncAll } from '../services/syncService';
+import { syncAll, getSyncRateLimitUntil, getSyncRateLimitMessage } from '../services/syncService';
 import { useAuth } from '../context/AuthContext';
 import { workOrdersAPI } from '../services/api';
 
@@ -26,6 +28,8 @@ const safeText = (value, fallback = '') => {
     return fallback;
   }
 };
+
+const normalizePhoneForCall = (value) => String(value || '').replace(/[^\d+]/g, '');
 
 const buildElevatorDisplay = (elevator) => {
   const tip = elevator?.tip || elevator?.tipObjekta;
@@ -255,7 +259,10 @@ export default function RepairsListScreen({ navigation, route }) {
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await syncAll();
+      const synced = await syncAll();
+      if (!synced && Date.now() < getSyncRateLimitUntil()) {
+        Alert.alert('Sinkronizacija pauzirana', getSyncRateLimitMessage());
+      }
       loadRepairs();
     } catch (e) {
       console.error('Greška pri syncu popravaka:', e);
@@ -523,6 +530,29 @@ export default function RepairsListScreen({ navigation, route }) {
     flowReportedAt
   );
 
+  const flowCallerPhone = safeText(selectedFlow?.kontaktTelefon || selectedFlow?.pozivateljTelefon, '');
+
+  const handleCallCaller = useCallback(async () => {
+    if (!flowCallerPhone) return;
+    const dialValue = normalizePhoneForCall(flowCallerPhone);
+    if (!dialValue) {
+      Alert.alert('Poziv nije moguć', 'Broj telefona nije ispravnog formata.');
+      return;
+    }
+
+    const telUrl = `tel:${dialValue}`;
+    try {
+      const canOpen = await Linking.canOpenURL(telUrl);
+      if (!canOpen) {
+        Alert.alert('Poziv nije moguć', 'Uređaj ne podržava direktno pozivanje.');
+        return;
+      }
+      await Linking.openURL(telUrl);
+    } catch (err) {
+      Alert.alert('Greška', 'Ne mogu otvoriti biranje broja.');
+    }
+  }, [flowCallerPhone]);
+
   const flowAssignedTechnician = (() => {
     const fromLinked = resolveUserName(selectedFlow?.poslanMajstorId);
     const name = fromLinked || safeText(selectedFlow?.poslanMajstorIme, '');
@@ -657,6 +687,10 @@ export default function RepairsListScreen({ navigation, route }) {
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
+        initialNumToRender={12}
+        maxToRenderPerBatch={10}
+        windowSize={7}
+        removeClippedSubviews
         stickySectionHeadersEnabled={false}
         contentContainerStyle={styles.listContent}
       />
@@ -679,6 +713,20 @@ export default function RepairsListScreen({ navigation, route }) {
             <View style={styles.modalRows}>
               <FlowRow label="Prijavio kvar" value={flowReportedBy} icon="person-add-outline" />
               <FlowRow label="Pozivatelj" value={flowCaller} icon="person-outline" />
+              {flowCallerPhone ? (
+                <TouchableOpacity style={styles.flowCallRow} onPress={handleCallCaller} activeOpacity={0.8}>
+                  <View style={styles.flowLabelWrap}>
+                    <Ionicons name="call-outline" size={16} color="#065f46" />
+                    <Text style={styles.flowLabel}>Telefon pozivatelja</Text>
+                  </View>
+                  <View style={styles.flowCallContent}>
+                    <Text style={styles.flowValue}>{flowCallerPhone}</Text>
+                    <View style={styles.flowCallButton}>
+                      <Text style={styles.flowCallButtonText}>Nazovi</Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              ) : null}
               <FlowRow label="Majstor poslan" value={flowAssignedTechnician} icon="construct-outline" />
               <FlowRow label="Riješio kvar" value={flowResolvedBy} icon="checkmark-done-outline" />
               <FlowRow label="Potpisao" value={flowSignedBy} icon="create-outline" />
@@ -975,6 +1023,32 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#0f172a',
     fontWeight: '600',
+  },
+  flowCallRow: {
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    backgroundColor: '#f0fdf4',
+    gap: 6,
+  },
+  flowCallContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  flowCallButton: {
+    backgroundColor: '#16a34a',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  flowCallButtonText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '800',
   },
   modalLoadingRow: {
     marginTop: 10,

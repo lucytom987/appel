@@ -34,7 +34,7 @@ router.get('/unread/count', authenticate, async (req, res) => {
 router.get('/room/:roomId', authenticate, async (req, res) => {
   try {
     const { limit = 50, skip = 0 } = req.query;
-    const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 0, 1), 200);
+    const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 0, 1), 100);
     const parsedSkip = Math.max(parseInt(skip, 10) || 0, 0);
 
     const room = await ChatRoom.findOne({ _id: req.params.roomId, companyId: req.companyId });

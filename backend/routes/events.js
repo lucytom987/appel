@@ -9,7 +9,7 @@ const { logAction } = require('../services/auditService');
 router.get('/', authenticate, async (req, res) => {
   try {
     const { elevatorId, eventType, status, startDate, endDate, serviserId, updatedAfter, limit = 200, skip = 0, includeDeleted } = req.query;
-    const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 0, 1), 500);
+    const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 0, 1), 200);
     const parsedSkip = Math.max(parseInt(skip, 10) || 0, 0);
     const filter = { companyId: req.companyId };
     
@@ -253,7 +253,7 @@ router.get('/elevator/:elevatorId', authenticate, async (req, res) => {
   try {
     const { elevatorId } = req.params;
     const { eventType, status, limit = 200, skip = 0 } = req.query;
-    const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 0, 1), 500);
+    const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 0, 1), 200);
     const parsedSkip = Math.max(parseInt(skip, 10) || 0, 0);
 
     const filter = {

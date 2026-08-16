@@ -17,7 +17,7 @@ function Get-RepoRoot {
   return Split-Path -Parent $scriptPath
 }
 
-function Parse-Semver([string]$value) {
+function ConvertFrom-Semver([string]$value) {
   if ($value -notmatch '^(\d+)\.(\d+)\.(\d+)$') {
     throw "Invalid semantic version: $value"
   }
@@ -28,8 +28,8 @@ function Parse-Semver([string]$value) {
   }
 }
 
-function Bump-Semver([string]$current, [string]$bumpKind) {
-  $v = Parse-Semver $current
+function Update-Semver([string]$current, [string]$bumpKind) {
+  $v = ConvertFrom-Semver $current
   switch ($bumpKind) {
     'major' { $v.Major += 1; $v.Minor = 0; $v.Patch = 0 }
     'minor' { $v.Minor += 1; $v.Patch = 0 }
@@ -48,7 +48,7 @@ function Read-Utf8NoBom([string]$path) {
   return [System.IO.File]::ReadAllText($path, $enc)
 }
 
-function Replace-OrThrow([string]$content, [string]$pattern, [string]$replacement, [string]$label) {
+function Update-OrThrow([string]$content, [string]$pattern, [string]$replacement, [string]$label) {
   if (-not [regex]::IsMatch($content, $pattern)) {
     throw "Pattern not found for $label"
   }
@@ -56,7 +56,7 @@ function Replace-OrThrow([string]$content, [string]$pattern, [string]$replacemen
   return $newContent
 }
 
-function Replace-IfFound([string]$content, [string]$pattern, [string]$replacement, [string]$label) {
+function Update-IfFound([string]$content, [string]$pattern, [string]$replacement, [string]$label) {
   if ($content -notmatch $pattern) {
     Write-Host "Warning: skipped optional update for $label"
     return $content
@@ -90,7 +90,7 @@ if ($appConfig -notmatch 'versionCode:\s*(\d+)') {
 }
 $currentVersionCode = [int]$Matches[1]
 
-$newVersion = if ($Version) { $Version } else { Bump-Semver -current $currentVersion -bumpKind $Bump }
+$newVersion = if ($Version) { $Version } else { Update-Semver -current $currentVersion -bumpKind $Bump }
 $newBuildNumber = $currentBuildNumber + 1
 $newVersionCode = $currentVersionCode + 1
 $todayLabel = (Get-Date).ToString('dd.MM.yyyy')
@@ -98,21 +98,21 @@ $todayLabel = (Get-Date).ToString('dd.MM.yyyy')
 Write-Host "Current version: $currentVersion ($currentBuildNumber/$currentVersionCode)"
 Write-Host "New version:     $newVersion ($newBuildNumber/$newVersionCode)"
 
-$appConfig = Replace-OrThrow $appConfig 'version:\s*"\d+\.\d+\.\d+"' ('version: "' + $newVersion + '"') 'app.config.js version'
-$appConfig = Replace-OrThrow $appConfig 'buildNumber:\s*"\d+"' ('buildNumber: "' + $newBuildNumber + '"') 'app.config.js ios buildNumber'
-$appConfig = Replace-OrThrow $appConfig 'versionCode:\s*\d+' "versionCode: $newVersionCode" 'app.config.js android versionCode'
+$appConfig = Update-OrThrow $appConfig 'version:\s*"\d+\.\d+\.\d+"' ('version: "' + $newVersion + '"') 'app.config.js version'
+$appConfig = Update-OrThrow $appConfig 'buildNumber:\s*"\d+"' ('buildNumber: "' + $newBuildNumber + '"') 'app.config.js ios buildNumber'
+$appConfig = Update-OrThrow $appConfig 'versionCode:\s*\d+' "versionCode: $newVersionCode" 'app.config.js android versionCode'
 
 $appJson = Read-Utf8NoBom $appJsonPath
-$appJson = Replace-OrThrow $appJson '"version"\s*:\s*"\d+\.\d+\.\d+"' ('"version": "' + $newVersion + '"') 'app.json version'
-$appJson = Replace-OrThrow $appJson '"buildNumber"\s*:\s*"\d+"' ('"buildNumber": "' + $newBuildNumber + '"') 'app.json ios buildNumber'
-$appJson = Replace-OrThrow $appJson '"versionCode"\s*:\s*\d+' ('"versionCode": ' + $newVersionCode) 'app.json android versionCode'
+$appJson = Update-OrThrow $appJson '"version"\s*:\s*"\d+\.\d+\.\d+"' ('"version": "' + $newVersion + '"') 'app.json version'
+$appJson = Update-OrThrow $appJson '"buildNumber"\s*:\s*"\d+"' ('"buildNumber": "' + $newBuildNumber + '"') 'app.json ios buildNumber'
+$appJson = Update-OrThrow $appJson '"versionCode"\s*:\s*\d+' ('"versionCode": ' + $newVersionCode) 'app.json android versionCode'
 
 $backendAppRoute = Read-Utf8NoBom $backendAppRoutePath
-$backendAppRoute = Replace-OrThrow $backendAppRoute "LATEST_APP_VERSION \|\| '[^']+'" "LATEST_APP_VERSION || '$newVersion'" 'backend app latest version fallback'
-$backendAppRoute = Replace-OrThrow $backendAppRoute "MIN_SUPPORTED_APP_VERSION \|\| '[^']+'" "MIN_SUPPORTED_APP_VERSION || '$newVersion'" 'backend app min version fallback'
+$backendAppRoute = Update-OrThrow $backendAppRoute "LATEST_APP_VERSION \|\| '[^']+'" "LATEST_APP_VERSION || '$newVersion'" 'backend app latest version fallback'
+$backendAppRoute = Update-OrThrow $backendAppRoute "MIN_SUPPORTED_APP_VERSION \|\| '[^']+'" "MIN_SUPPORTED_APP_VERSION || '$newVersion'" 'backend app min version fallback'
 $backendLatestCodePattern = '(?m)(const latestVersionCode = Number\.isFinite\(Number\(latestVersionCodeRaw\)\)\s*\r?\n\s*\? Number\(latestVersionCodeRaw\)\s*\r?\n\s*:\s*)\d+'
 $backendLatestCodeReplacement = '${1}' + $newVersionCode
-$backendAppRoute = Replace-OrThrow $backendAppRoute $backendLatestCodePattern $backendLatestCodeReplacement 'backend app latest versionCode fallback'
+$backendAppRoute = Update-OrThrow $backendAppRoute $backendLatestCodePattern $backendLatestCodeReplacement 'backend app latest versionCode fallback'
 
 # Ensure minSupportedVersionCode fallback follows latestVersionCode as before.
 $backendAppRoute = [regex]::Replace(
@@ -122,22 +122,22 @@ $backendAppRoute = [regex]::Replace(
 )
 
 $renderYaml = Read-Utf8NoBom $renderYamlPath
-$renderYaml = Replace-OrThrow $renderYaml '(?m)(- key: LATEST_APP_VERSION\s*\r?\n\s*value:\s*)[^\r\n]+' ('${1}' + $newVersion) 'render latest version env'
-$renderYaml = Replace-OrThrow $renderYaml '(?m)(- key: LATEST_APP_VERSION_CODE\s*\r?\n\s*value:\s*)[^\r\n]+' ('${1}' + $newVersionCode) 'render latest versionCode env'
-$renderYaml = Replace-OrThrow $renderYaml '(?m)(- key: MIN_SUPPORTED_APP_VERSION\s*\r?\n\s*value:\s*)[^\r\n]+' ('${1}' + $newVersion) 'render min version env'
-$renderYaml = Replace-OrThrow $renderYaml '(?m)(- key: MIN_SUPPORTED_APP_VERSION_CODE\s*\r?\n\s*value:\s*)[^\r\n]+' ('${1}' + $newVersionCode) 'render min versionCode env'
+$renderYaml = Update-OrThrow $renderYaml '(?m)(- key: LATEST_APP_VERSION\s*\r?\n\s*value:\s*)[^\r\n]+' ('${1}' + $newVersion) 'render latest version env'
+$renderYaml = Update-OrThrow $renderYaml '(?m)(- key: LATEST_APP_VERSION_CODE\s*\r?\n\s*value:\s*)[^\r\n]+' ('${1}' + $newVersionCode) 'render latest versionCode env'
+$renderYaml = Update-OrThrow $renderYaml '(?m)(- key: MIN_SUPPORTED_APP_VERSION\s*\r?\n\s*value:\s*)[^\r\n]+' ('${1}' + $newVersion) 'render min version env'
+$renderYaml = Update-OrThrow $renderYaml '(?m)(- key: MIN_SUPPORTED_APP_VERSION_CODE\s*\r?\n\s*value:\s*)[^\r\n]+' ('${1}' + $newVersionCode) 'render min versionCode env'
 
 $aboutScreen = Read-Utf8NoBom $aboutScreenPath
-$aboutScreen = Replace-OrThrow $aboutScreen "currentVersion = Constants\?\.expoConfig\?\.version \|\| '[^']+'" "currentVersion = Constants?.expoConfig?.version || '$newVersion'" 'About fallback version'
-$aboutScreen = Replace-OrThrow $aboutScreen "currentVersionDate = '[^']+'" "currentVersionDate = '$todayLabel'" 'About version date'
-$aboutScreen = Replace-IfFound $aboutScreen 'Novosti \([^\)]+\)' "Novosti ($todayLabel)" 'About news date'
-$aboutScreen = Replace-IfFound $aboutScreen 'nova verzija aplikacije [0-9]+\.[0-9]+\.[0-9]+' "nova verzija aplikacije $newVersion" 'About news version text'
+$aboutScreen = Update-OrThrow $aboutScreen "currentVersion = Constants\?\.expoConfig\?\.version \|\| '[^']+'" "currentVersion = Constants?.expoConfig?.version || '$newVersion'" 'About fallback version'
+$aboutScreen = Update-OrThrow $aboutScreen "currentVersionDate = '[^']+'" "currentVersionDate = '$todayLabel'" 'About version date'
+$aboutScreen = Update-IfFound $aboutScreen 'Novosti \([^\)]+\)' "Novosti ($todayLabel)" 'About news date'
+$aboutScreen = Update-IfFound $aboutScreen 'nova verzija aplikacije [0-9]+\.[0-9]+\.[0-9]+' "nova verzija aplikacije $newVersion" 'About news version text'
 
 $loginScreen = Read-Utf8NoBom $loginScreenPath
 if ($loginScreen -notmatch "import Constants from 'expo-constants';") {
-  $loginScreen = Replace-OrThrow $loginScreen "import \* as SecureStore from 'expo-secure-store';" "import * as SecureStore from 'expo-secure-store';`nimport Constants from 'expo-constants';" 'Login constants import'
+  $loginScreen = Update-OrThrow $loginScreen "import \* as SecureStore from 'expo-secure-store';" "import * as SecureStore from 'expo-secure-store';`nimport Constants from 'expo-constants';" 'Login constants import'
 }
-$loginScreen = Replace-OrThrow $loginScreen "const APP_VERSION = [^;]+;" "const APP_VERSION = Constants?.expoConfig?.version || '$newVersion';" 'Login version label'
+$loginScreen = Update-OrThrow $loginScreen "const APP_VERSION = [^;]+;" "const APP_VERSION = Constants?.expoConfig?.version || '$newVersion';" 'Login version label'
 
 if (-not $DryRun) {
   Write-Utf8NoBom $appConfigPath $appConfig

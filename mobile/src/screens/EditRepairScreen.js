@@ -196,7 +196,7 @@ export default function EditRepairScreen({ route, navigation }) {
 
       try {
         if (online) {
-          const res = await usersAPI.getLite();
+          const res = await usersAPI.getLiteCached();
           const data = res.data?.data || res.data || [];
           const filtered = filterOutCurrent(data);
           try {

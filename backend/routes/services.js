@@ -73,6 +73,81 @@ const recalculateElevatorServiceDates = async (elevatorId, companyId) => {
   return elevator;
 };
 
+const createSingleService = async ({ rawBody, companyId, user, ipAddress, skipAudit = false }) => {
+  const elevatorId = rawBody.elevatorId || rawBody.elevator;
+  const clientRequestId = typeof rawBody.clientRequestId === 'string' ? rawBody.clientRequestId.trim() : '';
+
+  if (!elevatorId) {
+    const error = new Error('elevatorId je obavezan');
+    error.status = 400;
+    throw error;
+  }
+
+  if (clientRequestId) {
+    const existingByRequestId = await Service.findOne({
+      companyId,
+      clientRequestId,
+    })
+      .populate('elevatorId', 'brojUgovora nazivStranke ulica mjesto brojDizala')
+      .populate('serviserID', 'ime prezime email')
+      .populate('dodatniServiseri', 'ime prezime email');
+
+    if (existingByRequestId) {
+      return { data: existingByRequestId, deduped: true };
+    }
+  }
+
+  const elevator = await Elevator.findOne({ _id: elevatorId, companyId });
+  if (!elevator) {
+    const error = new Error('Dizalo nije pronađeno ili ne pripada vašoj firmi');
+    error.status = 404;
+    throw error;
+  }
+
+  const now = new Date();
+  const calculatedNextService = calculateNextServiceDate(rawBody.datum || now, elevator.intervalServisa);
+  const dodatniServiseri = Array.isArray(rawBody.dodatniServiseri || rawBody.additionalTechnicians)
+    ? (rawBody.dodatniServiseri || rawBody.additionalTechnicians).filter(Boolean)
+    : (rawBody.kolegaId ? [rawBody.kolegaId] : []);
+
+  const uniqueAssistants = [...new Set(dodatniServiseri.map(String))].filter((id) => String(id) !== String(user._id));
+
+  const service = new Service({
+    ...rawBody,
+    clientRequestId: clientRequestId || undefined,
+    companyId,
+    sljedeciServis: calculatedNextService,
+    dodatniServiseri: uniqueAssistants,
+    elevatorId,
+    serviserID: user._id,
+    updated_at: now,
+    updated_by: user._id,
+    is_deleted: false,
+  });
+
+  await service.save();
+  await recalculateElevatorServiceDates(elevatorId, companyId);
+
+  if (!skipAudit) {
+    await logAction({
+      korisnikId: user._id,
+      akcija: 'CREATE',
+      entitet: 'Service',
+      entitetId: service._id,
+      entitetNaziv: `${elevator.nazivStranke} - ${elevator.brojDizala}`,
+      noveVrijednosti: service.toObject(),
+      ipAdresa: ipAddress,
+      opis: 'Kreiran novi servis'
+    });
+  }
+
+  await service.populate('elevatorId', 'brojUgovora nazivStranke ulica mjesto brojDizala');
+  await service.populate('serviserID', 'ime prezime email');
+  await service.populate('dodatniServiseri', 'ime prezime email');
+
+  return { data: service, deduped: false };
+};
+
 // GET /api/services - lista servisa (filtri + delta)
 router.get('/', authenticate, async (req, res) => {
   try {
@@ -92,10 +167,7 @@ router.get('/', authenticate, async (req, res) => {
     }
     if (updatedAfter) {
       const afterDate = new Date(updatedAfter);
-      filter.$or = [
-        { updated_at: { $gte: afterDate } },
-        { updated_at: { $exists: false } },
-      ];
+      filter.updated_at = { $gte: afterDate };
     }
     if (startDate || endDate) {
       filter.datum = {};
@@ -217,57 +289,29 @@ router.get('/:id', authenticate, async (req, res) => {
 // POST /api/services
 router.post('/', authenticate, async (req, res) => {
   try {
-    const elevatorId = req.body.elevatorId || req.body.elevator;
-    if (!elevatorId) {
-      return res.status(400).json({ success: false, message: 'elevatorId je obavezan' });
-    }
-
-    const elevator = await Elevator.findOne({ _id: elevatorId, companyId: req.companyId });
-    if (!elevator) {
-      return res.status(404).json({ success: false, message: 'Dizalo nije pronađeno ili ne pripada vašoj firmi', elevatorId });
-    }
-
-    const now = new Date();
-    const calculatedNextService = calculateNextServiceDate(req.body.datum || now, elevator.intervalServisa);
-    const dodatniServiseri = Array.isArray(req.body.dodatniServiseri || req.body.additionalTechnicians)
-      ? (req.body.dodatniServiseri || req.body.additionalTechnicians).filter(Boolean)
-      : (req.body.kolegaId ? [req.body.kolegaId] : []);
-
-    const uniqueAssistants = [...new Set(dodatniServiseri.map(String))].filter((id) => String(id) !== String(req.user._id));
-
-    const service = new Service({
-      ...req.body,
+    const result = await createSingleService({
+      rawBody: req.body,
       companyId: req.companyId,
-      sljedeciServis: calculatedNextService,
-      dodatniServiseri: uniqueAssistants,
-      elevatorId,
-      serviserID: req.user._id,
-      updated_at: now,
-      updated_by: req.user._id,
-      is_deleted: false,
+      user: req.user,
+      ipAddress: req.ip,
     });
 
-    await service.save();
-  await recalculateElevatorServiceDates(elevatorId, req.companyId);
+    if (result.deduped) {
+      return res.status(200).json({
+        success: true,
+        message: 'Servis već postoji (idempotent retry)',
+        deduped: true,
+        data: result.data,
+      });
+    }
 
-    await logAction({
-      korisnikId: req.user._id,
-      akcija: 'CREATE',
-      entitet: 'Service',
-      entitetId: service._id,
-      entitetNaziv: `${elevator.nazivStranke} - ${elevator.brojDizala}`,
-      noveVrijednosti: service.toObject(),
-      ipAdresa: req.ip,
-      opis: 'Kreiran novi servis'
-    });
-
-    await service.populate('elevatorId', 'brojUgovora nazivStranke ulica mjesto brojDizala');
-    await service.populate('serviserID', 'ime prezime email');
-    await service.populate('dodatniServiseri', 'ime prezime email');
-
-    res.status(201).json({ success: true, message: 'Servis kreiran', data: service });
+    res.status(201).json({ success: true, message: 'Servis kreiran', data: result.data });
   } catch (error) {
     console.error('Greška pri kreiranju servisa:', error);
+
+    if (error?.status) {
+      return res.status(error.status).json({ success: false, message: error.message });
+    }
 
     if (error.name === 'ValidationError') {
       const messages = Object.keys(error.errors).map(key => `${key}: ${error.errors[key].message}`).join('; ');
@@ -279,7 +323,82 @@ router.post('/', authenticate, async (req, res) => {
       });
     }
 
+    if (error?.code === 11000 && error?.keyPattern?.companyId && error?.keyPattern?.clientRequestId) {
+      const clientRequestId = typeof req.body.clientRequestId === 'string' ? req.body.clientRequestId.trim() : '';
+      if (clientRequestId) {
+        try {
+          const existingByRequestId = await Service.findOne({
+            companyId: req.companyId,
+            clientRequestId,
+          })
+            .populate('elevatorId', 'brojUgovora nazivStranke ulica mjesto brojDizala')
+            .populate('serviserID', 'ime prezime email')
+            .populate('dodatniServiseri', 'ime prezime email');
+
+          if (existingByRequestId) {
+            return res.status(200).json({
+              success: true,
+              message: 'Servis već postoji (idempotent race)',
+              deduped: true,
+              data: existingByRequestId,
+            });
+          }
+        } catch (dedupeErr) {
+          console.log('Idempotent dedupe fetch failed:', dedupeErr?.message || dedupeErr);
+        }
+      }
+    }
+
     res.status(500).json({ success: false, message: 'Greška pri kreiranju servisa', error: error.message });
+  }
+});
+
+// POST /api/services/batch
+router.post('/batch', authenticate, async (req, res) => {
+  try {
+    const items = Array.isArray(req.body?.items) ? req.body.items : [];
+    if (!items.length) {
+      return res.status(400).json({ success: false, message: 'items je obavezan i mora sadržavati barem 1 zapis' });
+    }
+    if (items.length > 40) {
+      return res.status(400).json({ success: false, message: 'Maksimalno 40 zapisa po batch zahtjevu' });
+    }
+
+    const created = [];
+    const failed = [];
+
+    for (let i = 0; i < items.length; i += 1) {
+      const item = items[i];
+      try {
+        const result = await createSingleService({
+          rawBody: item,
+          companyId: req.companyId,
+          user: req.user,
+          ipAddress: req.ip,
+          skipAudit: false,
+        });
+        created.push(result.data);
+      } catch (err) {
+        failed.push({
+          index: i,
+          message: err?.message || 'Neuspjelo kreiranje servisa',
+          status: err?.status || 500,
+          clientRequestId: typeof item?.clientRequestId === 'string' ? item.clientRequestId : null,
+        });
+      }
+    }
+
+    const success = failed.length === 0;
+    res.status(success ? 201 : 207).json({
+      success,
+      createdCount: created.length,
+      failedCount: failed.length,
+      data: created,
+      failed,
+    });
+  } catch (error) {
+    console.error('Greška pri batch kreiranju servisa:', error);
+    res.status(500).json({ success: false, message: 'Greška pri batch kreiranju servisa', error: error.message });
   }
 });
 
@@ -331,14 +450,18 @@ router.put('/:id', authenticate, async (req, res) => {
       updated_by: req.user._id,
     };
 
-    const service = await Service.findByIdAndUpdate(
-      req.params.id,
+    const service = await Service.findOneAndUpdate(
+      { _id: req.params.id, companyId: req.companyId },
       updateData,
       { new: true, runValidators: true }
     )
       .populate('elevatorId', 'brojUgovora nazivStranke brojDizala')
       .populate('serviserID', 'ime prezime email')
       .populate('dodatniServiseri', 'ime prezime email');
+
+    if (!service) {
+      return res.status(404).json({ success: false, message: 'Servis nije pronađen ili ne pripada vašoj firmi' });
+    }
 
     await recalculateElevatorServiceDates(existingService.elevatorId, req.companyId);
 

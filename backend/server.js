@@ -14,25 +14,52 @@ const { setupSoftDeleteRetentionJob } = require('./services/retentionService');
 
 dotenv.config();
 
+const configuredOrigins = String(process.env.CORS_ORIGIN || '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+const allowAnyOrigin = configuredOrigins.length === 0 || configuredOrigins.includes('*');
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (allowAnyOrigin || !origin || configuredOrigins.includes(origin)) {
+      callback(null, true);
+      return;
+    }
+    callback(new Error('Not allowed by CORS'));
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+};
+
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: process.env.CORS_ORIGIN || '*',
+    origin: allowAnyOrigin ? true : configuredOrigins,
     methods: ['GET', 'POST', 'PUT', 'DELETE']
   }
 });
 
 // CORS mora biti PRIJE rate limitera da 429 odgovor ima CORS headere
-app.use(cors());
+app.use(cors(corsOptions));
 
 // Security middleware
 app.use(helmet());
 
+const parsePositiveInt = (value, fallback) => {
+  const n = Number.parseInt(String(value ?? ''), 10);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+};
+
+const GENERAL_RATE_LIMIT_WINDOW_MS = parsePositiveInt(process.env.API_RATE_LIMIT_WINDOW_MS, 15 * 60 * 1000);
+const GENERAL_RATE_LIMIT_MAX = parsePositiveInt(process.env.API_RATE_LIMIT_MAX, 300);
+const AUTH_RATE_LIMIT_WINDOW_MS = parsePositiveInt(process.env.AUTH_RATE_LIMIT_WINDOW_MS, 5 * 60 * 1000);
+const AUTH_RATE_LIMIT_MAX = parsePositiveInt(process.env.AUTH_RATE_LIMIT_MAX, 5);
+
 // Rate limiting - opća zaštita
 const generalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minuta
-  max: 300, // max 300 zahtjeva po IP u 15 min
+  windowMs: GENERAL_RATE_LIMIT_WINDOW_MS,
+  max: GENERAL_RATE_LIMIT_MAX,
   message: { message: 'Previše zahtjeva, pokušajte ponovo za 15 minuta' },
   standardHeaders: true,
   legacyHeaders: false,
@@ -40,11 +67,10 @@ const generalLimiter = rateLimit({
 app.use('/api/', generalLimiter);
 
 // Strogi rate limit za login/register (zaštita od brute force)
-const authWindowMs = 5 * 60 * 1000; // 5 minuta
 const authKeyGenerator = (req) => ipKeyGenerator(req);
 const authLimiter = rateLimit({
-  windowMs: authWindowMs,
-  max: 5, // max 5 neuspješnih pokušaja u 5 min
+  windowMs: AUTH_RATE_LIMIT_WINDOW_MS,
+  max: AUTH_RATE_LIMIT_MAX,
   message: { message: 'Previše pokušaja prijave, pokušajte ponovo za 5 minuta' },
   keyGenerator: authKeyGenerator,
   skipSuccessfulRequests: true, // broji samo neuspješne pokušaje (4xx/5xx)
@@ -99,6 +125,12 @@ const activeUsers = new Map();
 io.on('connection', async (socket) => {
   console.log(`🔌 Korisnik spojen: ${socket.id}`);
 
+  const hasValidSocketSession = () => {
+    const exp = Number(socket.tokenExp || 0);
+    if (!exp) return true;
+    return (Date.now() / 1000) < exp;
+  };
+
   // JWT autentifikacija u handshakeu
   try {
     const token = socket.handshake.auth?.token || socket.handshake.query?.token;
@@ -108,6 +140,10 @@ io.on('connection', async (socket) => {
     }
 
     const decoded = jwt.verify(token.replace('Bearer ', ''), process.env.JWT_SECRET);
+    if (decoded?.type === 'refresh') {
+      socket.emit('auth-error', 'Neispravan tip tokena');
+      return socket.disconnect(true);
+    }
     const user = await User.findById(decoded.userId);
 
     if (!user || !user.aktivan) {
@@ -117,6 +153,7 @@ io.on('connection', async (socket) => {
 
     socket.userId = String(user._id);
     socket.companyId = String(user.companyId);
+    socket.tokenExp = decoded?.exp;
     activeUsers.set(socket.userId, socket.id);
     console.log(`✅ Auth socket: ${user.email} (${socket.userId})`);
   } catch (err) {
@@ -128,6 +165,10 @@ io.on('connection', async (socket) => {
   // Join chat room
   socket.on('join-room', async (roomId) => {
     if (!socket.userId || !socket.companyId) return;
+    if (!hasValidSocketSession()) {
+      socket.emit('auth-error', 'Sesija je istekla');
+      return socket.disconnect(true);
+    }
     try {
       const room = await ChatRoom.findOne({ _id: roomId, companyId: socket.companyId }).select('_id');
       if (!room) {
@@ -144,6 +185,10 @@ io.on('connection', async (socket) => {
   // Send message
   socket.on('send-message', async (data) => {
     if (!socket.userId || !socket.companyId) return;
+    if (!hasValidSocketSession()) {
+      socket.emit('auth-error', 'Sesija je istekla');
+      return socket.disconnect(true);
+    }
     const { roomId, message } = data;
     try {
       const room = await ChatRoom.findOne({ _id: roomId, companyId: socket.companyId }).select('_id');

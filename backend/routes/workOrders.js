@@ -461,6 +461,8 @@ router.post('/:id/sign', authenticate, async (req, res) => {
     workOrder.signatureImage = req.body.signatureImage || workOrder.signatureImage;
     workOrder.customerSignatureImage = req.body.customerSignatureImage || workOrder.customerSignatureImage;
     workOrder.customerAbsent = req.body.customerAbsent === true;
+    const company = await Company.findById(req.companyId);
+
     if (!workOrder.companyLogoDataUrl) {
       workOrder.companyLogoDataUrl = company?.logoDataUrl || await toEmbeddedImageDataUrl(company?.logo);
     }
@@ -476,7 +478,6 @@ router.post('/:id/sign', authenticate, async (req, res) => {
     workOrder.updated_at = new Date();
 
     const baseUrl = resolveBaseUrl(req);
-    const company = await Company.findById(req.companyId);
     
     // PRIVREMENO ISKLJUČENO - PDF generiranje
     // const qrUrl = `${baseUrl}/api/work-orders/view/${workOrder._id}?token=${encodeURIComponent(workOrder.viewToken)}`;
@@ -487,12 +488,15 @@ router.post('/:id/sign', authenticate, async (req, res) => {
     // workOrder.lastGeneratedAt = new Date();
     await workOrder.save();
 
-    await Repair.findByIdAndUpdate(repair._id, {
-      radniNalogPotpisan: true,
-      radniNalogPotpisVrsta: 'digital',
-      updated_at: new Date(),
-      updated_by: req.user._id,
-    });
+    await Repair.updateOne(
+      { _id: repair._id, companyId: req.companyId },
+      {
+        radniNalogPotpisan: true,
+        radniNalogPotpisVrsta: 'digital',
+        updated_at: new Date(),
+        updated_by: req.user._id,
+      }
+    );
 
     await logAction({
       korisnikId: req.user._id,

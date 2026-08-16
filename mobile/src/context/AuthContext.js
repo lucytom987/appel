@@ -23,6 +23,9 @@ export const AuthProvider = ({ children }) => {
   const [firstLoginRequired, setFirstLoginRequired] = useState(false);
   const serverProbeRef = useRef(null);
   const userRef = useRef(null);
+  const wakeSyncInProgressRef = useRef(false);
+  const lastWakeSyncAtRef = useRef(0);
+  const lastNetworkOnlineRef = useRef(false);
 
   useEffect(() => {
     userRef.current = user;
@@ -34,11 +37,12 @@ export const AuthProvider = ({ children }) => {
     const unsubscribe = subscribeToNetworkChanges((online) => {
       setIsOnline(online);
       console.log(online ? 'Online' : 'Offline');
-      if (online) {
+      if (online && !lastNetworkOnlineRef.current) {
         wakeBackendAndSync(Boolean(userRef.current));
-      } else {
+      } else if (!online) {
         setServerAwake(false);
       }
+      lastNetworkOnlineRef.current = online;
     });
 
     return () => {
@@ -92,6 +96,19 @@ export const AuthProvider = ({ children }) => {
   };
 
   const wakeBackendAndSync = async (shouldSyncAfterWake = false) => {
+    const now = Date.now();
+    if (shouldSyncAfterWake && wakeSyncInProgressRef.current) {
+      return;
+    }
+    if (shouldSyncAfterWake && now - lastWakeSyncAtRef.current < 5000) {
+      return;
+    }
+
+    if (shouldSyncAfterWake) {
+      wakeSyncInProgressRef.current = true;
+      lastWakeSyncAtRef.current = now;
+    }
+
     const awake = await pingBackend();
     if (awake) {
       if (shouldSyncAfterWake) {
@@ -100,6 +117,10 @@ export const AuthProvider = ({ children }) => {
       }
     } else if (shouldSyncAfterWake) {
       scheduleServerProbe(true);
+    }
+
+    if (shouldSyncAfterWake) {
+      wakeSyncInProgressRef.current = false;
     }
   };
 

@@ -38,11 +38,19 @@ console.log(`🌐 API config: variant=${appVariant}, package=${detectedAndroidPa
 // Axios instance sa default konfiguracijom
 const api = axios.create({
   baseURL: API_URL,
-  timeout: 30000, // 30 sekundi timeout za Render free tier
+  timeout: 20000, // default za responsive UX; sporije mutacije koriste poseban timeout
   headers: {
     'Content-Type': 'application/json',
   },
 });
+
+const MUTATION_TIMEOUT_MS = 45000;
+const mutationRequest = (config) => api.request({ timeout: MUTATION_TIMEOUT_MS, ...config });
+const NON_QUEUEABLE_ENDPOINTS = ['/auth/login', '/auth/register', '/auth/public-register', '/auth/refresh', '/auth/complete-first-login'];
+const USERS_LITE_CACHE_TTL_MS = 120000;
+let usersLiteCache = null;
+let usersLiteCacheAt = 0;
+let usersLiteInFlight = null;
 
 let refreshPromise = null;
 
@@ -140,6 +148,12 @@ api.interceptors.response.use(
 
     // Ako je network ili 5xx i radi se o mutaciji (POST/PUT/DELETE) -> offline queue
     if ((isNetwork || (status && status >= 500)) && ['POST','PUT','DELETE'].includes(method)) {
+      const endpointPath = String(endpoint || '');
+      const isAuthEndpoint = NON_QUEUEABLE_ENDPOINTS.some((candidate) => endpointPath.includes(candidate));
+      if (isAuthEndpoint) {
+        return Promise.reject(normalized);
+      }
+
       try {
         syncQueue.add(method, endpoint, error.config?.data || '{}');
         return Promise.reject({ ...normalized, queued: true });
@@ -193,7 +207,8 @@ export const elevatorsAPI = {
 export const servicesAPI = {
   getAll: (params) => api.get('/services', { params }),
   getOne: (id) => api.get(`/services/${id}`),
-  create: (data) => api.post('/services', data),
+  create: (data) => mutationRequest({ method: 'post', url: '/services', data }),
+  createBatch: (items) => mutationRequest({ method: 'post', url: '/services/batch', data: { items } }),
   update: (id, data) => api.put(`/services/${id}`, data),
   delete: (id) => api.delete(`/services/${id}`),
   getMonthlyStats: (year, month) => api.get('/services/stats/monthly', { params: { year, month } }),
@@ -229,6 +244,28 @@ export const companyAPI = {
 export const usersAPI = {
   getAll: () => api.get('/users'),
   getLite: () => api.get('/users/lite'),
+  getLiteCached: async ({ force = false } = {}) => {
+    const now = Date.now();
+    if (!force && usersLiteCache && (now - usersLiteCacheAt) < USERS_LITE_CACHE_TTL_MS) {
+      return usersLiteCache;
+    }
+
+    if (!force && usersLiteInFlight) {
+      return usersLiteInFlight;
+    }
+
+    usersLiteInFlight = api.get('/users/lite')
+      .then((res) => {
+        usersLiteCache = res;
+        usersLiteCacheAt = Date.now();
+        return res;
+      })
+      .finally(() => {
+        usersLiteInFlight = null;
+      });
+
+    return usersLiteInFlight;
+  },
   getOne: (id) => api.get(`/users/${id}`),
   create: (data) => api.post('/users', data),
   update: (id, data) => api.put(`/users/${id}`, data),
@@ -260,7 +297,7 @@ export const repairsAPI = {
   getOne: (id) => api.get(`/repairs/${id}`),
   createWorkOrderDraft: (id) => api.post(`/work-orders/from-repair/${id}`),
   create: (data) =>
-    api.post('/repairs', {
+    mutationRequest({ method: 'post', url: '/repairs', data: {
       elevatorId: data.elevatorId || data.elevator,
       status: data.status || 'pending',
       datumPrijave: data.datumPrijave || data.reportedDate,
@@ -290,7 +327,7 @@ export const repairsAPI = {
       primioPoziv: data.primioPoziv || data.callReceivedBy,
       poslanMajstorId: data.poslanMajstorId || data.assignedTechnicianId,
       poslanMajstorIme: data.poslanMajstorIme || data.assignedTechnicianName,
-    }),
+    }}),
   update: (id, data) =>
     api.put(`/repairs/${id}`, {
       elevatorId: data.elevatorId || data.elevator,

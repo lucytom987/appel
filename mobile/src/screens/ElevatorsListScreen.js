@@ -12,7 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { elevatorDB } from '../database/db';
-import { syncAll, primeFullSync } from '../services/syncService';
+import { syncAll, primeFullSync, getSyncRateLimitUntil, getSyncRateLimitMessage } from '../services/syncService';
 import { useAuth } from '../context/AuthContext';
 
 export default function ElevatorsListScreen({ navigation }) {
@@ -119,7 +119,10 @@ export default function ElevatorsListScreen({ navigation }) {
 
     setRefreshing(true);
     await primeFullSync();
-    await syncAll();
+    const synced = await syncAll();
+    if (!synced && Date.now() < getSyncRateLimitUntil()) {
+      Alert.alert('Sinkronizacija pauzirana', getSyncRateLimitMessage());
+    }
     loadElevators();
     setRefreshing(false);
   };

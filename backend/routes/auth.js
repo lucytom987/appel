@@ -33,15 +33,16 @@ const getClientIp = (req) => {
 
 // Helper za generiranje access/refresh tokena
 const generateTokens = (userId) => {
+  const refreshSecret = process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET;
   const accessToken = jwt.sign(
-    { userId },
+    { userId, type: 'access' },
     process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRE || '30d' }
+    { expiresIn: process.env.JWT_EXPIRE || '1h' }
   );
 
   const refreshToken = jwt.sign(
-    { userId },
-    process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET,
+    { userId, type: 'refresh' },
+    refreshSecret,
     { expiresIn: process.env.JWT_REFRESH_EXPIRE || '90d' }
   );
 
@@ -107,6 +108,9 @@ router.post('/refresh', async (req, res) => {
     let decoded;
     try {
       decoded = jwt.verify(incoming, process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET);
+      if (decoded?.type !== 'refresh') {
+        return res.status(401).json({ message: 'Nevažeći tip tokena za refresh' });
+      }
     } catch (err) {
       return res.status(401).json({ message: 'Nevažeći refresh token' });
     }

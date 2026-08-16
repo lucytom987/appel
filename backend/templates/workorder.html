@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Obračun popravka dizala - <%= workOrder && workOrder.workOrderNumber || workOrderNumber || 'RN' %></title>
+  <title><%= workOrder && (workOrder.serviceId || workOrder.service) ? 'Obračun servisa dizala' : 'Obračun popravka dizala' %> - <%= workOrder && workOrder.workOrderNumber || workOrderNumber || 'RN' %></title>
   <style>
     :root {
       --ink: #0f172a;
@@ -209,6 +209,11 @@
       background: var(--panel);
     }
 
+    .labor-table td,
+    .labor-table th {
+      vertical-align: middle;
+    }
+
     .signatures {
       margin-top: auto;
       padding-top: 7mm;
@@ -368,7 +373,7 @@
     </div>
 
     <div class="title-wrap">
-      <h1 class="title">Obračun popravka dizala</h1>
+      <h1 class="title"><%= workOrder && (workOrder.serviceId || workOrder.service) ? 'Obračun servisa dizala' : 'Obračun popravka dizala' %></h1>
       <div class="title-rule"></div>
     </div>
 
@@ -400,9 +405,11 @@
     <table class="items-table">
       <thead>
         <tr>
-          <th style="width: 146mm;">Naziv utrošenog materijala - dijelovi</th>
-          <th style="width: 22mm;" class="num">J.M.</th>
-          <th style="width: 22mm;" class="num">Količina</th>
+          <th style="width: 108mm;">Naziv utrošenog materijala - dijelovi</th>
+          <th style="width: 20mm;" class="num">J.M.</th>
+          <th style="width: 20mm;" class="num">Količina</th>
+          <th style="width: 21mm;" class="num">Cijena</th>
+          <th style="width: 21mm;" class="num">Iznos</th>
         </tr>
       </thead>
       <tbody>
@@ -412,6 +419,8 @@
               <td><%= item.naziv || '-' %></td>
               <td class="num"><%= item.jedinica || '-' %></td>
               <td class="num"><%= item.kolicina || '-' %></td>
+              <td></td>
+              <td></td>
             </tr>
           <% }) %>
         <% } else if (repair && repair.utroseniMaterijal) { %>
@@ -419,27 +428,54 @@
             <td><%= repair.utroseniMaterijal %></td>
             <td class="num">-</td>
             <td class="num">-</td>
+            <td></td>
+            <td></td>
           </tr>
         <% } %>
-        <tr class="rowline"><td></td><td></td><td></td></tr>
-        <tr class="rowline"><td></td><td></td><td></td></tr>
-        <tr class="rowline"><td></td><td></td><td></td></tr>
-        <tr class="rowline"><td></td><td></td><td></td></tr>
+        <tr class="rowline"><td></td><td></td><td></td><td></td><td></td></tr>
+        <tr class="rowline"><td></td><td></td><td></td><td></td><td></td></tr>
+        <tr class="rowline"><td></td><td></td><td></td><td></td><td></td></tr>
+        <tr class="rowline"><td></td><td></td><td></td><td></td><td></td></tr>
+        <tr>
+          <td colspan="4" style="text-align:right; font-weight:800;">Ukupno materijal</td>
+          <td></td>
+        </tr>
       </tbody>
     </table>
 
-    <table class="form" style="margin-top:4mm;">
+    <table class="form labor-table" style="margin-top:4mm;">
+      <thead>
+        <tr>
+          <th style="width: 32mm;">Serviser</th>
+          <th>Ime i prezime</th>
+          <th style="width: 24mm;" class="num">Radni sati</th>
+          <th style="width: 24mm;" class="num">Cijena sata</th>
+          <th style="width: 24mm;" class="num">Iznos</th>
+        </tr>
+      </thead>
+      <tbody>
       <% serviserRows.forEach((row, index) => { %>
         <tr>
           <td class="label-cell"><%= row.label %></td>
           <td><div class="fill small-fill"><%= row.naziv || '' %></div></td>
-          <td class="label-cell"><%= row.label ? 'Radni sati' : '' %></td>
-          <td><div class="fill small-fill"><%= row.sati != null && row.sati !== '' ? formatHoursHR(row.sati) : '' %></div></td>
+          <td class="num"><div class="fill small-fill"><%= row.sati != null && row.sati !== '' ? formatHoursHR(row.sati) : '' %></div></td>
+          <td></td>
+          <td></td>
         </tr>
       <% }) %>
       <tr class="hours-summary">
-        <td colspan="3" style="text-align:right; font-weight:800;">Ukupno sati</td>
-        <td><div class="fill small-fill"><strong><%= formatHoursHR(totalSati) %></strong></div></td>
+        <td colspan="2" style="text-align:right; font-weight:800;">Ukupno sati</td>
+        <td class="num"><div class="fill small-fill"><strong><%= formatHoursHR(totalSati) %></strong></div></td>
+        <td style="text-align:right; font-weight:800;">Ukupno rad</td>
+        <td></td>
+      </tr>
+      </tbody>
+    </table>
+
+    <table class="form" style="margin-top:2mm;">
+      <tr class="hours-summary">
+        <td style="text-align:right; font-weight:800; width: 164mm;">Ukupno za naplatu (rad + materijal)</td>
+        <td style="width: 39mm;"></td>
       </tr>
     </table>
 

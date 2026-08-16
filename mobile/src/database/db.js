@@ -268,7 +268,10 @@ export const initDatabase = () => {
         method TEXT,
         endpoint TEXT,
         data TEXT,
-        created_at INTEGER
+        created_at INTEGER,
+        attempts INTEGER DEFAULT 0,
+        last_attempt_at INTEGER,
+        next_attempt_at INTEGER
       );
 
       -- Indexi za brže pretrage
@@ -292,6 +295,9 @@ export const initDatabase = () => {
       CREATE INDEX IF NOT EXISTS idx_events_datum ON events(datum);
       CREATE INDEX IF NOT EXISTS idx_messages_chatroom ON messages(chatroomId);
       CREATE INDEX IF NOT EXISTS idx_messages_synced ON messages(synced);
+      CREATE INDEX IF NOT EXISTS idx_elevators_updated_at ON elevators(updated_at);
+      CREATE INDEX IF NOT EXISTS idx_services_updated_at ON services(updated_at);
+      CREATE INDEX IF NOT EXISTS idx_repairs_updated_at ON repairs(updated_at);
     `);
 
 
@@ -318,6 +324,11 @@ export const initDatabase = () => {
     try { db.execSync('ALTER TABLE services ADD COLUMN deleted_at TEXT;'); } catch (e) {}
     try { db.execSync('ALTER TABLE services ADD COLUMN updated_by TEXT;'); } catch (e) {}
     try { db.execSync('ALTER TABLE services ADD COLUMN sync_status TEXT DEFAULT "synced";'); } catch (e) {}
+    try { db.execSync('ALTER TABLE sync_queue ADD COLUMN attempts INTEGER DEFAULT 0;'); } catch (e) {}
+    try { db.execSync('ALTER TABLE sync_queue ADD COLUMN last_attempt_at INTEGER;'); } catch (e) {}
+    try { db.execSync('ALTER TABLE sync_queue ADD COLUMN next_attempt_at INTEGER;'); } catch (e) {}
+    try { db.execSync('CREATE INDEX IF NOT EXISTS idx_sync_queue_next_attempt ON sync_queue(next_attempt_at);'); } catch (e) {}
+    try { db.execSync('CREATE INDEX IF NOT EXISTS idx_sync_queue_created_at ON sync_queue(created_at);'); } catch (e) {}
     try { db.execSync('ALTER TABLE services ADD COLUMN notePhotos TEXT;'); } catch (e) {}
     try { db.execSync('ALTER TABLE events ADD COLUMN elevatorId TEXT;'); } catch (e) {}
     try { db.execSync('ALTER TABLE events ADD COLUMN eventType TEXT;'); } catch (e) {}
@@ -1352,13 +1363,24 @@ export const messageDB = {
 export const syncQueue = {
   add: (method, endpoint, data) => {
     return db.runSync(
-      'INSERT INTO sync_queue (method, endpoint, data, created_at) VALUES (?, ?, ?, ?)',
-      [method, endpoint, JSON.stringify(data), Date.now()]
+      'INSERT INTO sync_queue (method, endpoint, data, created_at, attempts, last_attempt_at, next_attempt_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [method, endpoint, JSON.stringify(data), Date.now(), 0, null, Date.now()]
     );
   },
   
   getAll: () => {
     return db.getAllSync('SELECT * FROM sync_queue ORDER BY created_at');
+  },
+
+  markAttempt: (id, nextAttemptAt) => {
+    return db.runSync(
+      'UPDATE sync_queue SET attempts = COALESCE(attempts, 0) + 1, last_attempt_at = ?, next_attempt_at = ? WHERE id = ?',
+      [Date.now(), nextAttemptAt || Date.now(), id]
+    );
+  },
+
+  postpone: (id, nextAttemptAt) => {
+    return db.runSync('UPDATE sync_queue SET next_attempt_at = ? WHERE id = ?', [nextAttemptAt || Date.now(), id]);
   },
   
   remove: (id) => {

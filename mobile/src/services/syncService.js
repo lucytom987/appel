@@ -94,6 +94,55 @@ let isOnline = false;
 let syncInterval = null;
 let syncInProgress = false;
 let queueInProgress = false;
+let lastSyncStartedAt = 0;
+let rateLimitedUntil = 0;
+
+const MIN_SYNC_GAP_MS = 20000;
+const RATE_LIMIT_BACKOFF_MS = 15 * 60 * 1000;
+
+const isRateLimitedNow = () => Date.now() < rateLimitedUntil;
+
+const getRateLimitBackoffMs = (err) => {
+  const headers = err?.response?.headers || {};
+
+  const retryAfterRaw = headers['retry-after'] || headers['Retry-After'];
+  if (retryAfterRaw !== undefined && retryAfterRaw !== null) {
+    const asNumber = Number(retryAfterRaw);
+    if (Number.isFinite(asNumber) && asNumber > 0) {
+      return Math.max(1000, asNumber * 1000);
+    }
+
+    const asDateMs = new Date(String(retryAfterRaw)).getTime() - Date.now();
+    if (Number.isFinite(asDateMs) && asDateMs > 0) {
+      return asDateMs;
+    }
+  }
+
+  const resetRaw = headers['ratelimit-reset'] || headers['RateLimit-Reset'];
+  const resetSeconds = Number(resetRaw);
+  if (Number.isFinite(resetSeconds) && resetSeconds > 0) {
+    // express-rate-limit najčešće šalje sekunde do reseta
+    return Math.max(1000, resetSeconds * 1000);
+  }
+
+  return RATE_LIMIT_BACKOFF_MS;
+};
+
+const applyRateLimitBackoff = (err, source = 'sync') => {
+  const status = Number(err?.status || err?.response?.status || 0);
+  if (status !== 429) return;
+  rateLimitedUntil = Date.now() + getRateLimitBackoffMs(err);
+  console.log(`Rate limit detected (${source}); skipping sync calls until ${new Date(rateLimitedUntil).toISOString()}`);
+};
+
+export const getSyncRateLimitUntil = () => rateLimitedUntil;
+
+export const getSyncRateLimitMessage = () => {
+  if (!isRateLimitedNow()) return '';
+  const remainingMs = Math.max(0, rateLimitedUntil - Date.now());
+  const remainingMinutes = Math.ceil(remainingMs / 60000);
+  return `Sinkronizacija je privremeno pauzirana zbog previše zahtjeva. Pokušajte ponovno za otprilike ${remainingMinutes} min.`;
+};
 
 // Mark local record as conflict for later resolution
 const markConflict = (db, id) => {
@@ -139,16 +188,8 @@ export const checkOnlineStatus = async () => {
 
 export const subscribeToNetworkChanges = (callback) =>
   NetInfo.addEventListener((state) => {
-    const wasOnline = isOnline;
     isOnline = Boolean(state.isConnected && state.isInternetReachable);
     if (callback) callback(isOnline);
-    if (!wasOnline && isOnline) {
-      console.log('Online - pokrećem full sync');
-      (async () => {
-        await forceFullNextSync();
-        await syncAll();
-      })();
-    }
   });
 
 // lastSync helpers
@@ -213,6 +254,16 @@ const ensureToken = async () => {
   return token || null;
 };
 
+const MAX_QUEUE_ATTEMPTS = 8;
+const MAX_FALLBACK_DEPTH = 2;
+
+const getNextBackoffAt = (attempts) => {
+  const safeAttempts = Number.isFinite(Number(attempts)) ? Number(attempts) : 0;
+  const baseMs = Math.min(5 * 60 * 1000, 4000 * (2 ** safeAttempts));
+  const jitterMs = Math.floor(Math.random() * 1200);
+  return Date.now() + baseMs + jitterMs;
+};
+
 // Queue helpers
 const parseQueuedData = (raw) => {
   if (!raw) return {};
@@ -226,6 +277,7 @@ const parseQueuedData = (raw) => {
 
 export const processSyncQueue = async () => {
   if (queueInProgress) return false;
+  if (isRateLimitedNow()) return false;
   queueInProgress = true;
 
   try {
@@ -249,7 +301,13 @@ export const processSyncQueue = async () => {
 
     console.log(`Sync queue: processing ${items.length} item(s)`);
 
+    const now = Date.now();
     for (const item of items) {
+      const nextAttemptAt = Number(item?.next_attempt_at || 0);
+      if (nextAttemptAt && nextAttemptAt > now) {
+        continue;
+      }
+
       const payload = parseQueuedData(item.data);
       try {
         await api.request({
@@ -265,16 +323,32 @@ export const processSyncQueue = async () => {
         // Stop early if offline again
         if (!err?.response) {
           console.log(`Queue item ${item.id} failed (offline): ${err?.message || 'n/a'}`);
+          syncQueue.markAttempt?.(item.id, getNextBackoffAt(item?.attempts || 0));
           break;
         }
 
         // Drop on unrecoverable 4xx to avoid endless retry
         if (status && status >= 400 && status < 500) {
+          if (status === 409 || status === 412 || status === 429) {
+            const nextRetryAt = getNextBackoffAt((item?.attempts || 0) + 1);
+            syncQueue.markAttempt?.(item.id, nextRetryAt);
+            console.log(`Queue item ${item.id} postponed (status ${status})`);
+            continue;
+          }
           console.log(`Queue item ${item.id} dropped (status ${status})`);
           syncQueue.remove(item.id);
           continue;
         }
 
+        const nextRetryAt = getNextBackoffAt(item?.attempts || 0);
+        const attemptCount = Number(item?.attempts || 0) + 1;
+        if (attemptCount >= MAX_QUEUE_ATTEMPTS) {
+          console.log(`Queue item ${item.id} dropped (max attempts reached)`);
+          syncQueue.remove(item.id);
+          continue;
+        }
+
+        syncQueue.markAttempt?.(item.id, nextRetryAt);
         console.log(`Queue item ${item.id} retained (status ${status || 'unknown'})`);
       }
     }
@@ -286,8 +360,9 @@ export const processSyncQueue = async () => {
 };
 
 // Pull elevatori (delta, uz auto-recovery ako lokalni broj je manji od server total)
-export const syncElevatorsFromServer = async (forceFull = false) => {
+export const syncElevatorsFromServer = async (forceFull = false, fallbackDepth = 0) => {
   if (!isOnline) return false;
+  if (isRateLimitedNow()) return false;
   try {
     const periodicFull = await shouldRunPeriodicFull('lastFullElevators', 6);
     const shouldFullSync = forceFull || periodicFull || (await shouldForceFullSync('lastSyncElevators', elevatorDB.getAll));
@@ -362,6 +437,11 @@ export const syncElevatorsFromServer = async (forceFull = false) => {
       skip += serverElevators.length;
     } while (fetched < total && skip < 5000);
 
+    if (fetched < total && skip >= 5000) {
+      console.log(`Elevators sync stopped at safety cap (fetched ${fetched}/${total})`);
+      return false;
+    }
+
     // Ako je full pull (nema updatedAfter) napravimo reconciliaciju: lokalni zapisi koji nisu na serveru -> označi kao obrisane (osim local_ i dirty)
     if (!last) {
       try {
@@ -386,17 +466,9 @@ export const syncElevatorsFromServer = async (forceFull = false) => {
       }
     }
 
-    // Ako delta nije vratila ni�ta, forsiraj jedan full pull
+    // 0 delta je normalno stanje kada nema promjena; ne forsiraj full pull svaki put.
     if (!shouldFullSync && fetched === 0) {
-      try {
-        if (SecureStore.deleteItemAsync) {
-          await SecureStore.deleteItemAsync('lastSyncElevators');
-          console.log('Elevators delta returned 0; retrying with full pull');
-        }
-      } catch (e) {
-        console.log('Could not clear lastSyncElevators for full retry:', e?.message);
-      }
-      return syncElevatorsFromServer();
+      console.log('Elevators delta returned 0; no changes detected');
     }
 
     await setLastSync('lastSyncElevators');
@@ -406,14 +478,15 @@ export const syncElevatorsFromServer = async (forceFull = false) => {
 
     // Recovery: ako delta sync donese manje zapisa od server total, odradi jo� jedan full pull
     const localCount = (elevatorDB.getAll?.() || []).length;
-    if (!forceFull && total && localCount < total) {
+    if (!forceFull && total && localCount < total && fallbackDepth < MAX_FALLBACK_DEPTH) {
       console.log(`Elevators local count (${localCount}) < server total (${total}); forcing full pull once`);
-      return syncElevatorsFromServer(true);
+      return syncElevatorsFromServer(true, fallbackDepth + 1);
     }
 
     console.log(`Elevators synced: ${fetched} (total reported: ${total || fetched})`);
     return true;
   } catch (err) {
+    applyRateLimitBackoff(err, 'elevators');
     console.log('Gre�ka sync elevators:', err.message);
     return false;
   }
@@ -540,8 +613,9 @@ export const syncElevatorsToServer = async () => {
 };
 
 // Pull services (delta)
-export const syncServicesFromServer = async (forceFull = false) => {
+export const syncServicesFromServer = async (forceFull = false, fallbackDepth = 0) => {
   if (!isOnline) return false;
+  if (isRateLimitedNow()) return false;
   try {
     const periodicFull = await shouldRunPeriodicFull('lastFullServices', 6);
     const shouldFullSync = forceFull || periodicFull || (await shouldForceFullSync('lastSyncServices', serviceDB.getAll));
@@ -609,6 +683,11 @@ export const syncServicesFromServer = async (forceFull = false) => {
       skip += serverServices.length;
     } while (fetched < total && skip < 5000); // hard stop to avoid runaway
 
+    if (fetched < total && skip >= 5000) {
+      console.log(`Services sync stopped at safety cap (fetched ${fetched}/${total})`);
+      return false;
+    }
+
     // Full pull reconciliation: mark local services missing on server as deleted (except local_ or dirty)
     if (!last) {
       try {
@@ -633,17 +712,9 @@ export const syncServicesFromServer = async (forceFull = false) => {
       }
     }
 
-    // Ako je delta sync vratio 0 rezultata, poku�aj jedan full sync (obrisi lastSyncServices)
+    // 0 delta je normalno stanje kada nema promjena; ne forsiraj full pull svaki put.
     if (!shouldFullSync && fetched === 0) {
-      try {
-        if (SecureStore.deleteItemAsync) {
-          await SecureStore.deleteItemAsync('lastSyncServices');
-          console.log('Services delta returned 0; retrying with full pull');
-        }
-      } catch (e) {
-        console.log('Could not clear lastSyncServices for full retry:', e?.message);
-      }
-      return syncServicesFromServer(true);
+      console.log('Services delta returned 0; no changes detected');
     }
 
     await setLastSync('lastSyncServices');
@@ -654,14 +725,16 @@ export const syncServicesFromServer = async (forceFull = false) => {
     console.log(`Services synced: ${fetched} (total reported: ${total || fetched}), lokalno: ${localCount}`);
     return true;
   } catch (err) {
+    applyRateLimitBackoff(err, 'services');
     console.log('Gre�ka sync services:', err.message);
     return false;
   }
 };
 
 // Pull repairs (delta)
-export const syncRepairsFromServer = async () => {
+export const syncRepairsFromServer = async (fallbackDepth = 0) => {
   if (!isOnline) return false;
+  if (isRateLimitedNow()) return false;
   try {
     const periodicFull = await shouldRunPeriodicFull('lastFullRepairs', 1); // ce�ci full sync da pokupimo brisanja (svakih ~1h)
     const shouldFullSync = periodicFull || (() => {
@@ -760,17 +833,14 @@ export const syncRepairsFromServer = async () => {
       skip += serverRepairs.length;
     } while (fetched < total && skip < 5000);
 
-    // Ako delta vrati 0, poku�aj full pull
+    if (fetched < total && skip >= 5000) {
+      console.log(`Repairs sync stopped at safety cap (fetched ${fetched}/${total})`);
+      return false;
+    }
+
+    // 0 delta je normalno stanje kada nema promjena; ne forsiraj full pull svaki put.
     if (!shouldFullSync && fetched === 0) {
-      try {
-        if (SecureStore.deleteItemAsync) {
-          await SecureStore.deleteItemAsync('lastSyncRepairs');
-          console.log('Repairs delta returned 0; retrying with full pull');
-        }
-      } catch (e) {
-        console.log('Could not clear lastSyncRepairs for full retry:', e?.message);
-      }
-      return syncRepairsFromServer();
+      console.log('Repairs delta returned 0; no changes detected');
     }
 
     await setLastSync('lastSyncRepairs');
@@ -780,6 +850,7 @@ export const syncRepairsFromServer = async () => {
     console.log(`Repairs synced: ${fetched} (total reported: ${total || fetched})`);
     return true;
   } catch (err) {
+    applyRateLimitBackoff(err, 'repairs');
     console.log('Gre�ka sync repairs:', err.message);
     return false;
   }
@@ -1043,6 +1114,7 @@ export const syncRepairsToServer = async () => {
 // Sync users (admin)
 export const syncUsersFromServer = async () => {
   if (!isOnline) return false;
+  if (isRateLimitedNow()) return false;
   try {
     const userData = await SecureStore.getItemAsync('userData');
     if (!userData) return false;
@@ -1052,6 +1124,7 @@ export const syncUsersFromServer = async () => {
     userDB.bulkInsert(res.data);
     return true;
   } catch (err) {
+    applyRateLimitBackoff(err, 'users');
     console.log('Gre�ka sync users:', err.message);
     return false;
   }
@@ -1064,11 +1137,23 @@ export const primeFullSync = async () => {
 
 // Master sync
 export const syncAll = async () => {
+  if (isRateLimitedNow()) {
+    console.log(`Sync paused due to rate limit until ${new Date(rateLimitedUntil).toISOString()}`);
+    return false;
+  }
+
+  const now = Date.now();
+  if (now - lastSyncStartedAt < MIN_SYNC_GAP_MS) {
+    console.log('Sync skipped (cooldown window active)');
+    return false;
+  }
+
   if (syncInProgress) {
     console.log('Sync već u tijeku - preskačem');
     return false;
   }
   syncInProgress = true;
+  lastSyncStartedAt = now;
 
   const online = await checkOnlineStatus();
   if (!online) {
@@ -1151,6 +1236,8 @@ export default {
   processSyncQueue,
   forceFullNextSync,
   primeFullSync,
+  getSyncRateLimitUntil,
+  getSyncRateLimitMessage,
 };
 
 

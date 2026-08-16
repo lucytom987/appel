@@ -10,7 +10,7 @@ const { logAction } = require('../services/auditService');
 router.get('/', authenticate, async (req, res) => {
   try {
     const { limit = 100, skip = 0 } = req.query;
-    const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 0, 1), 200);
+    const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 0, 1), 100);
     const parsedSkip = Math.max(parseInt(skip, 10) || 0, 0);
 
     const chatrooms = await ChatRoom.find({ companyId: req.companyId })

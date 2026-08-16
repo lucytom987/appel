@@ -15,7 +15,7 @@ const {
 router.get('/', authenticate, async (req, res) => {
   try {
     const { updatedAfter, includeDeleted = 'false', limit = 200, skip = 0 } = req.query;
-    const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 0, 1), 500);
+    const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 0, 1), 200);
     const parsedSkip = Math.max(parseInt(skip, 10) || 0, 0);
     const filter = { companyId: req.companyId };
 
@@ -203,11 +203,18 @@ router.put('/:id', authenticate, async (req, res) => {
     }
     updateData.azuriranDatum = now;
 
-    const elevator = await Elevator.findByIdAndUpdate(
-      req.params.id,
+    const elevator = await Elevator.findOneAndUpdate(
+      { _id: req.params.id, companyId: req.companyId },
       updateData,
       { new: true, runValidators: true }
     );
+
+    if (!elevator) {
+      return res.status(404).json({
+        success: false,
+        message: 'Dizalo nije pronađeno'
+      });
+    }
 
     // Audit log
     await logAction({

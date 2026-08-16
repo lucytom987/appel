@@ -23,6 +23,17 @@ import { repairsAPI, usersAPI } from '../services/api';
 import ms from '../utils/scale';
 import { applyUserPickerFilter } from '../utils/userPickerFilters';
 
+const wait = (msDelay) => new Promise((resolve) => setTimeout(resolve, msDelay));
+
+const isTransientRequestError = (err) => {
+  if (!err) return false;
+  if (err.queued) return false;
+  const status = Number(err.status || err.response?.status || 0);
+  if (status >= 500) return true;
+  const message = String(err.message || '').toLowerCase();
+  return message.includes('network') || message.includes('timeout') || message.includes('socket');
+};
+
 export default function AddRepairScreen({ navigation, route }) {
   const { elevator } = route.params || {};
   const { user, isOnline, serverAwake } = useAuth();
@@ -65,6 +76,7 @@ export default function AddRepairScreen({ navigation, route }) {
   });
   const opisInputRef = useRef(null);
   const callerInputRef = useRef(null);
+  const requestSessionIdRef = useRef(`repSession_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`);
 
   // Prefill reporter/contact from logged-in user for convenience
   const defaultReporter = React.useMemo(() => {
@@ -150,7 +162,7 @@ export default function AddRepairScreen({ navigation, route }) {
 
       try {
         if (online) {
-          const res = await usersAPI.getLite();
+          const res = await usersAPI.getLiteCached();
           const data = res.data?.data || res.data || [];
           const filtered = filterOutCurrent(data);
           try {
@@ -203,11 +215,6 @@ export default function AddRepairScreen({ navigation, route }) {
       return;
     }
 
-    if (!online && !isOfflineDemo) {
-      Alert.alert('Offline', 'Za slanje prijave potreban je internet.');
-      return;
-    }
-
     const result = await persistRepair({
       assignedTechnicianId: formData.poslanMajstorId,
       showSuccessAlert: true,
@@ -250,6 +257,7 @@ export default function AddRepairScreen({ navigation, route }) {
         poslanMajstorIme: assignedTechnicianName,
         poslanMajstorAt: normalizedAssignedId ? new Date().toISOString() : null,
         trebaloBi: isTrebaloBi,
+        clientRequestId: `${requestSessionIdRef.current}_${String(selectedElevator._id || selectedElevator.id)}_${(formData.reportedDate || new Date()).toISOString().slice(0, 10)}`,
       };
 
       // Provjeri je li offline korisnik (demo korisnik)
@@ -277,7 +285,21 @@ export default function AddRepairScreen({ navigation, route }) {
       } else {
         // Online s pravim korisničkim tokenom - spremi na backend
         try {
-          const response = await repairsAPI.create(repairData);
+          let response;
+          let lastErr;
+          for (let attempt = 1; attempt <= 3; attempt += 1) {
+            try {
+              response = await repairsAPI.create(repairData);
+              break;
+            } catch (err) {
+              lastErr = err;
+              if (!isTransientRequestError(err) || attempt === 3) {
+                throw err;
+              }
+              await wait(500 * attempt);
+            }
+          }
+          if (!response && lastErr) throw lastErr;
 
           // Spremi u lokalnu bazu (osiguraj "trebalo bi" flag i offline kompatibilnost)
           const created = response.data?.data || response.data || {};
@@ -302,6 +324,18 @@ export default function AddRepairScreen({ navigation, route }) {
           if (error.response?.status === 401) {
             throw new Error('Vaša prijava je istekla. Molim prijavite se ponovno.');
           }
+          if (error.queued) {
+            if (showSuccessAlert) {
+              Alert.alert('Prijavljeno', 'Kvar je spremljen u red čekanja i bit će poslan čim se veza stabilizira.', [
+                { text: 'OK', onPress: () => navigateAfterSave && navigation.navigate('Repairs') }
+              ]);
+            } else if (navigateAfterSave) {
+              navigation.navigate('Repairs');
+            }
+
+            return { success: true, assignedTechnician };
+          }
+
           // Fallback na lokalnu bazu
           console.log('⚠️ Backend greška - fallback na lokalnu bazu');
           repairDB.insert({
@@ -620,9 +654,9 @@ export default function AddRepairScreen({ navigation, route }) {
               <Text style={styles.stepSecondaryButtonText}>Nazad</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.submitButtonInline, (loading || (!online && !isOfflineDemo)) && styles.submitButtonDisabled]}
+              style={[styles.submitButtonInline, loading && styles.submitButtonDisabled]}
               onPress={handleSubmit}
-              disabled={loading || (!online && !isOfflineDemo)}
+              disabled={loading}
               activeOpacity={0.85}
             >
               {loading ? (

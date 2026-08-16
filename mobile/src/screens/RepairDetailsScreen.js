@@ -19,6 +19,8 @@ const safeText = (value, fallback = '') => {
   return normalized || fallback;
 };
 
+const normalizePhoneForCall = (value) => String(value || '').replace(/[^\d+]/g, '');
+
 const statusLabel = (repair) => {
   if (repair.trebaloBi) return 'Trebalo bi';
   if (repair.status === 'completed') return 'Završeno';
@@ -356,6 +358,29 @@ export default function RepairDetailsScreen({ route, navigation }) {
     flowReportedAt
   );
 
+  const flowCallerPhone = safeText(selectedFlow?.kontaktTelefon || selectedFlow?.pozivateljTelefon, '');
+
+  const handleCallCaller = useCallback(async () => {
+    if (!flowCallerPhone) return;
+    const dialValue = normalizePhoneForCall(flowCallerPhone);
+    if (!dialValue) {
+      Alert.alert('Poziv nije moguć', 'Broj telefona nije ispravnog formata.');
+      return;
+    }
+
+    const telUrl = `tel:${dialValue}`;
+    try {
+      const canOpen = await Linking.canOpenURL(telUrl);
+      if (!canOpen) {
+        Alert.alert('Poziv nije moguć', 'Uređaj ne podržava direktno pozivanje.');
+        return;
+      }
+      await Linking.openURL(telUrl);
+    } catch (err) {
+      Alert.alert('Greška', 'Ne mogu otvoriti biranje broja.');
+    }
+  }, [flowCallerPhone]);
+
   const flowAssignedTechnician = (() => {
     const fromLinked = resolveUserName(selectedFlow?.poslanMajstorId);
     const name = fromLinked || safeText(selectedFlow?.poslanMajstorIme, '');
@@ -504,7 +529,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
 
       try {
         if (online) {
-          const res = await usersAPI.getLite();
+          const res = await usersAPI.getLiteCached();
           const data = res.data?.data || res.data || [];
           // Online endpoint je tenant-scoped po JWT-u, ne trebamo dodatno filtrirati po companyId.
           const filtered = (Array.isArray(data) ? data : []).filter((u) => {
@@ -1595,6 +1620,20 @@ export default function RepairDetailsScreen({ route, navigation }) {
             <View style={styles.flowModalRows}>
               <FlowRow label="Prijavio kvar" value={flowReportedBy} icon="person-add-outline" />
               <FlowRow label="Pozivatelj" value={flowCaller} icon="person-outline" />
+              {flowCallerPhone ? (
+                <TouchableOpacity style={styles.flowCallRow} onPress={handleCallCaller} activeOpacity={0.8}>
+                  <View style={styles.flowLabelWrap}>
+                    <Ionicons name="call-outline" size={16} color="#065f46" />
+                    <Text style={styles.flowLabel}>Telefon pozivatelja</Text>
+                  </View>
+                  <View style={styles.flowCallContent}>
+                    <Text style={styles.flowValue}>{flowCallerPhone}</Text>
+                    <View style={styles.flowCallButton}>
+                      <Text style={styles.flowCallButtonText}>Nazovi</Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              ) : null}
               <FlowRow label="Majstor poslan" value={flowAssignedTechnician} icon="construct-outline" />
               <FlowRow label="Riješio kvar" value={flowResolvedBy} icon="checkmark-done-outline" />
               <FlowRow label="Potpisao" value={flowSignedBy} icon="create-outline" />
@@ -2153,6 +2192,31 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#0f172a',
     lineHeight: 20,
+  },
+  flowCallRow: {
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+    borderRadius: 14,
+    padding: 12,
+    backgroundColor: '#f0fdf4',
+    gap: 8,
+  },
+  flowCallContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  flowCallButton: {
+    backgroundColor: '#16a34a',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+  },
+  flowCallButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '800',
   },
   flowModalLoadingRow: {
     flexDirection: 'row',

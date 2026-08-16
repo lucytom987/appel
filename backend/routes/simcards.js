@@ -9,7 +9,7 @@ const { logAction } = require('../services/auditService');
 router.get('/', authenticate, async (req, res) => {
   try {
     const { aktivna, elevatorId, limit = 100, skip = 0 } = req.query;
-    const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 0, 1), 200);
+    const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 0, 1), 100);
     const parsedSkip = Math.max(parseInt(skip, 10) || 0, 0);
     const filter = { companyId: req.companyId };
     if (typeof aktivna !== 'undefined') filter.aktivna = aktivna === 'true' || aktivna === true;

@@ -209,6 +209,28 @@ router.get('/:id', authenticate, async (req, res) => {
 // POST /api/repairs - kreiraj popravak
 router.post('/', authenticate, async (req, res) => {
   try {
+    const clientRequestId = typeof req.body.clientRequestId === 'string' ? req.body.clientRequestId.trim() : '';
+
+    if (clientRequestId) {
+      const existingByRequestId = await Repair.findOne({
+        companyId: req.companyId,
+        clientRequestId,
+      })
+        .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala')
+        .populate('serviserID', 'ime prezime email')
+        .populate('completedBy', 'ime prezime email')
+        .populate('poslanMajstorId', 'ime prezime email');
+
+      if (existingByRequestId) {
+        return res.status(200).json({
+          success: true,
+          message: 'Popravak već postoji (idempotent retry)',
+          deduped: true,
+          data: existingByRequestId,
+        });
+      }
+    }
+
     const elevator = await Elevator.findOne({ _id: req.body.elevatorId || req.body.elevator, companyId: req.companyId });
     if (!elevator) {
       return res.status(404).json({ success: false, message: 'Dizalo nije pronađeno ili ne pripada vašoj firmi' });
@@ -265,6 +287,7 @@ router.post('/', authenticate, async (req, res) => {
     const isWorkOrderSigned = Boolean(req.body.radniNalogPotpisan);
     const repair = new Repair({
       ...req.body,
+      clientRequestId: clientRequestId || undefined,
       companyId: req.companyId,
       elevatorId: req.body.elevatorId || req.body.elevator,
       serviserID: req.user._id,
@@ -307,6 +330,34 @@ router.post('/', authenticate, async (req, res) => {
     res.status(201).json({ success: true, message: 'Popravak kreiran', data: repair });
   } catch (error) {
     console.error('Greška pri kreiranju popravka:', error);
+
+    if (error?.code === 11000 && error?.keyPattern?.companyId && error?.keyPattern?.clientRequestId) {
+      const clientRequestId = typeof req.body.clientRequestId === 'string' ? req.body.clientRequestId.trim() : '';
+      if (clientRequestId) {
+        try {
+          const existingByRequestId = await Repair.findOne({
+            companyId: req.companyId,
+            clientRequestId,
+          })
+            .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala')
+            .populate('serviserID', 'ime prezime email')
+            .populate('completedBy', 'ime prezime email')
+            .populate('poslanMajstorId', 'ime prezime email');
+
+          if (existingByRequestId) {
+            return res.status(200).json({
+              success: true,
+              message: 'Popravak već postoji (idempotent race)',
+              deduped: true,
+              data: existingByRequestId,
+            });
+          }
+        } catch (dedupeErr) {
+          console.log('Repair idempotent dedupe fetch failed:', dedupeErr?.message || dedupeErr);
+        }
+      }
+    }
+
     res.status(500).json({ success: false, message: 'Greška pri kreiranju popravka', error: error.message });
   }
 });
@@ -414,10 +465,18 @@ router.put('/:id', authenticate, async (req, res) => {
       updatePayload.completedAt = null;
     }
 
-    const repair = await Repair.findByIdAndUpdate(req.params.id, updatePayload, { new: true, runValidators: true })
+    const repair = await Repair.findOneAndUpdate(
+      { _id: req.params.id, companyId: req.companyId },
+      updatePayload,
+      { new: true, runValidators: true }
+    )
       .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala')
       .populate('serviserID', 'ime prezime email')
       .populate('completedBy', 'ime prezime email');
+
+    if (!repair) {
+      return res.status(404).json({ success: false, message: 'Popravak nije pronađen ili ne pripada vašoj firmi' });
+    }
       
     await repair.populate('poslanMajstorId', 'ime prezime email');
 

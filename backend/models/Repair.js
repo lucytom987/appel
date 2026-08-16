@@ -80,5 +80,6 @@ repairSchema.index({ azuriranDatum: -1 });
 repairSchema.index({ updated_at: -1 });
 repairSchema.index({ is_deleted: 1 });
 repairSchema.index({ completedBy: 1 });
+repairSchema.index({ companyId: 1, clientRequestId: 1 }, { unique: true, sparse: true });
 
 module.exports = mongoose.model('Repair', repairSchema);

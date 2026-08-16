@@ -73,5 +73,6 @@ serviceSchema.index({ serviserID: 1 });
 serviceSchema.index({ dodatniServiseri: 1 });
 serviceSchema.index({ updated_at: -1 });
 serviceSchema.index({ is_deleted: 1 });
+serviceSchema.index({ companyId: 1, clientRequestId: 1 }, { unique: true, sparse: true });
 
 module.exports = mongoose.model('Service', serviceSchema);

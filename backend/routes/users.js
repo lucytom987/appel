@@ -166,7 +166,7 @@ router.delete('/:id', authenticate, checkRole(['menadzer', 'admin']), async (req
     const userEmail = user.email;
     const userUloga = user.uloga;
 
-    await User.findByIdAndDelete(req.params.id);
+    await User.deleteOne({ _id: req.params.id, companyId: req.companyId });
 
     await logAction({
       korisnikId: req.user._id,

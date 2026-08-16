@@ -249,9 +249,6 @@ export default function RepairDetailsScreen({ route, navigation }) {
   const [signingLoading, setSigningLoading] = useState(false);
   const [creatingWorkOrder, setCreatingWorkOrder] = useState(false);
   const [creatingWorkOrderSeconds, setCreatingWorkOrderSeconds] = useState(0);
-  const [showCreateWorkOrderCountdown, setShowCreateWorkOrderCountdown] = useState(false);
-  const [createWorkOrderCountdownSeconds, setCreateWorkOrderCountdownSeconds] = useState(5);
-  const [pendingWorkOrderRepairId, setPendingWorkOrderRepairId] = useState(null);
   const [deletingWorkOrder, setDeletingWorkOrder] = useState(false);
   const [deletingRepair, setDeletingRepair] = useState(false);
   const [showWorkOrderMenu, setShowWorkOrderMenu] = useState(false);
@@ -426,48 +423,6 @@ export default function RepairDetailsScreen({ route, navigation }) {
 
     return () => clearInterval(timer);
   }, [creatingWorkOrder]);
-
-  useEffect(() => {
-    if (!showCreateWorkOrderCountdown || !pendingWorkOrderRepairId) {
-      setCreateWorkOrderCountdownSeconds(5);
-      return;
-    }
-
-    const timer = setInterval(() => {
-      setCreateWorkOrderCountdownSeconds((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [showCreateWorkOrderCountdown, pendingWorkOrderRepairId]);
-
-  useEffect(() => {
-    if (!showCreateWorkOrderCountdown || !pendingWorkOrderRepairId) return;
-    if (createWorkOrderCountdownSeconds > 0) return;
-
-    const executeCreate = async () => {
-      setShowCreateWorkOrderCountdown(false);
-      setCreatingWorkOrder(true);
-      try {
-        const draftRes = await workOrdersAPI.createFromRepair(pendingWorkOrderRepairId);
-        const newWorkOrder = draftRes?.data?.data;
-        setWorkOrder(newWorkOrder);
-      } catch (err) {
-        Alert.alert('Greška', err?.response?.data?.message || err?.message || 'Kreiranje radnog naloga nije uspjelo');
-      } finally {
-        setPendingWorkOrderRepairId(null);
-        setCreatingWorkOrder(false);
-        setCreateWorkOrderCountdownSeconds(5);
-      }
-    };
-
-    executeCreate();
-  }, [createWorkOrderCountdownSeconds, showCreateWorkOrderCountdown, pendingWorkOrderRepairId]);
 
   // Učitaj postojeći radni nalog (ako postoji)
   useEffect(() => {
@@ -738,12 +693,6 @@ export default function RepairDetailsScreen({ route, navigation }) {
     }
   };
 
-  const cancelCreateWorkOrderCountdown = () => {
-    setShowCreateWorkOrderCountdown(false);
-    setPendingWorkOrderRepairId(null);
-    setCreateWorkOrderCountdownSeconds(5);
-  };
-
   const handleDeleteWorkOrder = () => {
     const woId = workOrder?._id || workOrder?.id;
     if (!woId) return;
@@ -1011,9 +960,16 @@ export default function RepairDetailsScreen({ route, navigation }) {
       return;
     }
 
-    setPendingWorkOrderRepairId(repairIdForWorkOrder);
-    setCreateWorkOrderCountdownSeconds(5);
-    setShowCreateWorkOrderCountdown(true);
+    setCreatingWorkOrder(true);
+    try {
+      const draftRes = await workOrdersAPI.createFromRepair(repairIdForWorkOrder);
+      const newWorkOrder = draftRes?.data?.data;
+      setWorkOrder(newWorkOrder);
+    } catch (err) {
+      Alert.alert('Greška', err?.response?.data?.message || err?.message || 'Kreiranje radnog naloga nije uspjelo');
+    } finally {
+      setCreatingWorkOrder(false);
+    }
   };
 
   const openWorkOrderMenu = () => {
@@ -1048,12 +1004,6 @@ export default function RepairDetailsScreen({ route, navigation }) {
     } finally {
       setFlowLoadingSigner(false);
     }
-  };
-
-  const promptWorkOrderFlow = (repairId) => {
-    setPendingWorkOrderRepairId(repairId);
-    setCreateWorkOrderCountdownSeconds(5);
-    setShowCreateWorkOrderCountdown(true);
   };
 
   useEffect(() => {
@@ -1667,20 +1617,6 @@ export default function RepairDetailsScreen({ route, navigation }) {
             <Text style={styles.loadingTitle}>Kreiram radni nalog...</Text>
             <Text style={styles.loadingSubtitle}>Pričekaj malo, obrada traje duže na sporijoj mreži.</Text>
             <Text style={styles.loadingTimer}>Trajanje: {creatingWorkOrderSeconds}s</Text>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal visible={showCreateWorkOrderCountdown} transparent animationType="fade" onRequestClose={cancelCreateWorkOrderCountdown}>
-        <View style={styles.loadingOverlay}>
-          <View style={styles.loadingCard}>
-            <Ionicons name="document-text-outline" size={30} color="#2563eb" />
-            <Text style={styles.loadingTitle}>Kreiram radni nalog...</Text>
-            <Text style={styles.loadingSubtitle}>Ako si se predomislio, možeš odustati prije početka kreiranja.</Text>
-            <Text style={styles.loadingTimer}>Pokretanje za: {createWorkOrderCountdownSeconds}s</Text>
-            <TouchableOpacity style={styles.countdownCancelButton} onPress={cancelCreateWorkOrderCountdown}>
-              <Text style={styles.countdownCancelButtonText}>Odustani</Text>
-            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -2601,18 +2537,6 @@ const styles = StyleSheet.create({
     fontSize: ms(14),
     color: '#fff',
     fontWeight: '700',
-  },
-  countdownCancelButton: {
-    marginTop: ms(16),
-    paddingHorizontal: ms(18),
-    paddingVertical: ms(10),
-    borderRadius: ms(10),
-    backgroundColor: '#e2e8f0',
-  },
-  countdownCancelButtonText: {
-    fontSize: ms(14),
-    fontWeight: '700',
-    color: '#334155',
   },
   disabledAction: {
     opacity: 0.45,

@@ -378,38 +378,51 @@
     </div>
 
     <table class="form">
+      <colgroup>
+        <col style="width: 24mm;" />
+        <col style="width: 39mm;" />
+        <col style="width: 34mm;" />
+        <col style="width: 30mm;" />
+        <col style="width: 24mm;" />
+        <col style="width: 39mm;" />
+      </colgroup>
       <tr>
         <td class="label-cell">Broj ugovora</td>
         <td><div class="fill small-fill"><%= elevator && elevator.brojUgovora || '-' %></div></td>
-        <td class="label-cell">Broj radnog naloga</td>
+        <td class="label-cell">Br. radnog naloga</td>
         <td><div class="fill small-fill"><%= workOrder && workOrder.workOrderNumber || '-' %></div></td>
-      </tr>
-      <tr>
-        <td class="label-cell">Broj dizala</td>
-        <td colspan="3"><div class="fill small-fill"><%= elevator && elevator.brojDizala || '-' %></div></td>
+        <td class="label-cell">Oznaka dizala</td>
+        <td><div class="fill small-fill"><%= elevator && elevator.brojDizala || '-' %></div></td>
       </tr>
       <tr>
         <td class="label-cell">Naziv potrošača</td>
-        <td colspan="3"><div class="fill small-fill customer-name"><%= elevator && elevator.nazivStranke || '-' %></div></td>
+        <td colspan="5"><div class="fill small-fill customer-name"><%= elevator && elevator.nazivStranke || '-' %></div></td>
       </tr>
       <tr>
         <td class="label-cell">Adresa</td>
-        <td colspan="3"><div class="fill small-fill"><%= elevator ? [elevator.ulica, elevator.mjesto].filter(Boolean).join(', ') || '-' : '-' %></div></td>
+        <td colspan="5"><div class="fill small-fill"><%= elevator ? [elevator.ulica, elevator.mjesto].filter(Boolean).join(', ') || '-' : '-' %></div></td>
       </tr>
       <tr>
         <td class="label-cell section-head">Opis izvršenih radova</td>
-        <td colspan="3"><div class="description-box"><%= repair && repair.opisPopravka || 'Nema zapisanog opisa izvršenih radova.' %></div></td>
+        <td colspan="5"><div class="description-box"><%= repair && repair.opisPopravka || 'Nema zapisanog opisa izvršenih radova.' %></div></td>
       </tr>
     </table>
 
     <table class="items-table">
+      <colgroup>
+        <col style="width: 106mm;" />
+        <col style="width: 20mm;" />
+        <col style="width: 20mm;" />
+        <col style="width: 22mm;" />
+        <col style="width: 22mm;" />
+      </colgroup>
       <thead>
         <tr>
-          <th style="width: 108mm;">Naziv utrošenog materijala - dijelovi</th>
-          <th style="width: 20mm;" class="num">J.M.</th>
-          <th style="width: 20mm;" class="num">Količina</th>
-          <th style="width: 21mm;" class="num">Cijena</th>
-          <th style="width: 21mm;" class="num">Iznos</th>
+          <th>Naziv utrošenog materijala - dijelovi</th>
+          <th class="num">J.M.</th>
+          <th class="num">Količina</th>
+          <th class="num">Cijena</th>
+          <th class="num">Iznos</th>
         </tr>
       </thead>
       <tbody>
@@ -436,6 +449,8 @@
         <tr class="rowline"><td></td><td></td><td></td><td></td><td></td></tr>
         <tr class="rowline"><td></td><td></td><td></td><td></td><td></td></tr>
         <tr class="rowline"><td></td><td></td><td></td><td></td><td></td></tr>
+        <tr class="rowline"><td></td><td></td><td></td><td></td><td></td></tr>
+        <tr class="rowline"><td></td><td></td><td></td><td></td><td></td></tr>
         <tr>
           <td colspan="4" style="text-align:right; font-weight:800;">Ukupno materijal</td>
           <td></td>
@@ -444,13 +459,20 @@
     </table>
 
     <table class="form labor-table" style="margin-top:4mm;">
+      <colgroup>
+        <col style="width: 32mm;" />
+        <col style="width: 74mm;" />
+        <col style="width: 40mm;" />
+        <col style="width: 22mm;" />
+        <col style="width: 22mm;" />
+      </colgroup>
       <thead>
         <tr>
-          <th style="width: 32mm;">Serviser</th>
+          <th>Serviser</th>
           <th>Ime i prezime</th>
-          <th style="width: 24mm;" class="num">Radni sati</th>
-          <th style="width: 24mm;" class="num">Cijena sata</th>
-          <th style="width: 24mm;" class="num">Iznos</th>
+          <th class="num">Radni sati</th>
+          <th class="num">Cijena sata</th>
+          <th class="num">Iznos</th>
         </tr>
       </thead>
       <tbody>

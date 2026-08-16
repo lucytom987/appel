@@ -19,7 +19,7 @@ import { useAuth } from '../context/AuthContext';
 import Constants from 'expo-constants';
 import ms from '../utils/scale';
 
-const APP_VERSION = Constants?.expoConfig?.version || '2.0.18';
+const APP_VERSION = Constants?.expoConfig?.version || '2.0.19';
 
 export default function LoginScreen() {
   const { login, loading } = useAuth();

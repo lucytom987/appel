@@ -359,7 +359,7 @@ const sendSignedEmailInBackground = async ({ workOrderId, companyId, baseUrl }) 
 router.post('/from-service/:serviceId', authenticate, async (req, res) => {
   try {
     const service = await Service.findOne({ _id: req.params.serviceId, companyId: req.companyId, is_deleted: { $ne: true } })
-      .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala brojUgovora')
+      .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala brojDizalaOpis brojUgovora')
       .populate('serviserID', 'ime prezime email');
 
     if (!service) {
@@ -447,7 +447,7 @@ router.post('/:id/sign', authenticate, async (req, res) => {
 
     const [service, company] = await Promise.all([
       Service.findOne({ _id: workOrder.serviceId, companyId: req.companyId })
-        .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala brojUgovora kontaktOsoba'),
+        .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala brojDizalaOpis brojUgovora kontaktOsoba'),
       Company.findById(req.companyId),
     ]);
 

@@ -108,6 +108,7 @@ export const initDatabase = () => {
         nazivStranke TEXT,
         ulica TEXT,
         mjesto TEXT,
+        brojDizalaOpis TEXT,
         brojDizala TEXT,
         tip TEXT,
         kontaktOsoba TEXT,
@@ -346,6 +347,7 @@ export const initDatabase = () => {
     try { db.execSync('ALTER TABLE elevators ADD COLUMN updated_by TEXT;'); } catch (e) {}
     try { db.execSync('ALTER TABLE elevators ADD COLUMN sync_status TEXT DEFAULT "synced";'); } catch (e) {}
     try { db.execSync('ALTER TABLE elevators ADD COLUMN synced INTEGER DEFAULT 0;'); } catch (e) {}
+    try { db.execSync('ALTER TABLE elevators ADD COLUMN brojDizalaOpis TEXT;'); } catch (e) {}
     try { db.execSync('ALTER TABLE elevators ADD COLUMN serviceScheduleMode TEXT DEFAULT "interval";'); } catch (e) {}
     try { db.execSync('ALTER TABLE elevators ADD COLUMN serviceMonths TEXT;'); } catch (e) {}
     try { db.execSync('CREATE INDEX IF NOT EXISTS idx_services_sync_status ON services(sync_status);'); } catch (e) {}
@@ -423,10 +425,10 @@ export const elevatorDB = {
     
     
     const result = db.runSync(
-      `INSERT INTO elevators (id, brojUgovora, nazivStranke, ulica, mjesto, brojDizala, 
-       tip, kontaktOsoba, koordinate_lat, koordinate_lng, status, 
+      `INSERT INTO elevators (id, brojUgovora, nazivStranke, ulica, mjesto, brojDizala,
+       brojDizalaOpis, tip, kontaktOsoba, koordinate_lat, koordinate_lng, status,
        intervalServisa, serviceScheduleMode, serviceMonths, godisnjiPregled, zadnjiServis, sljedeciServis, napomene, is_deleted, deleted_at, updated_by, updated_at, sync_status, synced) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )`,
       [
         elevator.id || elevator._id,
         elevator.brojUgovora,
@@ -434,6 +436,7 @@ export const elevatorDB = {
         elevator.ulica,
         elevator.mjesto,
         elevator.brojDizala,
+        elevator.brojDizalaOpis,
         elevator.tip || elevator.tipObjekta || 'stambeno',
         JSON.stringify(elevator.kontaktOsoba || {}),
         elevator.koordinate?.latitude,
@@ -462,7 +465,7 @@ export const elevatorDB = {
     const syncedFlag = syncStatus === 'synced' ? 1 : 0;
     
     return db.runSync(
-      `UPDATE elevators SET brojUgovora=?, nazivStranke=?, ulica=?, mjesto=?, brojDizala=?, 
+      `UPDATE elevators SET brojUgovora=?, nazivStranke=?, ulica=?, mjesto=?, brojDizala=?, brojDizalaOpis=?,
        tip=?, kontaktOsoba=?, koordinate_lat=?, koordinate_lng=?, 
        status=?, intervalServisa=?, serviceScheduleMode=?, serviceMonths=?, godisnjiPregled=?, zadnjiServis=?, sljedeciServis=?, napomene=?, 
        is_deleted=?, deleted_at=?, updated_by=?, updated_at=?, sync_status=?, synced=? WHERE id=?`,
@@ -472,6 +475,7 @@ export const elevatorDB = {
         elevator.ulica,
         elevator.mjesto,
         elevator.brojDizala,
+        elevator.brojDizalaOpis,
         elevator.tip || elevator.tipObjekta || 'stambeno',
         JSON.stringify(elevator.kontaktOsoba || {}),
         elevator.koordinate?.latitude,

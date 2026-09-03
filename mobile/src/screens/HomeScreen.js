@@ -6,7 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   RefreshControl,
-  ImageBackground,
+  Image,
   Platform,
   BackHandler,
   Alert,
@@ -25,7 +25,6 @@ import { isElevatorDueThisMonth } from '../utils/serviceSchedule';
 
 const DIZALA_CARD_IMAGE = require('../../assets/dizala_card.png');
 const MAP_CARD_IMAGE = require('../../assets/map_card.png');
-const REPAIRS_CARD_IMAGE = require('../../assets/popravci.png');
 
 export default function HomeScreen({ navigation }) {
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
@@ -57,11 +56,13 @@ export default function HomeScreen({ navigation }) {
   const isSmallScreen = screenWidth < 390;
   const isTinyScreen = screenWidth < 360;
   const isCompactScreen = isTinyScreen || (isSmallScreen && screenHeight < 780);
-  const gridGap = isTinyScreen ? 7 : (isCompactScreen ? 8 : 10);
-  const gridPadding = isTinyScreen ? 10 : (isCompactScreen ? 12 : 15);
+  const gridGap = isTinyScreen ? 7 : (isCompactScreen ? 8 : 9);
+  const gridPadding = isTinyScreen ? 10 : (isCompactScreen ? 12 : 14);
   const cardWidth = (screenWidth - (gridPadding * 2) - gridGap) / 2;
-  const topCardHeight = isTinyScreen ? 186 : (isCompactScreen ? 194 : (isSmallScreen ? 202 : 212));
-  const bottomCardHeight = topCardHeight;
+  const fullCardWidth = screenWidth - (gridPadding * 2);
+  const quickCardHeight = isTinyScreen ? 94 : (isCompactScreen ? 98 : 104);
+  const servicesCardHeight = isTinyScreen ? 108 : (isCompactScreen ? 112 : 118);
+  const repairsCardHeight = isTinyScreen ? 112 : (isCompactScreen ? 116 : 122);
 
   // Konvertiraj isOnline u boolean eksplicitno
   const online = Boolean(isOnline);
@@ -369,26 +370,28 @@ export default function HomeScreen({ navigation }) {
       <View style={[styles.header, isCompactScreen && styles.headerCompact]}>
         <View>
           <Text style={[styles.greeting, isCompactScreen && styles.greetingCompact]}>Pozdrav, {user?.prezime}!</Text>
-          <View style={styles.statusContainer}>
-            <View style={[styles.statusDot, { backgroundColor: online ? '#10b981' : '#ef4444' }]} />
-            <Text style={[styles.statusText, isCompactScreen && styles.statusTextCompact]}>
-              {online ? 'Online' : 'Offline'}
-            </Text>
-          </View>
-          <View style={[styles.statusContainer, { marginTop: 4 }]}>
-            <View
-              style={[
-                styles.statusDot,
-                { backgroundColor: serverReady ? '#10b981' : (serverReady === null ? '#f59e0b' : '#ef4444') },
-              ]}
-            />
-            <Text style={[styles.statusText, isCompactScreen && styles.statusTextCompact]}>
-              {serverReady
-                ? 'Server ON'
-                : serverReady === null
-                  ? 'Provjeravam server...'
-                  : 'Server se budi (Render)'}
-            </Text>
+          <View style={styles.statusLine}>
+            <View style={styles.statusContainer}>
+              <View style={[styles.statusDot, { backgroundColor: online ? '#10b981' : '#ef4444' }]} />
+              <Text style={[styles.statusText, isCompactScreen && styles.statusTextCompact]}>
+                {online ? 'Online' : 'Offline'}
+              </Text>
+            </View>
+            <View style={styles.statusContainer}>
+              <View
+                style={[
+                  styles.statusDot,
+                  { backgroundColor: serverReady ? '#10b981' : (serverReady === null ? '#f59e0b' : '#ef4444') },
+                ]}
+              />
+              <Text style={[styles.statusText, isCompactScreen && styles.statusTextCompact]}>
+                {serverReady
+                  ? 'Server ON'
+                  : serverReady === null
+                    ? 'Provjeravam...'
+                    : 'Server se budi'}
+              </Text>
+            </View>
           </View>
         </View>
         <View style={[styles.headerButtons, isCompactScreen && styles.headerButtonsCompact]}>
@@ -441,153 +444,115 @@ export default function HomeScreen({ navigation }) {
           <TouchableOpacity 
             style={[
               styles.statCard,
-              styles.statCardTopSquare,
+              styles.quickCard,
               styles.statCardElevators,
-              { width: cardWidth, height: topCardHeight },
+              { width: cardWidth, height: quickCardHeight },
             ]}
             onPress={() => navigation.navigate('Elevators')}
           >
-            <View style={styles.topCardBody}>
-              <ImageBackground
+            <View style={[styles.quickCardImageFrame, styles.elevatorImageFrame]}>
+              <Image
                 source={DIZALA_CARD_IMAGE}
-                style={[
-                  styles.dizalaCardImage,
-                  {
-                    height: isTinyScreen ? 82 : (isSmallScreen ? 90 : 100),
-                    marginBottom: isTinyScreen ? 4 : 6,
-                  },
-                ]}
-                imageStyle={styles.dizalaCardImageInner}
-                resizeMode="cover"
+                style={styles.quickCardImage}
+                resizeMode="contain"
               />
-              <Text style={[styles.statNumberTop, isSmallScreen && styles.statNumberTopSmall, isTinyScreen && styles.statNumberTopTiny]}>
-                {stats.totalElevators}
-              </Text>
             </View>
-            <View style={styles.topCardFooter}>
-              <View style={[styles.cardBottomDivider, styles.cardBottomDividerTop]} />
-              <Text style={styles.cardBottomTitle}>DIZALA</Text>
+            <View style={styles.quickCardText}>
+              <Text style={styles.quickCardLabel}>DIZALA</Text>
+              <Text style={styles.quickCardValue}>{stats.totalElevators}</Text>
             </View>
           </TouchableOpacity>
 
           <TouchableOpacity 
             style={[
               styles.statCard,
-              styles.statCardTopSquare,
+              styles.quickCard,
               styles.mapCard,
-              { width: cardWidth, height: topCardHeight },
+              { width: cardWidth, height: quickCardHeight },
             ]}
             onPress={() => navigation.navigate('Map')}
           >
-            <View style={styles.topCardBody}>
-              <ImageBackground
+            <View style={[styles.quickCardImageFrame, styles.mapImageFrame]}>
+              <Image
                 source={MAP_CARD_IMAGE}
-                style={[
-                  styles.mapCardImage,
-                  { height: isTinyScreen ? 104 : (isSmallScreen ? 112 : 122) },
-                ]}
-                imageStyle={styles.mapCardImageInner}
-                resizeMode="cover"
+                style={styles.quickCardImage}
+                resizeMode="contain"
               />
             </View>
-            <View style={styles.topCardFooter}>
-              <View style={[styles.cardBottomDivider, styles.cardBottomDividerTop]} />
-              <Text style={styles.cardBottomTitle}>KARTA</Text>
+            <View style={styles.quickCardText}>
+              <Text style={styles.quickCardLabel}>KARTA</Text>
+              <Ionicons name="location" size={24} color="#15956f" />
             </View>
           </TouchableOpacity>
 
           <TouchableOpacity 
             style={[
               styles.statCard,
-              styles.statCardBottom,
               styles.statCardServices,
-              { width: cardWidth, height: bottomCardHeight },
+              styles.statCardWide,
+              { width: fullCardWidth, height: servicesCardHeight },
             ]}
             onPress={() => navigation.navigate('Services')}
           >
-            <View style={styles.servicesCardBody}>
-              <View style={styles.gaugeWrapper}>
-                <View style={styles.servicesKpiWrap}>
-                  <Text style={[styles.servicesKpiRatio, isCompactScreen && styles.servicesKpiRatioCompact]}>
-                    {stats.servicedElevatorsThisMonth}/{stats.elevatorsRequiringServiceThisMonth}
-                  </Text>
-                  <View style={styles.servicesProgressTrack}>
-                    <View
-                      style={[
-                        styles.servicesProgressFill,
-                        { width: `${Math.max(6, Math.round(serviceProgress * 100))}%` },
-                      ]}
-                    />
-                  </View>
-                  <View style={styles.servicesProgressScale}>
-                    <Text style={styles.servicesProgressScaleText}>0%</Text>
-                    <Text style={styles.servicesProgressScaleText}>{Math.round(serviceProgress * 100)}%</Text>
-                    <Text style={styles.servicesProgressScaleText}>100%</Text>
-                  </View>
+            <View style={styles.summaryHeader}>
+              <View style={styles.summaryTitleWrap}>
+                <View style={styles.summaryIconBlue}>
+                  <Ionicons name="construct-outline" size={21} color="#2563eb" />
+                </View>
+                <View>
+                  <Text style={styles.summaryTitle}>SERVISI</Text>
+                  <Text style={styles.summarySubtitle}>Servisirano ovaj mjesec</Text>
                 </View>
               </View>
-              <Text
-                style={[styles.statLabel, styles.servicesStatLabel, isCompactScreen && styles.servicesStatLabelCompact]}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.82}
-              >
-                Servisirano ovaj mjesec
-              </Text>
+              <Text style={styles.summaryValue}>{stats.servicedElevatorsThisMonth}/{stats.elevatorsRequiringServiceThisMonth}</Text>
             </View>
-            <View style={styles.cardBottomDivider} />
-            <Text style={styles.cardBottomTitle}>SERVISI</Text>
+            <View style={styles.serviceProgressMeta}>
+              <Text style={styles.serviceProgressLabel}>Napredak</Text>
+              <Text style={styles.serviceProgressPercent}>{Math.round(serviceProgress * 100)}%</Text>
+            </View>
+            <View style={styles.servicesProgressTrack}>
+              <View
+                style={[
+                  styles.servicesProgressFill,
+                  { width: `${Math.max(4, Math.round(serviceProgress * 100))}%` },
+                ]}
+              />
+            </View>
           </TouchableOpacity>
 
           <TouchableOpacity 
             style={[
               styles.statCard,
-              styles.statCardBottom,
               styles.statCardRepairs,
-              { width: cardWidth, height: bottomCardHeight },
+              styles.statCardWide,
+              { width: fullCardWidth, height: repairsCardHeight },
             ]}
             onPress={() => navigation.navigate('Repairs')}
           >
-            <View style={styles.repairsTopArea}>
-              <View style={[styles.repairsList, isCompactScreen && styles.repairsListCompact]}>
-                <View style={[styles.repairsRow, isCompactScreen && styles.repairsRowCompact]}>
-                  <View style={[styles.repairsRowDot, { backgroundColor: '#ef4444' }]} />
-                  <Text
-                    style={[styles.repairsRowLabel, isCompactScreen && styles.repairsRowLabelCompact]}
-                    numberOfLines={1}
-                    allowFontScaling={false}
-                  >
-                    ČEKANJE
-                  </Text>
-                  <Text style={[styles.repairsRowNumber, isCompactScreen && styles.repairsRowNumberCompact, { color: '#ef4444' }]}>{stats.repairsPending}</Text>
+            <View style={styles.summaryHeader}>
+              <View style={styles.summaryTitleWrap}>
+                <View style={styles.summaryIconRed}>
+                  <Ionicons name="hammer-outline" size={21} color="#ef4444" />
                 </View>
-                <View style={[styles.repairsRow, isCompactScreen && styles.repairsRowCompact]}>
-                  <View style={[styles.repairsRowDot, { backgroundColor: '#f59e0b' }]} />
-                  <Text
-                    style={[styles.repairsRowLabel, isCompactScreen && styles.repairsRowLabelCompact]}
-                    numberOfLines={1}
-                    allowFontScaling={false}
-                  >
-                    TREBALO BI
-                  </Text>
-                  <Text style={[styles.repairsRowNumber, isCompactScreen && styles.repairsRowNumberCompact, { color: '#f59e0b' }]}>{stats.repairsTrebaloBi}</Text>
-                </View>
-                <View style={[styles.repairsRow, isCompactScreen && styles.repairsRowCompact]}>
-                  <View style={[styles.repairsRowDot, { backgroundColor: '#2563eb' }]} />
-                  <Text
-                    style={[styles.repairsRowLabel, isCompactScreen && styles.repairsRowLabelCompact]}
-                    numberOfLines={1}
-                    allowFontScaling={false}
-                  >
-                    NEPOTPISANO
-                  </Text>
-                  <Text style={[styles.repairsRowNumber, isCompactScreen && styles.repairsRowNumberCompact, { color: '#2563eb' }]}>{stats.repairsUnsigned}</Text>
-                </View>
+                <Text style={styles.summaryTitle}>POPRAVCI</Text>
               </View>
+              <Ionicons name="chevron-forward" size={18} color="#64748b" />
             </View>
-            <View style={styles.repairsCardFooter}>
-              <View style={styles.cardBottomDivider} />
-              <Text style={styles.cardBottomTitle}>POPRAVCI</Text>
+            <View style={styles.repairMetricsRow}>
+              <View style={styles.repairMetric}>
+                <Text style={[styles.repairMetricNumber, { color: '#ef4444' }]}>{stats.repairsPending}</Text>
+                <Text style={styles.repairMetricLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>Čekanje</Text>
+              </View>
+              <View style={styles.repairMetricDivider} />
+              <View style={styles.repairMetric}>
+                <Text style={[styles.repairMetricNumber, { color: '#f59e0b' }]}>{stats.repairsTrebaloBi}</Text>
+                <Text style={styles.repairMetricLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>Trebalo bi</Text>
+              </View>
+              <View style={styles.repairMetricDivider} />
+              <View style={styles.repairMetric}>
+                <Text style={[styles.repairMetricNumber, { color: '#2563eb' }]}>{stats.repairsUnsigned}</Text>
+                <Text style={styles.repairMetricLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>Nepotpisano</Text>
+              </View>
             </View>
           </TouchableOpacity>
         </View>
@@ -684,6 +649,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
+  statusLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    columnGap: 14,
+    rowGap: 4,
+  },
   statusDot: {
     width: 8,
     height: 8,
@@ -716,28 +688,28 @@ const styles = StyleSheet.create({
   },
   statCard: {
     backgroundColor: '#f3f6fb',
-    borderRadius: 20,
-    padding: 16,
+    borderRadius: 16,
+    padding: 12,
     width: '47%',
-    minHeight: 246,
+    minHeight: 0,
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07,
-    shadowRadius: 10,
-    elevation: 3,
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
     borderWidth: 1,
     borderColor: '#dfe7f2',
   },
   statCardElevators: {
-    backgroundColor: '#eef4ff',
-    borderColor: '#dfe8f7',
+    backgroundColor: '#f3f7ff',
+    borderColor: '#d6e3f8',
   },
   statCardTopSquare: {
-    minHeight: 212,
+    minHeight: 0,
     justifyContent: 'flex-start',
-    paddingTop: 12,
-    paddingBottom: 10,
+    paddingTop: 8,
+    paddingBottom: 8,
     overflow: 'hidden',
   },
   topCardBody: {
@@ -753,7 +725,61 @@ const styles = StyleSheet.create({
     paddingBottom: 2,
   },
   statCardBottom: {
-    minHeight: 212,
+    minHeight: 0,
+  },
+  statCardWide: {
+    width: '100%',
+  },
+  quickCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 7,
+    gap: 7,
+    overflow: 'hidden',
+  },
+  quickCardImageFrame: {
+    height: '100%',
+    aspectRatio: 1,
+    padding: 0,
+    borderRadius: 12,
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
+    overflow: 'hidden',
+  },
+  elevatorImageFrame: {
+    borderColor: 'transparent',
+  },
+  mapImageFrame: {
+    borderColor: 'transparent',
+  },
+  quickCardImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 9,
+  },
+  quickCardText: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 1,
+  },
+  quickCardValue: {
+    fontSize: rf(23, 19, 30),
+    fontWeight: '800',
+    color: '#0f172a',
+    lineHeight: rf(27, 23, 35),
+    textAlign: 'center',
+  },
+  quickCardLabel: {
+    fontSize: rf(11, 9.5, 14),
+    fontWeight: '800',
+    color: '#475569',
+    letterSpacing: 0,
+    textAlign: 'center',
   },
   dizalaCardImage: {
     width: '100%',
@@ -768,6 +794,11 @@ const styles = StyleSheet.create({
   statCardServices: {
     backgroundColor: '#f3f7fb',
     borderColor: '#dfe7f1',
+    alignItems: 'stretch',
+    justifyContent: 'flex-start',
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 12,
   },
   servicesCardBody: {
     flex: 1,
@@ -780,16 +811,113 @@ const styles = StyleSheet.create({
   statCardRepairs: {
     backgroundColor: '#f3f7fb',
     borderColor: '#dfe7f1',
-    padding: 0,
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 12,
+    alignItems: 'stretch',
+    justifyContent: 'flex-start',
     overflow: 'hidden',
   },
   mapCard: {
-    paddingTop: 10,
-    paddingHorizontal: 10,
-    paddingBottom: 12,
+    backgroundColor: '#f2f8f5',
     overflow: 'hidden',
-    borderColor: '#dfe7f1',
+    borderColor: '#d7e9e1',
+  },
+  summaryHeader: {
+    width: '100%',
+    minHeight: 40,
+    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 10,
+  },
+  summaryTitleWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+    flexShrink: 1,
+  },
+  summaryIconBlue: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#dbeafe',
+  },
+  summaryIconRed: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fee2e2',
+  },
+  summaryTitle: {
+    fontSize: rf(16, 14, 20),
+    fontWeight: '800',
+    color: '#1f2937',
+    letterSpacing: 0.2,
+  },
+  summarySubtitle: {
+    marginTop: 1,
+    fontSize: rf(10.5, 9, 13),
+    fontWeight: '600',
+    color: '#64748b',
+  },
+  summaryValue: {
+    fontSize: rf(22, 18, 29),
+    fontWeight: '800',
+    color: '#0f172a',
+  },
+  serviceProgressMeta: {
+    width: '100%',
+    marginTop: 9,
+    marginBottom: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  serviceProgressLabel: {
+    fontSize: rf(10.5, 9, 13),
+    fontWeight: '600',
+    color: '#64748b',
+  },
+  serviceProgressPercent: {
+    fontSize: rf(11, 9.5, 14),
+    fontWeight: '800',
+    color: '#2563eb',
+  },
+  repairMetricsRow: {
+    flex: 1,
+    width: '100%',
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'stretch',
+  },
+  repairMetric: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  repairMetricNumber: {
+    fontSize: rf(22, 18, 29),
+    fontWeight: '800',
+    lineHeight: rf(25, 21, 33),
+  },
+  repairMetricLabel: {
+    marginTop: 1,
+    fontSize: rf(12, 10.5, 15),
+    fontWeight: '700',
+    color: '#475569',
+    textAlign: 'center',
+    width: '100%',
+  },
+  repairMetricDivider: {
+    width: 1,
+    marginVertical: 4,
+    backgroundColor: '#dbe3ee',
   },
   mapCardImage: {
     width: '100%',
@@ -824,9 +952,9 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     alignItems: 'stretch',
     justifyContent: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 6,
   },
   repairsListCompact: {
     paddingHorizontal: 10,
@@ -838,8 +966,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#ffffff',
     borderRadius: 12,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingVertical: 7,
+    paddingHorizontal: 11,
     borderWidth: 1,
     borderColor: '#e5e7eb',
     shadowColor: '#0f172a',
@@ -861,11 +989,11 @@ const styles = StyleSheet.create({
   },
   repairsRowLabel: {
     flex: 1,
-    flexShrink: 1,
+    flexShrink: 0,
     fontSize: rf(12, 10, 18),
     fontWeight: '700',
     color: '#334155',
-    letterSpacing: 0.4,
+    letterSpacing: 0.2,
     marginRight: 6,
   },
   repairsRowLabelCompact: {
@@ -873,9 +1001,9 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   repairsRowNumber: {
-    fontSize: rf(20, 16, 28),
+    fontSize: rf(18, 15, 24),
     fontWeight: '800',
-    minWidth: 28,
+    minWidth: 24,
     textAlign: 'right',
   },
   repairsRowNumberCompact: {
@@ -918,19 +1046,19 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   servicesKpiRatio: {
-    fontSize: rf(29, 21, 40),
+    fontSize: rf(26, 20, 34),
     fontWeight: '800',
     color: '#0f172a',
     letterSpacing: 0.2,
-    marginBottom: 8,
+    marginBottom: 6,
   },
   servicesKpiRatioCompact: {
     fontSize: rf(24, 18, 34),
     marginBottom: 6,
   },
   servicesProgressTrack: {
-    width: '88%',
-    height: 11,
+    width: '100%',
+    height: 8,
     backgroundColor: '#dbe7fb',
     borderRadius: 999,
     overflow: 'hidden',
@@ -954,10 +1082,10 @@ const styles = StyleSheet.create({
     color: '#64748b',
   },
   statNumberTop: {
-    fontSize: rf(38, 28, 50),
+    fontSize: rf(33, 26, 44),
     fontWeight: '800',
     color: '#0f172a',
-    marginTop: 4,
+    marginTop: 2,
     marginBottom: 2,
   },
   statNumberTopSmall: {
@@ -979,7 +1107,7 @@ const styles = StyleSheet.create({
     marginTop: 0,
   },
   cardBottomTitle: {
-    fontSize: rf(16, 13, 22),
+    fontSize: rf(15, 12.5, 19),
     fontWeight: '800',
     color: '#1f2937',
     letterSpacing: 0.5,

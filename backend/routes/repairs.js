@@ -106,7 +106,7 @@ router.get('/', authenticate, async (req, res) => {
     }
 
     const repairs = await Repair.find(filter)
-      .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala')
+      .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala brojDizalaOpis')
       .populate('serviserID', 'ime prezime email')
       .populate('completedBy', 'ime prezime email')
       .populate('poslanMajstorId', 'ime prezime email')
@@ -189,7 +189,7 @@ router.get('/stats/monthly', authenticate, async (req, res) => {
 router.get('/:id', authenticate, async (req, res) => {
   try {
     const repair = await Repair.findOne({ _id: req.params.id, companyId: req.companyId, is_deleted: { $ne: true } })
-      .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala')
+      .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala brojDizalaOpis')
       .populate('serviserID', 'ime prezime email uloga')
       .populate('completedBy', 'ime prezime email')
       .populate('poslanMajstorId', 'ime prezime email')
@@ -216,7 +216,7 @@ router.post('/', authenticate, async (req, res) => {
         companyId: req.companyId,
         clientRequestId,
       })
-        .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala')
+        .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala brojDizalaOpis')
         .populate('serviserID', 'ime prezime email')
         .populate('completedBy', 'ime prezime email')
         .populate('poslanMajstorId', 'ime prezime email');
@@ -264,7 +264,7 @@ router.post('/', authenticate, async (req, res) => {
     if (existingRepair) {
       console.log(`⚠️ Duplikat popravka pronađen, vraćam postojeću: ${existingRepair._id}`);
       const populated = await Repair.findById(existingRepair._id)
-        .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala')
+        .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala brojDizalaOpis')
         .populate('serviserID', 'ime prezime email')
         .populate('completedBy', 'ime prezime email');
       return res.status(201).json({ success: true, message: 'Popravak već postoji', data: populated });
@@ -322,7 +322,7 @@ router.post('/', authenticate, async (req, res) => {
       opis: 'Kreiran novi popravak'
     });
 
-    await repair.populate('elevatorId', 'nazivStranke ulica mjesto brojDizala');
+    await repair.populate('elevatorId', 'nazivStranke ulica mjesto brojDizala brojDizalaOpis');
     await repair.populate('serviserID', 'ime prezime email');
     await repair.populate('completedBy', 'ime prezime email');
     await repair.populate('poslanMajstorId', 'ime prezime email');
@@ -339,7 +339,7 @@ router.post('/', authenticate, async (req, res) => {
             companyId: req.companyId,
             clientRequestId,
           })
-            .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala')
+            .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala brojDizalaOpis')
             .populate('serviserID', 'ime prezime email')
             .populate('completedBy', 'ime prezime email')
             .populate('poslanMajstorId', 'ime prezime email');
@@ -470,7 +470,7 @@ router.put('/:id', authenticate, async (req, res) => {
       updatePayload,
       { new: true, runValidators: true }
     )
-      .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala')
+      .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala brojDizalaOpis')
       .populate('serviserID', 'ime prezime email')
       .populate('completedBy', 'ime prezime email');
 

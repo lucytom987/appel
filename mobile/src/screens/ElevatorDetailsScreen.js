@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -16,6 +16,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { serviceDB, repairDB, elevatorDB, userDB, eventDB } from '../database/db';
 import { useAuth } from '../context/AuthContext';
 import { servicesAPI, simcardsAPI } from '../services/api';
+import { formatElevatorLabel } from '../utils/elevatorLabel';
 
 export default function ElevatorDetailsScreen({ route, navigation }) {
   const insets = useSafeAreaInsets();
@@ -65,6 +66,43 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
     const d = new Date(value);
     return Number.isNaN(d.getTime()) ? null : d;
   };
+
+  const parseAnnualMonth = (value) => {
+    if (value === null || value === undefined || value === '') return null;
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      const monthNum = Math.trunc(value);
+      return monthNum >= 1 && monthNum <= 12 ? monthNum : null;
+    }
+    const raw = String(value).trim();
+    if (!raw) return null;
+    if (/^\d{1,2}$/.test(raw)) {
+      const monthNum = Number(raw);
+      return monthNum >= 1 && monthNum <= 12 ? monthNum : null;
+    }
+    const monthYear = raw.match(/^(\d{1,2})[./-]\s*\d{4}$/);
+    if (monthYear) {
+      const monthNum = Number(monthYear[1]);
+      return monthNum >= 1 && monthNum <= 12 ? monthNum : null;
+    }
+    const parsed = new Date(raw);
+    if (!Number.isNaN(parsed.getTime())) return parsed.getMonth() + 1;
+    return null;
+  };
+
+  const MONTH_LABELS = [
+    'Siječanj',
+    'Veljača',
+    'Ožujak',
+    'Travanj',
+    'Svibanj',
+    'Lipanj',
+    'Srpanj',
+    'Kolovoz',
+    'Rujan',
+    'Listopad',
+    'Studeni',
+    'Prosinac',
+  ];
   
   const getServiserLabel = (service) => {
     const raw = service?.serviserID;
@@ -118,6 +156,27 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
       ? { latitude: currentElevator.koordinate[0], longitude: currentElevator.koordinate[1] }
       : (currentElevator.koordinate || { latitude: 0, longitude: 0 })
   };
+
+  const elevatorAddress = useMemo(
+    () => [elevator.ulica, elevator.mjesto].filter(Boolean).join(', ').trim(),
+    [elevator.ulica, elevator.mjesto]
+  );
+
+  const isPrivreda = (elevator.tip || elevator.tipObjekta) === 'privreda';
+  const heroPrimary = isPrivreda
+    ? (elevator.nazivStranke || elevatorAddress || 'Naziv nije postavljen')
+    : (elevatorAddress || elevator.nazivStranke || 'Adresa nije postavljena');
+  const heroSecondary = isPrivreda
+    ? (elevatorAddress || 'Adresa nije postavljena')
+    : (elevator.nazivStranke || 'Naziv nije postavljen');
+
+  const selectableElevators = groupElevators.length > 0 ? groupElevators : [elevator];
+  const elevatorId = (item) => String(item?.id || item?._id || '');
+  const currentElevatorId = elevatorId(elevator);
+  const currentGroupIndex = Math.max(
+    0,
+    selectableElevators.findIndex((item) => elevatorId(item) === currentElevatorId)
+  );
 
   const loadData = useCallback(() => {
     try {
@@ -449,13 +508,13 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
         <Text style={styles.sectionTitle}>Servisiranje</Text>
 
         {(() => {
-          const annual = parseDateSafe(elevator.godisnjiPregled);
-          if (!annual) return null;
+          const annualMonth = parseAnnualMonth(elevator.godisnjiPregled);
+          if (!annualMonth) return null;
           return (
             <InfoRow
               icon="calendar-outline"
               label="Godišnji pregled"
-              value={annual.toLocaleDateString('hr-HR')}
+              value={MONTH_LABELS[annualMonth - 1] || '-'}
             />
           );
         })()}
@@ -771,11 +830,14 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: Math.max(insets.top + 8, 16) }]}>
         <View style={styles.headerTopRow}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color="#111827" />
           </TouchableOpacity>
+          <Text style={styles.headerTitle} numberOfLines={1} allowFontScaling={false}>
+            Detalji dizala
+          </Text>
           <View style={styles.headerActions}>
             <TouchableOpacity 
               onPress={() => navigation.navigate('EditElevator', { elevator })}
@@ -784,90 +846,76 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
               <Ionicons name="create-outline" size={24} color="#2563eb" />
             </TouchableOpacity>
             <View style={[styles.headerStatus, { backgroundColor: getStatusColor(elevator.status) }]}>
-              <Text style={styles.headerStatusText}>{getStatusLabel(elevator.status)}</Text>
+              <Text style={styles.headerStatusText} allowFontScaling={false}>{getStatusLabel(elevator.status)}</Text>
             </View>
           </View>
         </View>
 
-        <View style={styles.heroBlock}>
-          <Text style={styles.heroContract}>{elevator.brojUgovora || 'Bez ugovora'}</Text>
-          <Text style={styles.heroName} numberOfLines={2}>{elevator.nazivStranke || 'Naziv nije postavljen'}</Text>
-          <Text style={styles.heroAddress} numberOfLines={2}>
-            {[elevator.ulica, elevator.mjesto].filter(Boolean).join(', ') || 'Adresa nije postavljena'}
-          </Text>
-        </View>
-      </View>
-
-      {groupElevators.length > 0 && (
-        <View style={styles.groupBlock}>
-          <View style={styles.groupHeaderRow}>
-            <Text style={styles.sectionTitle}>Dizala na adresi ({groupElevators.length})</Text>
-          </View>
-
-          {groupElevators.length <= 5 ? (
-            <View style={[styles.elevatorsInline, { marginTop: 6 }]}>
-              {groupElevators.map((e) => {
-                const active = e.id === elevator.id || e._id === elevator.id;
-                return (
-                  <TouchableOpacity
-                    key={e.id}
-                    disabled={active}
-                    style={[styles.elevatorBadge, active && styles.elevatorBadgeActive]}
-                    onPress={() => !active && navigation.navigate('ElevatorDetails', { elevator: e })}
-                  >
-                    <Text style={[styles.elevatorBadgeText, active && styles.elevatorBadgeTextActive]}>{e.brojDizala || '?'}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          ) : (
-            <View style={[styles.elevatorsInline, { flexWrap: 'nowrap', alignItems: 'center', marginTop: 8 }]}>
-              <View style={styles.currentBadge}>
-                <Ionicons name="checkmark-circle" size={14} color="#10b981" />
-                <Text style={styles.currentBadgeText}>{elevator.brojDizala || 'Aktivno dizalo'}</Text>
-              </View>
-              <TouchableOpacity onPress={() => setGroupModalVisible(true)} style={[styles.moreButton, { marginLeft: 6 }]}>
-                <Ionicons name="list" size={16} color="#2563eb" />
-                <Text style={styles.moreButtonText}>Prikaži sve</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </View>
-      )}
-
-      {/* Tabs */}
-      <View style={styles.tabs}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'info' && styles.tabActive]}
-          onPress={() => setActiveTab('info')}
-        >
-          <Text style={[styles.tabText, activeTab === 'info' && styles.tabTextActive]}>
-            Informacije
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'services' && styles.tabActive]}
-          onPress={() => setActiveTab('services')}
-        >
-          <Text style={[styles.tabText, activeTab === 'services' && styles.tabTextActive]}>
-            Servisi ({services.length})
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'events' && styles.tabActive]}
-          onPress={() => setActiveTab('events')}
-        >
-          <Text style={[styles.tabText, activeTab === 'events' && styles.tabTextActive]}>
-            Događaji ({repairs.length + events.length + serviceNotesCount})
-          </Text>
-        </TouchableOpacity>
       </View>
 
       {/* Content */}
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={{ paddingBottom: Math.max(insets.bottom + 20, 40) }}
+        stickyHeaderIndices={[1]}
       >
+        <View style={styles.introBlock}>
+          <View style={styles.heroAnimatedWrap}>
+            <View style={styles.heroBlock}>
+              <Text style={styles.heroContract}>{elevator.brojUgovora || 'Bez ugovora'}</Text>
+              <Text style={styles.heroName} numberOfLines={2}>{heroPrimary}</Text>
+              <Text style={styles.heroAddress} numberOfLines={2}>{heroSecondary}</Text>
+              <View style={styles.selectorDivider} />
+              <TouchableOpacity
+                style={styles.elevatorSelector}
+                activeOpacity={0.8}
+                onPress={() => setGroupModalVisible(true)}
+              >
+                <Text style={styles.elevatorSelectorEyebrow} allowFontScaling={false}>
+                  Odabrano dizalo · {currentGroupIndex + 1} od {selectableElevators.length}
+                </Text>
+                <View style={styles.elevatorSelectorRow}>
+                  <Ionicons name="business-outline" size={24} color="#2563eb" />
+                  <Text style={styles.elevatorSelectorValue} numberOfLines={1} allowFontScaling={false}>
+                    {formatElevatorLabel(elevator)}
+                  </Text>
+                  <Ionicons name="chevron-down" size={22} color="#2563eb" />
+                </View>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+
+        {/* Tabs */}
+        <View style={styles.tabsStickyWrap}>
+          <View style={styles.tabs}>
+            <TouchableOpacity
+              style={[styles.tab, activeTab === 'info' && styles.tabActive]}
+              onPress={() => setActiveTab('info')}
+            >
+              <Text style={[styles.tabText, activeTab === 'info' && styles.tabTextActive]} allowFontScaling={false}>
+                Informacije
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.tab, activeTab === 'services' && styles.tabActive]}
+              onPress={() => setActiveTab('services')}
+            >
+              <Text style={[styles.tabText, activeTab === 'services' && styles.tabTextActive]} allowFontScaling={false}>
+                Servisi ({services.length})
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.tab, activeTab === 'events' && styles.tabActive]}
+              onPress={() => setActiveTab('events')}
+            >
+              <Text style={[styles.tabText, activeTab === 'events' && styles.tabTextActive]} allowFontScaling={false}>
+                Događaji ({repairs.length + events.length + serviceNotesCount})
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
         {activeTab === 'info' && renderInfoTab()}
         {activeTab === 'services' && renderServicesTab()}
         {activeTab === 'events' && renderEventsTab()}
@@ -883,17 +931,17 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
         <View style={[styles.modalOverlay, { paddingBottom: Math.max((insets?.bottom || 0) + 12, 32) }]}>
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Dizala na adresi ({groupElevators.length})</Text>
+              <Text style={styles.modalTitle}>Dizala na adresi ({selectableElevators.length})</Text>
               <TouchableOpacity onPress={() => setGroupModalVisible(false)}>
                 <Ionicons name="close" size={22} color="#0f172a" />
               </TouchableOpacity>
             </View>
             <ScrollView style={{ maxHeight: 420 }} contentContainerStyle={{ paddingBottom: 18 }}>
-              {groupElevators.map((e) => {
-                const active = e.id === elevator.id || e._id === elevator.id;
+              {selectableElevators.map((e) => {
+                const active = elevatorId(e) === currentElevatorId;
                 return (
                   <TouchableOpacity
-                    key={e.id}
+                    key={elevatorId(e)}
                     disabled={active}
                     style={[styles.modalItem, active && styles.modalItemActive]}
                     onPress={() => {
@@ -902,7 +950,10 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
                     }}
                   >
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.modalItemTitle}>{e.brojDizala || 'Dizalo'}</Text>
+                      <Text style={styles.modalItemTitle}>{formatElevatorLabel(e)}</Text>
+                      {!!e.brojUgovora && (
+                        <Text style={styles.modalItemSubtitle}>Ugovor {e.brojUgovora}</Text>
+                      )}
                     </View>
                     {active ? (
                       <View style={styles.activePill}>
@@ -1096,13 +1147,11 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: '#fff',
-    paddingTop: 52,
-    paddingBottom: 16,
+    paddingBottom: 6,
     paddingHorizontal: 18,
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
     flexDirection: 'column',
-    gap: 10,
   },
   headerTopRow: {
     flexDirection: 'row',
@@ -1111,6 +1160,7 @@ const styles = StyleSheet.create({
   },
   backButton: {
     marginRight: 10,
+    paddingVertical: 6,
   },
   headerActions: {
     flexDirection: 'row',
@@ -1130,63 +1180,86 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '600',
   },
+  headerTitle: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0f172a',
+    marginRight: 8,
+    textAlign: 'center',
+  },
+  introBlock: {
+    backgroundColor: '#f9fafb',
+    paddingTop: 8,
+  },
+  heroAnimatedWrap: {
+    marginHorizontal: 18,
+  },
   heroBlock: {
     backgroundColor: '#f8fafc',
     borderRadius: 12,
-    padding: 14,
+    padding: 10,
     borderWidth: 1,
     borderColor: '#e2e8f0',
   },
   heroContract: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
     color: '#0f172a',
-    marginBottom: 6,
+    marginBottom: 4,
   },
   heroName: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '900',
     color: '#0f172a',
   },
   heroAddress: {
-    marginTop: 6,
-    fontSize: 15,
+    marginTop: 4,
+    fontSize: 14,
     color: '#475569',
   },
-  heroNumbersRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 10,
-  },
-  numberBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 10,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  numberBadgeText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  groupBlock: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 14,
-    marginHorizontal: 18,
-    marginTop: 8,
+  selectorDivider: {
+    height: 1,
+    marginTop: 12,
     marginBottom: 10,
+    backgroundColor: '#e2e8f0',
+  },
+  elevatorSelector: {
+    width: '100%',
+    overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: '#93c5fd',
+    borderRadius: 8,
+    backgroundColor: '#eff6ff',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  elevatorSelectorEyebrow: {
+    marginBottom: 7,
+    color: '#2563eb',
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  elevatorSelectorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  elevatorSelectorValue: {
+    flex: 1,
+    color: '#1e293b',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  tabsStickyWrap: {
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
   },
   tabs: {
     flexDirection: 'row',
     backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
   },
   tab: {
     flex: 1,
@@ -1255,82 +1328,6 @@ const styles = StyleSheet.create({
     color: '#4b5563',
     lineHeight: 22,
     fontWeight: '500',
-  },
-  elevatorsInline: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  elevatorBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: '#f3f4f6',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-  },
-  elevatorBadgeActive: {
-    backgroundColor: '#2563eb',
-    borderColor: '#2563eb',
-  },
-  elevatorBadgeText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#374151',
-  },
-  elevatorBadgeTextActive: {
-    color: '#fff',
-  },
-  moreBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: '#e0e7ff',
-    borderWidth: 1,
-    borderColor: '#c7d2fe',
-  },
-  moreBadgeText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#1d4ed8',
-  },
-  currentBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginLeft: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 10,
-    backgroundColor: '#ecfdf3',
-    borderWidth: 1,
-    borderColor: '#bbf7d0',
-  },
-  currentBadgeText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#166534',
-  },
-  groupHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 10,
-  },
-  moreButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: '#eef2ff',
-    borderWidth: 1,
-    borderColor: '#c7d2fe',
-  },
-  moreButtonText: {
-    color: '#2563eb',
-    fontWeight: '700',
   },
   modalOverlay: {
     flex: 1,

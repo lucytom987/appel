@@ -21,7 +21,6 @@ import { useAuth } from '../context/AuthContext';
 import LocationPickerModal from '../components/LocationPickerModal';
 import { elevatorDB, serviceDB, repairDB } from '../database/db';
 import { elevatorsAPI, servicesAPI, repairsAPI } from '../services/api';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import ms from '../utils/scale';
 import { normalizeServiceMonths } from '../utils/serviceSchedule';
 
@@ -49,8 +48,8 @@ export default function EditElevatorScreen({ navigation, route }) {
   const [deleting, setDeleting] = useState(false);
   const [geocoding, setGeocoding] = useState(false);
   const [mapPickerVisible, setMapPickerVisible] = useState(false);
-  const [showDatePicker, setShowDatePicker] = useState(false);
   const [applyToAddress, setApplyToAddress] = useState(false);
+  const [applyContactToAddress, setApplyContactToAddress] = useState(false);
 
   // Normaliziraj kontaktOsoba ako dolazi kao JSON string iz SQLite
   const parsedKontakt = (() => {
@@ -83,6 +82,45 @@ export default function EditElevatorScreen({ navigation, route }) {
     ).sort((a, b) => (a?.brojDizala || '').localeCompare(b?.brojDizala || ''));
   }, [elevator.ulica, elevator.mjesto]);
 
+  useEffect(() => {
+    const shouldApplyToGroup = groupElevators.length > 1;
+    setApplyToAddress(shouldApplyToGroup);
+    setApplyContactToAddress(shouldApplyToGroup);
+  }, [groupElevators.length]);
+
+  const parseAnnualMonth = (value) => {
+    if (value === null || value === undefined || value === '') return '';
+
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      const monthNum = Math.trunc(value);
+      return monthNum >= 1 && monthNum <= 12 ? String(monthNum) : '';
+    }
+
+    const raw = String(value).trim();
+    if (!raw) return '';
+
+    if (/^\d{1,2}$/.test(raw)) {
+      const monthNum = Number(raw);
+      return monthNum >= 1 && monthNum <= 12 ? String(monthNum) : '';
+    }
+
+    const monthYear = raw.match(/^(\d{1,2})[./-]\s*\d{4}$/);
+    if (monthYear) {
+      const monthNum = Number(monthYear[1]);
+      return monthNum >= 1 && monthNum <= 12 ? String(monthNum) : '';
+    }
+
+    const parsed = new Date(raw);
+    if (!Number.isNaN(parsed.getTime())) return String(parsed.getMonth() + 1);
+    return '';
+  };
+
+  const annualMonthToIso = (monthValue) => {
+    const monthNum = Number(monthValue);
+    if (!Number.isInteger(monthNum) || monthNum < 1 || monthNum > 12) return undefined;
+    return new Date(Date.UTC(2000, monthNum - 1, 1)).toISOString();
+  };
+
   const [formData, setFormData] = useState({
     // Osnovno
     brojUgovora: elevator.brojUgovora || '',
@@ -90,6 +128,7 @@ export default function EditElevatorScreen({ navigation, route }) {
     ulica: elevator.ulica || '',
     mjesto: elevator.mjesto || '',
     brojDizala: elevator.brojDizala || '',
+    brojDizalaOpis: elevator.brojDizalaOpis || '',
     tip: elevator.tip || elevator.tipObjekta || 'stambeno',
     
     // Kontakt osoba
@@ -126,16 +165,11 @@ export default function EditElevatorScreen({ navigation, route }) {
         return [];
       })()
     ),
-    godisnjiPregled: elevator.godisnjiPregled || '',
+    godisnjiPregled: parseAnnualMonth(elevator.godisnjiPregled),
     
     // Napomene
     napomene: elevator.napomene || '',
   });
-
-  const statusOptions = [
-    { value: 'aktivan', label: 'Aktivno', color: '#10b981' },
-    { value: 'neaktivan', label: 'Neaktivno', color: '#6b7280' },
-  ];
 
   const tipOptions = [
     { value: 'stambeno', label: 'Stambeno' },
@@ -225,77 +259,12 @@ export default function EditElevatorScreen({ navigation, route }) {
     });
   };
 
-  const parseDateSafe = (value) => {
-    if (!value) return null;
-    const d = new Date(value);
-    return Number.isNaN(d.getTime()) ? null : d;
-  };
-
-  const parseEuroDate = (value) => {
-    if (!value || typeof value !== 'string') return null;
-    const cleaned = value.trim();
-    const parts = cleaned.split(/[./-]/).filter(Boolean);
-    if (parts.length !== 3) return null;
-    const [dd, mm, yyyy] = parts.map((p) => parseInt(p, 10));
-    if (!dd || !mm || !yyyy) return null;
-    const d = new Date(yyyy, mm - 1, dd);
-    if (Number.isNaN(d.getTime())) return null;
-    if (d.getFullYear() !== yyyy || d.getMonth() !== mm - 1 || d.getDate() !== dd) return null;
-    return d;
-  };
-
-  const formatEuroDate = (date) => {
-    if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
-    const dd = String(date.getDate()).padStart(2, '0');
-    const mm = String(date.getMonth() + 1).padStart(2, '0');
-    const yyyy = date.getFullYear();
-    return `${dd}.${mm}.${yyyy}`;
-  };
-
-  const normalizeDate = (value) => {
-    if (!value) return undefined;
-    const trimmed = String(value).trim();
-
-    const euro = parseEuroDate(trimmed);
-    if (euro) return euro.toISOString();
-
-    const monthYearMatch = trimmed.match(/^(\d{1,2})[./-]\s*(\d{4})$/);
-    const yearMonthMatch = trimmed.match(/^(\d{4})[./-]\s*(\d{1,2})$/);
-    const match = monthYearMatch || yearMonthMatch;
-    if (match) {
-      const month = Number(monthYearMatch ? match[1] : match[2]);
-      const year = Number(monthYearMatch ? match[2] : match[1]);
-      if (month >= 1 && month <= 12) {
-        const isoDate = new Date(Date.UTC(year, month - 1, 1));
-        return isoDate.toISOString();
-      }
-    }
-
-    const d = new Date(trimmed);
-    return Number.isNaN(d.getTime()) ? undefined : d.toISOString();
-  };
-
-  const handleAnnualInputChange = (value) => {
-    const parsed = parseEuroDate(value);
-    setFormData(prev => ({ ...prev, godisnjiPregled: parsed ? formatEuroDate(parsed) : value }));
-  };
-
   useEffect(() => {
-    const parsed = parseDateSafe(elevator.godisnjiPregled);
-    if (parsed) {
-      setFormData(prev => ({ ...prev, godisnjiPregled: formatEuroDate(parsed) }));
-    }
+    setFormData((prev) => ({
+      ...prev,
+      godisnjiPregled: parseAnnualMonth(elevator.godisnjiPregled),
+    }));
   }, [elevator.godisnjiPregled]);
-
-  const handleAnnualDateChange = (event, selectedDate) => {
-    if (event?.type === 'dismissed') {
-      setShowDatePicker(false);
-      return;
-    }
-    setShowDatePicker(false);
-    const chosen = selectedDate || new Date();
-    setFormData(prev => ({ ...prev, godisnjiPregled: formatEuroDate(chosen) }));
-  };
 
   const toggleServiceMonth = (month) => {
     setFormData((prev) => {
@@ -333,24 +302,33 @@ export default function EditElevatorScreen({ navigation, route }) {
 
     setLoading(true);
 
+    let pendingElevatorData = null;
+    let pendingElevatorId = null;
+    let pendingOtherTargets = [];
+    let pendingSharedAddressData = null;
+
     try {
+      const cleanContactOsoba = (() => {
+        const cleanCodes = (formData.kontaktOsoba.ulazneSifre || [])
+          .map((c) => (c || '').trim())
+          .filter(Boolean);
+
+        return {
+          ...formData.kontaktOsoba,
+          ulaznaKoda: cleanCodes[0] || formData.kontaktOsoba.ulaznaKoda || '',
+          ulazneSifre: cleanCodes,
+        };
+      })();
+
       const elevatorData = {
         brojUgovora: formData.brojUgovora,
         nazivStranke: formData.nazivStranke,
         ulica: formData.ulica,
         mjesto: formData.mjesto,
         brojDizala: formData.brojDizala,
+        brojDizalaOpis: formData.brojDizalaOpis,
         tip: formData.tip || 'stambeno',
-        kontaktOsoba: (() => {
-          const cleanCodes = (formData.kontaktOsoba.ulazneSifre || [])
-            .map((c) => (c || '').trim())
-            .filter(Boolean);
-          return {
-            ...formData.kontaktOsoba,
-            ulaznaKoda: cleanCodes[0] || formData.kontaktOsoba.ulaznaKoda || '',
-            ulazneSifre: cleanCodes,
-          };
-        })(),
+        kontaktOsoba: cleanContactOsoba,
         koordinate: {
           latitude: parseFloat(formData.koordinate.latitude) || 0,
           longitude: parseFloat(formData.koordinate.longitude) || 0,
@@ -359,8 +337,13 @@ export default function EditElevatorScreen({ navigation, route }) {
         intervalServisa: parseInt(formData.intervalServisa) || 1,
         serviceScheduleMode: formData.serviceScheduleMode === 'months' ? 'months' : 'interval',
         serviceMonths: normalizeServiceMonths(formData.serviceMonths || []),
-        godisnjiPregled: normalizeDate(formData.godisnjiPregled),
+        godisnjiPregled: annualMonthToIso(formData.godisnjiPregled),
         napomene: formData.napomene,
+      };
+
+      const sharedAddressData = {
+        ...(applyToAddress && formData.brojUgovora ? { brojUgovora: formData.brojUgovora } : {}),
+        ...(applyContactToAddress ? { kontaktOsoba: cleanContactOsoba } : {}),
       };
 
       // Odredi ispravan ID (lokalni 'id' ili server '_id')
@@ -372,9 +355,14 @@ export default function EditElevatorScreen({ navigation, route }) {
       const token = await SecureStore.getItemAsync('userToken');
       const isOfflineUser = token?.startsWith('offline_token_');
 
-      const targets = applyToAddress ? groupElevators : [elevator];
+      const applyToGroup = applyToAddress || applyContactToAddress;
+      const targets = applyToGroup ? groupElevators : [elevator];
       const mainId = elevator._id || elevator.id;
       const otherTargets = targets.filter((t) => (t._id || t.id) !== mainId);
+      pendingElevatorData = elevatorData;
+      pendingElevatorId = eid;
+      pendingOtherTargets = otherTargets;
+      pendingSharedAddressData = sharedAddressData;
 
       if (!online || isOfflineUser) {
         // Spremi samo lokalno i označi za sync
@@ -388,14 +376,14 @@ export default function EditElevatorScreen({ navigation, route }) {
           updated_at: now,
         });
 
-        // Primijeni broj ugovora na ostala dizala na istoj adresi
-        if (otherTargets.length && formData.brojUgovora) {
+        // Primijeni adresne podatke na ostala dizala na istoj adresi
+        if (otherTargets.length && Object.keys(sharedAddressData).length) {
           otherTargets.forEach((t) => {
             const tid = t._id || t.id;
             if (!tid) return;
             elevatorDB.update(tid, {
               ...t,
-              brojUgovora: formData.brojUgovora,
+              ...sharedAddressData,
               id: tid,
               sync_status: 'dirty',
               synced: 0,
@@ -403,7 +391,7 @@ export default function EditElevatorScreen({ navigation, route }) {
             });
           });
         }
-        Alert.alert('Spremljeno lokalno', applyToAddress ? 'Ažurirano za sva dizala na adresi (čeka sync).' : 'Dizalo je ažurirano i čeka sinkronizaciju.');
+        Alert.alert('Spremljeno lokalno', applyToGroup ? 'Ažurirano za sva dizala na adresi (čeka sync).' : 'Dizalo je ažurirano i čeka sinkronizaciju.');
       } else {
         // Ažuriraj na backend
         const response = await elevatorsAPI.update(eid, elevatorData);
@@ -415,37 +403,36 @@ export default function EditElevatorScreen({ navigation, route }) {
           sync_status: 'synced',
         });
 
-        // Primijeni broj ugovora na ostala dizala na istoj adresi (samo brojUgovora da ne diramo specifične atribute)
-        if (otherTargets.length && formData.brojUgovora) {
-          for (const t of otherTargets) {
+        // Primijeni adresne podatke na ostala dizala na istoj adresi
+        if (otherTargets.length && Object.keys(sharedAddressData).length) {
+          await Promise.all(otherTargets.map(async (t) => {
             const tid = t._id || t.id;
-            if (!tid) continue;
+            if (!tid) return;
             try {
-              const res = await elevatorsAPI.update(tid, { brojUgovora: formData.brojUgovora });
+              const res = await elevatorsAPI.update(tid, sharedAddressData);
               const upd = res.data?.data || res.data || {};
               elevatorDB.update(tid, {
                 ...t,
                 ...upd,
-                brojUgovora: formData.brojUgovora,
                 id: tid,
                 synced: 1,
                 sync_status: 'synced',
               });
             } catch (err) {
-              console.log('Apply broj ugovora fail for', tid, err?.message);
+              console.log('Apply address data fail for', tid, err?.message);
               elevatorDB.update(tid, {
                 ...t,
-                brojUgovora: formData.brojUgovora,
+                ...sharedAddressData,
                 id: tid,
                 sync_status: 'dirty',
                 synced: 0,
                 updated_at: Date.now(),
               });
             }
-          }
+          }));
         }
 
-        Alert.alert('Uspjeh', applyToAddress ? 'Broj ugovora ažuriran za sva dizala na adresi.' : 'Dizalo uspješno ažurirano', [
+        Alert.alert('Uspjeh', applyToGroup ? 'Podaci ažurirani za sva dizala na adresi.' : 'Dizalo uspješno ažurirano', [
           {
             text: 'OK',
             onPress: () => navigation.navigate('Elevators'),
@@ -455,8 +442,46 @@ export default function EditElevatorScreen({ navigation, route }) {
 
     } catch (error) {
       console.error('Greška pri ažuriranju dizala:', error);
-      const msg = error.response?.data?.message || error.message || 'Nije moguće ažurirati dizalo';
-      Alert.alert('Greška', msg);
+      if (error?.queued) {
+        const now = Date.now();
+        if (pendingElevatorId && pendingElevatorData) {
+          elevatorDB.update(pendingElevatorId, {
+            ...elevator,
+            ...pendingElevatorData,
+            id: pendingElevatorId,
+            sync_status: 'dirty',
+            synced: 0,
+            updated_at: now,
+          });
+        }
+        if (pendingSharedAddressData && Object.keys(pendingSharedAddressData).length) {
+          pendingOtherTargets.forEach((target) => {
+            const targetId = target._id || target.id;
+            if (!targetId) return;
+            elevatorDB.update(targetId, {
+              ...target,
+              ...pendingSharedAddressData,
+              id: targetId,
+              sync_status: 'dirty',
+              synced: 0,
+              updated_at: now,
+            });
+          });
+        }
+        Alert.alert(
+          'Spremljeno u red čekanja',
+          'Veza prema serveru prekinula se tijekom spremanja. Izmjena će se automatski poslati čim se veza stabilizira.',
+          [{ text: 'OK', onPress: () => navigation.navigate('Elevators') }]
+        );
+      } else if (error?.sessionExpired) {
+        Alert.alert('Prijava je istekla', error.message);
+      } else if (error?.timeout) {
+        Alert.alert('Server nije odgovorio', 'Spremanje je trajalo predugo. Provjerite je li izmjena već vidljiva prije ponovnog pokušaja.');
+      } else if (error?.network) {
+        Alert.alert('Veza nije uspjela', 'Mreža je dostupna, ali aplikacija nije dobila odgovor servera. Pokušajte ponovno za nekoliko trenutaka.');
+      } else {
+        Alert.alert('Greška', error?.message || 'Nije moguće ažurirati dizalo');
+      }
     } finally {
       setLoading(false);
     }
@@ -636,6 +661,21 @@ export default function EditElevatorScreen({ navigation, route }) {
     };
   }, []);
 
+  const [expandedSections, setExpandedSections] = useState({
+    podaci: false,
+    kontakt: false,
+    lokacija: false,
+    servisiranje: false,
+    napomene: false,
+  });
+
+  const toggleSection = (section) => {
+    setExpandedSections((prev) => ({
+      ...prev,
+      [section]: !prev[section],
+    }));
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Header */}
@@ -682,52 +722,43 @@ export default function EditElevatorScreen({ navigation, route }) {
           </View>
         )}
 
-        {/* Status */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Status</Text>
-          
-          <View style={styles.statusButtons}>
-            {statusOptions.map(option => (
-              <TouchableOpacity
-                key={option.value}
-                style={[
-                  styles.statusButton,
-                  formData.status === option.value && {
-                    backgroundColor: option.color,
-                    borderColor: option.color,
-                  }
-                ]}
-                onPress={() => setFormData(prev => ({ ...prev, status: option.value }))}
-              >
-                <Text style={[
-                  styles.statusButtonText,
-                  formData.status === option.value && styles.statusButtonTextActive
-                ]}>
-                  {option.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
+          <TouchableOpacity style={styles.expandableHeader} onPress={() => toggleSection('podaci')} activeOpacity={0.8}>
+            <View style={styles.expandableTitleWrap}>
+              <Text style={styles.sectionTitle}>Podaci o stranci</Text>
+              <Text style={styles.sectionSubtitle}>Broj ugovora, naziv, adresa i tip objekta</Text>
+            </View>
+            <Ionicons name={expandedSections.podaci ? 'chevron-up' : 'chevron-down'} size={18} color="#475569" />
+          </TouchableOpacity>
 
-        {/* Osnovno */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Osnovno</Text>
-          <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
-            {tipOptions.map((opt) => {
-              const active = formData.tip === opt.value;
-              return (
-                <TouchableOpacity
-                  key={opt.value}
-                  style={[styles.statusButton, active && { backgroundColor: '#2563eb', borderColor: '#2563eb' }]}
-                  onPress={() => setFormData((prev) => ({ ...prev, tip: opt.value }))}
-                >
-                  <Text style={[styles.statusButtonText, active && styles.statusButtonTextActive]}>{opt.label}</Text>
-                </TouchableOpacity>
-              );
-            })}
+          {expandedSections.podaci && (
+          <>
+          <View style={styles.toggleRow}>
+            <TouchableOpacity
+              style={[
+                styles.toggleButton,
+                formData.status === 'aktivan' && styles.toggleButtonActiveGreen,
+              ]}
+              onPress={() => setFormData((prev) => ({ ...prev, status: prev.status === 'aktivan' ? 'neaktivan' : 'aktivan' }))}
+            >
+              <Text style={[styles.toggleButtonText, formData.status === 'aktivan' && styles.toggleButtonTextActive]}>
+                {formData.status === 'aktivan' ? 'Aktivno' : 'Neaktivno'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.toggleButton,
+                formData.tip === 'privreda' && styles.toggleButtonActiveBlue,
+              ]}
+              onPress={() => setFormData((prev) => ({ ...prev, tip: prev.tip === 'privreda' ? 'stambeno' : 'privreda' }))}
+            >
+              <Text style={[styles.toggleButtonText, formData.tip === 'privreda' && styles.toggleButtonTextActive]}>
+                {formData.tip === 'privreda' ? 'Privreda' : 'Stambeno'}
+              </Text>
+            </TouchableOpacity>
           </View>
-          
+
           <Text style={styles.label}>Broj ugovora *</Text>
           <TextInput
             style={styles.input}
@@ -781,12 +812,29 @@ export default function EditElevatorScreen({ navigation, route }) {
             onChangeText={(text) => setFormData(prev => ({ ...prev, brojDizala: text }))}
             placeholder="npr. D1, D2..."
           />
+
+          <Text style={styles.label}>Opis uz broj dizala</Text>
+          <TextInput
+            style={styles.input}
+            value={formData.brojDizalaOpis}
+            onChangeText={(text) => setFormData(prev => ({ ...prev, brojDizalaOpis: text }))}
+            placeholder="npr. lijevo, desno, 1. kat..."
+          />
+          </>
+          )}
         </View>
 
-        {/* Kontakt osoba */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Kontakt osoba</Text>
-          
+          <TouchableOpacity style={styles.expandableHeader} onPress={() => toggleSection('kontakt')} activeOpacity={0.8}>
+            <View style={styles.expandableTitleWrap}>
+              <Text style={styles.sectionTitle}>Kontakt osoba</Text>
+              <Text style={styles.sectionSubtitle}>Ime, mobitel, e-mail i ulazne šifre</Text>
+            </View>
+            <Ionicons name={expandedSections.kontakt ? 'chevron-up' : 'chevron-down'} size={18} color="#475569" />
+          </TouchableOpacity>
+
+          {expandedSections.kontakt && (
+          <>
           <Text style={styles.label}>Ime i prezime</Text>
           <TextInput
             style={styles.input}
@@ -845,14 +893,36 @@ export default function EditElevatorScreen({ navigation, route }) {
               <Ionicons name="add" size={18} color="#2563eb" />
               <Text style={styles.addCodeText}>Dodaj ulaz</Text>
             </TouchableOpacity>
+            {groupElevators.length > 1 && (
+              <TouchableOpacity
+                style={styles.applyRow}
+                onPress={() => setApplyContactToAddress((v) => !v)}
+                activeOpacity={0.8}
+              >
+                <Ionicons
+                  name={applyContactToAddress ? 'checkbox' : 'square-outline'}
+                  size={18}
+                  color={applyContactToAddress ? '#2563eb' : '#6b7280'}
+                />
+                <Text style={styles.applyText}>Primijeni kontakt osobu na sva dizala na adresi ({groupElevators.length})</Text>
+              </TouchableOpacity>
+            )}
           </View>
-        </View>
+            </>
+            )}
+          </View>
 
-        {/* Lokacija (GPS) */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Lokacija (GPS)</Text>
-          
-          {/* Akcijski gumbi */}
+            <TouchableOpacity style={styles.expandableHeader} onPress={() => toggleSection('lokacija')} activeOpacity={0.8}>
+              <View style={styles.expandableTitleWrap}>
+                <Text style={styles.sectionTitle}>Lokacija (GPS)</Text>
+              <Text style={styles.sectionSubtitle}>Nađi iz adrese ili odaberi na karti</Text>
+              </View>
+              <Ionicons name={expandedSections.lokacija ? 'chevron-up' : 'chevron-down'} size={18} color="#475569" />
+            </TouchableOpacity>
+
+            {expandedSections.lokacija && (
+            <>
           <View style={styles.locationActions}>
             <TouchableOpacity
               style={styles.locationButton}
@@ -877,51 +947,21 @@ export default function EditElevatorScreen({ navigation, route }) {
               <Text style={styles.locationButtonText}>Odaberi na karti</Text>
             </TouchableOpacity>
           </View>
-
-          {/* Koordinate prikaz */}
-          <View style={styles.coordinatesDisplay}>
-            <View style={styles.coordinateItem}>
-              <Text style={styles.coordinateLabel}>Širina (lat):</Text>
-              <TextInput
-                style={styles.coordinateInput}
-                value={formData.koordinate.latitude.toString()}
-                onChangeText={(text) => setFormData(prev => ({
-                  ...prev,
-                  koordinate: { ...prev.koordinate, latitude: parseFloat(text) || 0 }
-                }))}
-                placeholder="45.815"
-                keyboardType="decimal-pad"
-              />
-            </View>
-            <View style={styles.coordinateItem}>
-              <Text style={styles.coordinateLabel}>Dužina (lng):</Text>
-              <TextInput
-                style={styles.coordinateInput}
-                value={formData.koordinate.longitude.toString()}
-                onChangeText={(text) => setFormData(prev => ({
-                  ...prev,
-                  koordinate: { ...prev.koordinate, longitude: parseFloat(text) || 0 }
-                }))}
-                placeholder="15.982"
-                keyboardType="decimal-pad"
-              />
-            </View>
-          </View>
-
-          {formData.koordinate.latitude !== 0 && formData.koordinate.longitude !== 0 && (
-            <View style={styles.locationSet}>
-              <Ionicons name="checkmark-circle" size={16} color="#10b981" />
-              <Text style={styles.locationSetText}>
-                Lokacija postavljena
-              </Text>
-            </View>
+          </>
           )}
         </View>
 
-        {/* Servisiranje */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Servisiranje</Text>
+          <TouchableOpacity style={styles.expandableHeader} onPress={() => toggleSection('servisiranje')} activeOpacity={0.8}>
+            <View style={styles.expandableTitleWrap}>
+              <Text style={styles.sectionTitle}>Servisiranje</Text>
+              <Text style={styles.sectionSubtitle}>Način servisiranja, mjeseci i godišnji pregled</Text>
+            </View>
+            <Ionicons name={expandedSections.servisiranje ? 'chevron-up' : 'chevron-down'} size={18} color="#475569" />
+          </TouchableOpacity>
 
+          {expandedSections.servisiranje && (
+          <>
           <Text style={styles.label}>Način servisiranja</Text>
           <View style={styles.scheduleModeRow}>
             {[
@@ -987,46 +1027,55 @@ export default function EditElevatorScreen({ navigation, route }) {
           )}
 
           <Text style={styles.label}>Godišnji pregled</Text>
-          <View style={styles.dateRow}>
-            <TextInput
-              style={[styles.input, styles.dateInput]}
-              value={formData.godisnjiPregled}
-              onChangeText={handleAnnualInputChange}
-              placeholder="dd.mm.yyyy"
-              autoCapitalize="none"
-              keyboardType="numbers-and-punctuation"
-            />
-            <TouchableOpacity
-              style={styles.datePickerButton}
-              onPress={() => setShowDatePicker(true)}
-            >
-              <Ionicons name="calendar-outline" size={18} color="#1f2937" />
-              <Text style={styles.datePickerButtonText}>Odaberi</Text>
-            </TouchableOpacity>
+          <View style={styles.monthsGrid}>
+            {MONTH_OPTIONS.map((month) => {
+              const selected = String(formData.godisnjiPregled || '') === String(month.value);
+              return (
+                <TouchableOpacity
+                  key={`annual_${month.value}`}
+                  style={[styles.monthChip, selected && styles.monthChipActive]}
+                  onPress={() => setFormData((prev) => ({
+                    ...prev,
+                    godisnjiPregled: selected ? '' : String(month.value),
+                  }))}
+                >
+                  <Text style={[styles.monthChipText, selected && styles.monthChipTextActive]}>{month.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
-          <Text style={styles.hint}>Format: dd.mm.yyyy (podržavamo i YYYY-MM-DD ili MM/YYYY; spremamo 1. dan tog mjeseca).</Text>
+          <Text style={styles.hint}>Odaberite mjesec kada dolazi inspektor (ponavlja se jednom godišnje).</Text>
+          </>
+          )}
         </View>
 
-        {/* Napomene */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Napomene</Text>
-          
-          <TextInput
-            style={[styles.input, styles.textArea]}
-            value={formData.napomene}
-            onChangeText={(text) => setFormData(prev => ({ ...prev, napomene: text }))}
-            placeholder="Razne napomene..."
-            multiline
-            numberOfLines={4}
-            textAlignVertical="top"
-          />
+          <TouchableOpacity style={styles.expandableHeader} onPress={() => toggleSection('napomene')} activeOpacity={0.8}>
+            <View style={styles.expandableTitleWrap}>
+              <Text style={styles.sectionTitle}>Napomene</Text>
+              <Text style={styles.sectionSubtitle}>Dodatne informacije i komentari</Text>
+            </View>
+            <Ionicons name={expandedSections.napomene ? 'chevron-up' : 'chevron-down'} size={18} color="#475569" />
+          </TouchableOpacity>
+
+          {expandedSections.napomene && (
+            <TextInput
+              style={[styles.input, styles.textArea]}
+              value={formData.napomene}
+              onChangeText={(text) => setFormData(prev => ({ ...prev, napomene: text }))}
+              placeholder="Razne napomene..."
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+            />
+          )}
         </View>
 
         {/* Submit button */}
         <TouchableOpacity
-          style={[styles.submitButton, (!online || loading) && styles.submitButtonDisabled]}
+          style={[styles.submitButton, loading && styles.submitButtonDisabled]}
           onPress={handleUpdate}
-          disabled={!online || loading}
+          disabled={loading}
         >
           {loading ? (
             <ActivityIndicator color="#fff" />
@@ -1041,21 +1090,6 @@ export default function EditElevatorScreen({ navigation, route }) {
         <View style={{ height: 40 }} />
       </ScrollView>
       </KeyboardAvoidingView>
-
-      {showDatePicker && (
-        <DateTimePicker
-          value={(() => {
-            const euro = parseEuroDate(formData.godisnjiPregled);
-            if (euro) return euro;
-            const iso = parseDateSafe(formData.godisnjiPregled);
-            return iso || new Date();
-          })()}
-          mode="date"
-          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-          onChange={handleAnnualDateChange}
-        />
-      )}
-
       {/* Location Picker Modal */}
       <LocationPickerModal
         visible={mapPickerVisible}
@@ -1107,21 +1141,38 @@ const styles = StyleSheet.create({
   },
   section: {
     backgroundColor: '#fff',
-    padding: 20,
-    marginTop: 15,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginTop: 12,
+    borderRadius: 16,
+    marginHorizontal: 0,
+  },
+  expandableHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingVertical: 4,
+  },
+  expandableTitleWrap: {
+    flex: 1,
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     color: '#1f2937',
-    marginBottom: 15,
+  },
+  sectionSubtitle: {
+    marginTop: 4,
+    fontSize: 11,
+    color: '#64748b',
   },
   label: {
     fontSize: 14,
     fontWeight: '600',
     color: '#1f2937',
-    marginBottom: 8,
-    marginTop: 12,
+    marginBottom: 7,
+    marginTop: 10,
   },
   input: {
     backgroundColor: '#f9fafb',
@@ -1145,24 +1196,51 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   codeIndex: {
-    width: 60,
+    width: 68,
     fontSize: 13,
     fontWeight: '600',
     color: '#6b7280',
+    textAlign: 'center',
   },
   codeInput: {
     flex: 1,
+    minHeight: 46,
   },
   addCodeButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginTop: 4,
+    alignSelf: 'center',
+    marginTop: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: '#eff6ff',
   },
   addCodeText: {
     fontSize: 14,
     fontWeight: '600',
     color: '#2563eb',
+  },
+  applyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  applyText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#334155',
+    textAlign: 'center',
   },
   row: {
     flexDirection: 'row',
@@ -1260,28 +1338,6 @@ const styles = StyleSheet.create({
   monthChipTextActive: {
     color: '#fff',
   },
-  dateRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginTop: 6,
-  },
-  dateInput: {
-    flex: 1,
-  },
-  datePickerButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: '#e5e7eb',
-    borderRadius: 10,
-  },
-  datePickerButtonText: {
-    fontWeight: '600',
-    color: '#1f2937',
-  },
   typeButtons: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1307,28 +1363,38 @@ const styles = StyleSheet.create({
   typeButtonTextActive: {
     color: '#fff',
   },
-  statusButtons: {
+  toggleRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
+    gap: 10,
+    marginBottom: 12,
+    alignItems: 'stretch',
   },
-  statusButton: {
+  toggleButton: {
     flex: 1,
-    minWidth: '45%',
+    minHeight: 48,
     paddingVertical: 10,
     paddingHorizontal: 12,
-    borderRadius: 8,
-    borderWidth: 2,
-    borderColor: '#e5e7eb',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#dbe1ea',
     backgroundColor: '#fff',
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  statusButtonText: {
-    fontSize: 14,
+  toggleButtonActiveGreen: {
+    backgroundColor: '#10b981',
+    borderColor: '#10b981',
+  },
+  toggleButtonActiveBlue: {
+    backgroundColor: '#2563eb',
+    borderColor: '#2563eb',
+  },
+  toggleButtonText: {
+    fontSize: 13,
     fontWeight: '600',
-    color: '#666',
+    color: '#334155',
   },
-  statusButtonTextActive: {
+  toggleButtonTextActive: {
     color: '#fff',
   },
   submitButton: {
@@ -1357,18 +1423,20 @@ const styles = StyleSheet.create({
   },
   locationActions: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
     marginBottom: 15,
+    alignItems: 'stretch',
   },
   locationButton: {
     flex: 1,
+    minHeight: 48,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    paddingVertical: 12,
+    paddingVertical: 10,
     paddingHorizontal: 16,
-    borderRadius: 8,
+    borderRadius: 12,
     backgroundColor: '#f9fafb',
     borderWidth: 1,
     borderColor: '#e5e7eb',
@@ -1377,43 +1445,5 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#1f2937',
-  },
-  coordinatesDisplay: {
-    gap: 10,
-  },
-  coordinateItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  coordinateLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#6b7280',
-    width: 100,
-  },
-  coordinateInput: {
-    flex: 1,
-    backgroundColor: '#f9fafb',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 8,
-    padding: 10,
-    fontSize: 14,
-    color: '#1f2937',
-  },
-  locationSet: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 10,
-    padding: 8,
-    backgroundColor: '#f0fdf4',
-    borderRadius: 6,
-  },
-  locationSetText: {
-    fontSize: 12,
-    color: '#10b981',
-    fontWeight: '600',
   },
 });

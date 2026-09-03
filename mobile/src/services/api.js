@@ -88,11 +88,13 @@ api.interceptors.response.use(
     const status = error.response?.status;
     const method = error.config?.method?.toUpperCase();
     const endpoint = error.config?.url;
+    const isTimeout = error.code === 'ECONNABORTED' || String(error.message || '').toLowerCase().includes('timeout');
 
     // Standardiziraj error objekt (bez logiranja payload-a)
     const normalized = {
       status: status || 0,
       network: isNetwork,
+      timeout: isTimeout,
       endpoint,
       method,
       message: error.response?.data?.message || error.message || 'Neuspješan zahtjev',
@@ -197,7 +199,7 @@ export const elevatorsAPI = {
   getAll: (params) => api.get('/elevators', { params }),
   getOne: (id) => api.get(`/elevators/${id}`),
   create: (data) => api.post('/elevators', data),
-  update: (id, data) => api.put(`/elevators/${id}`, data),
+  update: (id, data) => mutationRequest({ method: 'put', url: `/elevators/${id}`, data }),
   delete: (id) => api.delete(`/elevators/${id}`),
   remove: (id) => api.delete(`/elevators/${id}`), // alias radi kompatibilnosti
   getStats: () => api.get('/elevators/stats/overview'),

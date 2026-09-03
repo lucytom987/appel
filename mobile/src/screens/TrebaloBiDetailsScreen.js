@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { elevatorDB, repairDB } from '../database/db';
 import { useFocusEffect } from '@react-navigation/native';
 import ms from '../utils/scale';
+import { formatElevatorLabel } from '../utils/elevatorLabel';
 
 const formatDate = (value) => {
   if (!value) return '-';
@@ -127,7 +128,7 @@ export default function TrebaloBiDetailsScreen({ route, navigation }) {
           )}
           <View style={styles.heroMetaRow}>
             <View style={[styles.badge, { borderColor: '#f59e0b' }]}>
-              <Text style={styles.badgeText}>{elevator?.brojDizala || 'Dizalo'}</Text>
+              <Text style={styles.badgeText}>{formatElevatorLabel(elevator)}</Text>
             </View>
             <View style={styles.metaRow}>
               <Ionicons name="time" size={16} color="#6b7280" />

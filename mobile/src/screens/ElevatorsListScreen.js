@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { elevatorDB } from '../database/db';
+import { formatElevatorLabel } from '../utils/elevatorLabel';
 import { syncAll, primeFullSync, getSyncRateLimitUntil, getSyncRateLimitMessage } from '../services/syncService';
 import { useAuth } from '../context/AuthContext';
 
@@ -73,6 +74,7 @@ export default function ElevatorsListScreen({ navigation }) {
           e.mjesto,
           e.brojUgovora,
           e.brojDizala,
+          e.brojDizalaOpis,
           e.kontaktOsoba?.imePrezime,
           e.kontaktOsoba?.mobitel,
           e.kontaktOsoba?.email,
@@ -243,7 +245,7 @@ export default function ElevatorsListScreen({ navigation }) {
             <View style={styles.detailRow}>
               <View style={styles.detailLeft}>
                 <Ionicons name="barcode-outline" size={16} color="#6b7280" />
-                <Text style={styles.detailText}>Dizalo: {item.brojDizala}</Text>
+                <Text style={styles.detailText}>Dizalo: {formatElevatorLabel(item)}</Text>
               </View>
               {(() => {
                 const isSynced = item.sync_status === 'synced' || item.synced;

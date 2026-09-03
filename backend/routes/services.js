@@ -88,7 +88,7 @@ const createSingleService = async ({ rawBody, companyId, user, ipAddress, skipAu
       companyId,
       clientRequestId,
     })
-      .populate('elevatorId', 'brojUgovora nazivStranke ulica mjesto brojDizala')
+      .populate('elevatorId', 'brojUgovora nazivStranke ulica mjesto brojDizala brojDizalaOpis')
       .populate('serviserID', 'ime prezime email')
       .populate('dodatniServiseri', 'ime prezime email');
 
@@ -141,7 +141,7 @@ const createSingleService = async ({ rawBody, companyId, user, ipAddress, skipAu
     });
   }
 
-  await service.populate('elevatorId', 'brojUgovora nazivStranke ulica mjesto brojDizala');
+  await service.populate('elevatorId', 'brojUgovora nazivStranke ulica mjesto brojDizala brojDizalaOpis');
   await service.populate('serviserID', 'ime prezime email');
   await service.populate('dodatniServiseri', 'ime prezime email');
 
@@ -176,7 +176,7 @@ router.get('/', authenticate, async (req, res) => {
     }
 
     const services = await Service.find(filter)
-      .populate('elevatorId', 'brojUgovora nazivStranke ulica mjesto brojDizala')
+      .populate('elevatorId', 'brojUgovora nazivStranke ulica mjesto brojDizala brojDizalaOpis')
       .populate('serviserID', 'ime prezime email')
       .populate('dodatniServiseri', 'ime prezime email')
       .sort({ datum: -1 })
@@ -270,7 +270,7 @@ router.get('/stats/monthly', authenticate, async (req, res) => {
 router.get('/:id', authenticate, async (req, res) => {
   try {
     const service = await Service.findOne({ _id: req.params.id, companyId: req.companyId, is_deleted: { $ne: true } })
-      .populate('elevatorId', 'brojUgovora nazivStranke ulica mjesto brojDizala')
+      .populate('elevatorId', 'brojUgovora nazivStranke ulica mjesto brojDizala brojDizalaOpis')
       .populate('serviserID', 'ime prezime email uloga')
       .populate('dodatniServiseri', 'ime prezime email uloga')
       .lean();
@@ -331,7 +331,7 @@ router.post('/', authenticate, async (req, res) => {
             companyId: req.companyId,
             clientRequestId,
           })
-            .populate('elevatorId', 'brojUgovora nazivStranke ulica mjesto brojDizala')
+            .populate('elevatorId', 'brojUgovora nazivStranke ulica mjesto brojDizala brojDizalaOpis')
             .populate('serviserID', 'ime prezime email')
             .populate('dodatniServiseri', 'ime prezime email');
 
@@ -455,7 +455,7 @@ router.put('/:id', authenticate, async (req, res) => {
       updateData,
       { new: true, runValidators: true }
     )
-      .populate('elevatorId', 'brojUgovora nazivStranke brojDizala')
+      .populate('elevatorId', 'brojUgovora nazivStranke brojDizala brojDizalaOpis')
       .populate('serviserID', 'ime prezime email')
       .populate('dodatniServiseri', 'ime prezime email');
 

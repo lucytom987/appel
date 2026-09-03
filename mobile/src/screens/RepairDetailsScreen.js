@@ -12,6 +12,7 @@ import ImageViewer from 'react-native-image-zoom-viewer';
 import SignatureModal from '../components/SignatureModal';
 import ms from '../utils/scale';
 import { applyUserPickerFilter } from '../utils/userPickerFilters';
+import { formatElevatorLabel } from '../utils/elevatorLabel';
 
 const safeText = (value, fallback = '') => {
   if (value === null || value === undefined) return fallback;
@@ -1041,7 +1042,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
         }}>
           <Ionicons name="arrow-back" size={24} color="#1f2937" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle} numberOfLines={1}>{`Popravak "${elevator?.brojDizala || 'Dizalo'}"`}</Text>
+        <Text style={styles.headerTitle} numberOfLines={1}>{`Popravak "${formatElevatorLabel(elevator)}"`}</Text>
         <TouchableOpacity
           onPress={() => navigation.navigate('EditRepair', { repair: repairData, returnTo, filter })}
           disabled={isRepairLocked}

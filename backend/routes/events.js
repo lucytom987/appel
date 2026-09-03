@@ -43,7 +43,7 @@ router.get('/', authenticate, async (req, res) => {
     }
 
     const events = await Event.find(filter)
-      .populate('elevatorId', 'brojUgovora nazivStranke ulica mjesto brojDizala')
+      .populate('elevatorId', 'brojUgovora nazivStranke ulica mjesto brojDizala brojDizalaOpis')
       .populate('repair.serviserID', 'ime prezime email')
       .populate('serviceNote.serviserID', 'ime prezime email')
       .populate('activity.serviserID', 'ime prezime email')
@@ -67,7 +67,7 @@ router.get('/:id', authenticate, async (req, res) => {
   try {
     const { id } = req.params;
     const event = await Event.findOne({ _id: id, companyId: req.companyId })
-      .populate('elevatorId', 'brojUgovora nazivStranke ulica mjesto brojDizala')
+      .populate('elevatorId', 'brojUgovora nazivStranke ulica mjesto brojDizala brojDizalaOpis')
       .populate('repair.serviserID', 'ime prezime email')
       .populate('serviceNote.serviserID', 'ime prezime email')
       .populate('activity.serviserID', 'ime prezime email')
@@ -156,7 +156,7 @@ router.post('/', authenticate, async (req, res) => {
     await logAction(user._id, 'CREATE', 'Event', event._id);
 
     const populated = await Event.findOne({ _id: event._id, companyId: req.companyId })
-      .populate('elevatorId', 'brojUgovora nazivStranke ulica mjesto brojDizala')
+      .populate('elevatorId', 'brojUgovora nazivStranke ulica mjesto brojDizala brojDizalaOpis')
       .populate('repair.serviserID', 'ime prezime email')
       .populate('serviceNote.serviserID', 'ime prezime email')
       .populate('activity.serviserID', 'ime prezime email')
@@ -211,7 +211,7 @@ router.put('/:id', authenticate, async (req, res) => {
     await logAction(user._id, 'UPDATE', 'Event', event._id);
 
     const updated = await Event.findOne({ _id: event._id, companyId: req.companyId })
-      .populate('elevatorId', 'brojUgovora nazivStranke ulica mjesto brojDizala')
+      .populate('elevatorId', 'brojUgovora nazivStranke ulica mjesto brojDizala brojDizalaOpis')
       .populate('repair.serviserID', 'ime prezime email')
       .populate('serviceNote.serviserID', 'ime prezime email')
       .populate('activity.serviserID', 'ime prezime email')
@@ -271,7 +271,7 @@ router.get('/elevator/:elevatorId', authenticate, async (req, res) => {
     }
 
     const events = await Event.find(filter)
-      .populate('elevatorId', 'brojUgovora nazivStranke ulica mjesto brojDizala')
+      .populate('elevatorId', 'brojUgovora nazivStranke ulica mjesto brojDizala brojDizalaOpis')
       .populate('repair.serviserID', 'ime prezime email')
       .populate('serviceNote.serviserID', 'ime prezime email')
       .populate('activity.serviserID', 'ime prezime email')

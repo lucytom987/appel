@@ -20,6 +20,7 @@ import { repairsAPI, usersAPI } from '../services/api';
 import ms from '../utils/scale';
 import { useFocusEffect } from '@react-navigation/native';
 import { applyUserPickerFilter } from '../utils/userPickerFilters';
+import { formatElevatorLabel } from '../utils/elevatorLabel';
 
 function formatName(person) {
   if (!person) return '';
@@ -237,6 +238,7 @@ export default function EditRepairScreen({ route, navigation }) {
         item.ulica,
         item.mjesto,
         item.brojDizala,
+        item.brojDizalaOpis,
         item.brojUgovora,
       ];
       return fields.some((f) => normalize(f).includes(q));
@@ -349,7 +351,7 @@ export default function EditRepairScreen({ route, navigation }) {
               <Text style={styles.sectionTitle}>Dizalo</Text>
               <Text style={styles.elevatorTitle}>{selectedElevator.nazivStranke || ''}</Text>
               <Text style={styles.elevatorDetail}>{selectedElevator.ulica}, {selectedElevator.mjesto}</Text>
-              <Text style={styles.elevatorCode}>Dizalo: {selectedElevator.brojDizala}</Text>
+              <Text style={styles.elevatorCode}>Dizalo: {formatElevatorLabel(selectedElevator)}</Text>
 
               <TouchableOpacity style={styles.selectorButton} onPress={() => setShowElevatorPicker((v) => !v)}>
                 <Ionicons name={showElevatorPicker ? 'chevron-up' : 'chevron-down'} size={18} color="#1d4ed8" />
@@ -382,6 +384,7 @@ export default function EditRepairScreen({ route, navigation }) {
                     ) : filteredElevators.map((item) => {
                       const id = item.id || item._id;
                       const isSelected = String(form.elevatorId || '') === String(id || '');
+                        const elevatorLabel = formatElevatorLabel(item);
                       return (
                         <TouchableOpacity
                           key={String(id)}
@@ -400,7 +403,7 @@ export default function EditRepairScreen({ route, navigation }) {
                             <Text style={styles.elevatorOptionTitle}>{item.nazivStranke || 'Bez naziva'}</Text>
                             <Text style={styles.elevatorOptionSub}>
                               {item.ulica || ''}{item.mjesto ? `, ${item.mjesto}` : ''}
-                              {item.brojDizala ? ` • Dizalo: ${item.brojDizala}` : ''}
+                              {elevatorLabel && elevatorLabel !== 'Dizalo' ? ` • Dizalo: ${elevatorLabel}` : ''}
                             </Text>
                           </View>
                         </TouchableOpacity>

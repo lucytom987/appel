@@ -232,7 +232,7 @@ const sendSignedWorkOrderEmailInBackground = async ({ workOrderId, companyId, ba
 
   const [repair, company] = await Promise.all([
     Repair.findOne({ _id: workOrder.repairId, companyId })
-      .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala brojUgovora kontaktOsoba')
+      .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala brojDizalaOpis brojUgovora kontaktOsoba')
       .populate('serviserID', 'ime prezime email'),
     Company.findById(companyId),
   ]);
@@ -361,7 +361,7 @@ const mapWorkOrderResponse = (workOrder, req) => {
 router.post('/from-repair/:repairId', authenticate, async (req, res) => {
   try {
     const repair = await Repair.findOne({ _id: req.params.repairId, companyId: req.companyId, is_deleted: { $ne: true } })
-      .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala brojUgovora')
+      .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala brojDizalaOpis brojUgovora')
       .populate('serviserID', 'ime prezime email');
 
     if (!repair) {
@@ -449,7 +449,7 @@ router.post('/:id/sign', authenticate, async (req, res) => {
     }
 
     const repair = await Repair.findOne({ _id: workOrder.repairId, companyId: req.companyId })
-      .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala brojUgovora kontaktOsoba')
+      .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala brojDizalaOpis brojUgovora kontaktOsoba')
       .populate('serviserID', 'ime prezime email');
     if (!repair) {
       return res.status(404).json({ success: false, message: 'Povezani popravak nije pronađen ili ne pripada vašoj firmi' });

@@ -407,6 +407,7 @@ export const syncElevatorsFromServer = async (forceFull = false, fallbackDepth =
           ulica: e.ulica,
           mjesto: e.mjesto,
           brojDizala: e.brojDizala,
+          brojDizalaOpis: e.brojDizalaOpis,
           kontaktOsoba: e.kontaktOsoba,
           koordinate: e.koordinate,
           status: e.status,
@@ -501,7 +502,33 @@ export const syncElevatorsToServer = async () => {
 
   const normalizeDate = (value) => {
     if (!value) return undefined;
-    const d = new Date(value);
+
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      const monthNum = Math.trunc(value);
+      if (monthNum >= 1 && monthNum <= 12) {
+        return new Date(Date.UTC(2000, monthNum - 1, 1)).toISOString();
+      }
+    }
+
+    const raw = String(value).trim();
+    if (!raw) return undefined;
+
+    if (/^\d{1,2}$/.test(raw)) {
+      const monthNum = Number(raw);
+      if (monthNum >= 1 && monthNum <= 12) {
+        return new Date(Date.UTC(2000, monthNum - 1, 1)).toISOString();
+      }
+    }
+
+    const monthYear = raw.match(/^(\d{1,2})[./-]\s*\d{4}$/);
+    if (monthYear) {
+      const monthNum = Number(monthYear[1]);
+      if (monthNum >= 1 && monthNum <= 12) {
+        return new Date(Date.UTC(2000, monthNum - 1, 1)).toISOString();
+      }
+    }
+
+    const d = new Date(raw);
     return Number.isNaN(d.getTime()) ? undefined : d.toISOString();
   };
 
@@ -526,6 +553,7 @@ export const syncElevatorsToServer = async () => {
         ulica: e.ulica,
         mjesto: e.mjesto,
         brojDizala: e.brojDizala,
+        brojDizalaOpis: e.brojDizalaOpis,
         kontaktOsoba,
         koordinate: e.koordinate || {
           latitude: e.koordinate_lat,

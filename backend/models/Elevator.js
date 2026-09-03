@@ -12,6 +12,7 @@ const elevatorSchema = new mongoose.Schema({
   nazivStranke: { type: String, required: true },
   ulica: { type: String, required: true },
   mjesto: { type: String, required: true },
+  brojDizalaOpis: { type: String },
   brojDizala: { type: String, required: true },
 
   // Tip objekta: stambeno ili privreda

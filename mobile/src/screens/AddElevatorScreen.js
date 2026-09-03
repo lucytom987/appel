@@ -20,7 +20,6 @@ import { useAuth } from '../context/AuthContext';
 import LocationPickerModal from '../components/LocationPickerModal';
 import { elevatorDB } from '../database/db';
 import { elevatorsAPI } from '../services/api';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import ms from '../utils/scale';
 import { normalizeServiceMonths } from '../utils/serviceSchedule';
 
@@ -46,14 +45,45 @@ export default function AddElevatorScreen({ navigation }) {
   const [loading, setLoading] = useState(false);
   const [geocoding, setGeocoding] = useState(false);
   const [mapPickerVisible, setMapPickerVisible] = useState(false);
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [activeDateElevatorId, setActiveDateElevatorId] = useState(null);
+  const parseAnnualMonth = (value) => {
+    if (value === null || value === undefined || value === '') return '';
+
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      const monthNum = Math.trunc(value);
+      return monthNum >= 1 && monthNum <= 12 ? String(monthNum) : '';
+    }
+
+    const raw = String(value).trim();
+    if (!raw) return '';
+
+    if (/^\d{1,2}$/.test(raw)) {
+      const monthNum = Number(raw);
+      return monthNum >= 1 && monthNum <= 12 ? String(monthNum) : '';
+    }
+
+    const monthYear = raw.match(/^(\d{1,2})[./-]\s*\d{4}$/);
+    if (monthYear) {
+      const monthNum = Number(monthYear[1]);
+      return monthNum >= 1 && monthNum <= 12 ? String(monthNum) : '';
+    }
+
+    const parsed = new Date(raw);
+    if (!Number.isNaN(parsed.getTime())) return String(parsed.getMonth() + 1);
+    return '';
+  };
+
+  const annualMonthToIso = (monthValue) => {
+    const monthNum = Number(monthValue);
+    if (!Number.isInteger(monthNum) || monthNum < 1 || monthNum > 12) return undefined;
+    return new Date(Date.UTC(2000, monthNum - 1, 1)).toISOString();
+  };
+
 
   // Konvertiraj isOnline u boolean i traži da je backend budan
   const online = Boolean(isOnline && serverAwake);
 
   const [elevators, setElevators] = useState([
-    { id: 1, brojDizala: '', intervalServisa: '1', serviceScheduleMode: 'interval', serviceMonths: [], godisnjiPregled: '' }
+    { id: 1, brojDizala: '', brojDizalaOpis: '', intervalServisa: '1', serviceScheduleMode: 'interval', serviceMonths: [], godisnjiPregled: '' }
   ]);
 
   const [formData, setFormData] = useState({
@@ -85,7 +115,7 @@ export default function AddElevatorScreen({ navigation }) {
 
   const addElevator = () => {
     const newId = elevators.length > 0 ? Math.max(...elevators.map(e => e.id)) + 1 : 1;
-    setElevators([...elevators, { id: newId, brojDizala: '', intervalServisa: '1', serviceScheduleMode: 'interval', serviceMonths: [], godisnjiPregled: '' }]);
+    setElevators([...elevators, { id: newId, brojDizala: '', brojDizalaOpis: '', intervalServisa: '1', serviceScheduleMode: 'interval', serviceMonths: [], godisnjiPregled: '' }]);
   };
 
   // Geocoding - pretvorba adrese u GPS koordinate
@@ -196,25 +226,6 @@ export default function AddElevatorScreen({ navigation }) {
     }));
   };
 
-  const formatDate = (value) => {
-    if (!value) return '';
-    const d = new Date(value);
-    return Number.isNaN(d.getTime()) ? '' : d.toISOString().split('T')[0];
-  };
-
-  const handleAnnualDateChange = (event, selectedDate) => {
-    if (event?.type === 'dismissed') {
-      setShowDatePicker(false);
-      return;
-    }
-    setShowDatePicker(false);
-    const safeDate = selectedDate || new Date();
-    const iso = safeDate.toISOString().split('T')[0];
-    if (activeDateElevatorId !== null) {
-      updateElevator(activeDateElevatorId, 'godisnjiPregled', iso);
-    }
-  };
-
   const handleSubmit = async () => {
     // Validacija - broj ugovora više nije obavezan
     if (!formData.nazivStranke.trim()) {
@@ -250,26 +261,6 @@ export default function AddElevatorScreen({ navigation }) {
     try {
       let successCount = 0;
 
-      const normalizeDate = (value) => {
-        if (!value) return undefined;
-        const trimmed = String(value).trim();
-
-        const monthYearMatch = trimmed.match(/^(\d{1,2})[./-]\s*(\d{4})$/);
-        const yearMonthMatch = trimmed.match(/^(\d{4})[./-]\s*(\d{1,2})$/);
-        const match = monthYearMatch || yearMonthMatch;
-        if (match) {
-          const month = Number(monthYearMatch ? match[1] : match[2]);
-          const year = Number(monthYearMatch ? match[2] : match[1]);
-          if (month >= 1 && month <= 12) {
-            const isoDate = new Date(Date.UTC(year, month - 1, 1));
-            return isoDate.toISOString();
-          }
-        }
-
-        const d = new Date(trimmed);
-        return Number.isNaN(d.getTime()) ? undefined : d.toISOString();
-      };
-
       const cleanEntryCodes = (formData.kontaktOsoba.ulazneSifre || [])
         .map((c) => (c || '').trim())
         .filter(Boolean);
@@ -286,6 +277,7 @@ export default function AddElevatorScreen({ navigation }) {
           ulica: formData.ulica,
           mjesto: formData.mjesto,
           brojDizala: elevator.brojDizala,
+          brojDizalaOpis: (elevator.brojDizalaOpis || '').trim() || undefined,
           tip: formData.tip || 'stambeno',
           kontaktOsoba: {
             ...formData.kontaktOsoba,
@@ -295,7 +287,7 @@ export default function AddElevatorScreen({ navigation }) {
           intervalServisa: parseInt(elevator.intervalServisa) || 1,
           serviceScheduleMode: elevator.serviceScheduleMode === 'months' ? 'months' : 'interval',
           serviceMonths: normalizeServiceMonths(elevator.serviceMonths || []),
-          godisnjiPregled: normalizeDate(elevator.godisnjiPregled),
+          godisnjiPregled: annualMonthToIso(elevator.godisnjiPregled),
           napomene: formData.napomene,
           koordinate: {
             latitude: parseFloat(formData.koordinate.latitude) || 0,
@@ -489,6 +481,14 @@ export default function AddElevatorScreen({ navigation }) {
                 onChangeText={(text) => updateElevator(elevator.id, 'brojDizala', text)}
                 placeholder="npr. 40-1234"
               />
+
+              <Text style={styles.label}>Opis uz broj dizala</Text>
+              <TextInput
+                style={styles.input}
+                value={elevator.brojDizalaOpis}
+                onChangeText={(text) => updateElevator(elevator.id, 'brojDizalaOpis', text)}
+                placeholder="npr. lijevo, desno, 1. kat..."
+              />
               
               <Text style={styles.label}>Interval servisa</Text>
               <View style={styles.scheduleModeRow}>
@@ -553,27 +553,21 @@ export default function AddElevatorScreen({ navigation }) {
               )}
 
               <Text style={styles.label}>Godišnji pregled</Text>
-              <View style={styles.dateRow}>
-                <TextInput
-                  style={[styles.input, styles.dateInput]}
-                  value={elevator.godisnjiPregled}
-                  onChangeText={(text) => updateElevator(elevator.id, 'godisnjiPregled', text)}
-                  placeholder="YYYY-MM-DD ili MM/YYYY"
-                  autoCapitalize="none"
-                  keyboardType="numbers-and-punctuation"
-                />
-                <TouchableOpacity
-                  style={styles.datePickerButton}
-                  onPress={() => {
-                    setActiveDateElevatorId(elevator.id);
-                    setShowDatePicker(true);
-                  }}
-                >
-                  <Ionicons name="calendar-outline" size={18} color="#1f2937" />
-                  <Text style={styles.datePickerButtonText}>Odaberi</Text>
-                </TouchableOpacity>
+              <View style={styles.monthsGrid}>
+                {MONTH_OPTIONS.map((month) => {
+                  const selected = String(parseAnnualMonth(elevator.godisnjiPregled)) === String(month.value);
+                  return (
+                    <TouchableOpacity
+                      key={`annual_${elevator.id}_${month.value}`}
+                      style={[styles.monthChip, selected && styles.monthChipActive]}
+                      onPress={() => updateElevator(elevator.id, 'godisnjiPregled', selected ? '' : String(month.value))}
+                    >
+                      <Text style={[styles.monthChipText, selected && styles.monthChipTextActive]}>{month.label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
-              <Text style={styles.hint}>Format: YYYY-MM-DD ili MM/YYYY (spremamo 1. dan tog mjeseca).</Text>
+              <Text style={styles.hint}>Odaberite mjesec kada dolazi inspektor (ponavlja se jednom godišnje).</Text>
             </View>
           ))}
         </View>
@@ -749,20 +743,6 @@ export default function AddElevatorScreen({ navigation }) {
         <View style={{ height: 40 }} />
       </ScrollView>
       </KeyboardAvoidingView>
-
-      {showDatePicker && (
-        <DateTimePicker
-          value={(() => {
-            const active = elevators.find((e) => e.id === activeDateElevatorId);
-            const d = active?.godisnjiPregled ? new Date(active.godisnjiPregled) : new Date();
-            return Number.isNaN(d.getTime()) ? new Date() : d;
-          })()}
-          mode="date"
-          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-          onChange={handleAnnualDateChange}
-        />
-      )}
-
       {/* Location Picker Modal */}
       <LocationPickerModal
         visible={mapPickerVisible}
@@ -966,28 +946,6 @@ const styles = StyleSheet.create({
   },
   monthChipTextActive: {
     color: '#fff',
-  },
-  dateRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginTop: 6,
-  },
-  dateInput: {
-    flex: 1,
-  },
-  datePickerButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: '#e5e7eb',
-    borderRadius: 10,
-  },
-  datePickerButtonText: {
-    fontWeight: '600',
-    color: '#1f2937',
   },
   typeButtons: {
     flexDirection: 'row',

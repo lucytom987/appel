@@ -77,6 +77,34 @@ const parseDate = (value) => {
   return Number.isNaN(d.getTime()) ? null : d;
 };
 
+const parseAnnualMonth = (value) => {
+  if (value === null || value === undefined || value === '') return null;
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const monthNum = Math.trunc(value);
+    return monthNum >= 1 && monthNum <= 12 ? monthNum : null;
+  }
+
+  const raw = String(value).trim();
+  if (!raw) return null;
+
+  if (/^\d{1,2}$/.test(raw)) {
+    const monthNum = Number(raw);
+    return monthNum >= 1 && monthNum <= 12 ? monthNum : null;
+  }
+
+  const monthYear = raw.match(/^(\d{1,2})[./-]\s*\d{4}$/);
+  if (monthYear) {
+    const monthNum = Number(monthYear[1]);
+    return monthNum >= 1 && monthNum <= 12 ? monthNum : null;
+  }
+
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) return parsed.getMonth() + 1;
+
+  return null;
+};
+
 const formatDateLabel = (date) => (date ? date.toLocaleDateString('hr-HR') : '-');
 
 const getServiceStatus = (daysLeft) => {
@@ -213,6 +241,7 @@ const resolveElevatorForService = (service) => {
   if (!elevator && raw && typeof raw === 'object') {
     elevator = {
       brojDizala: raw.brojDizala || undefined,
+      brojDizalaOpis: raw.brojDizalaOpis || undefined,
       nazivStranke: raw.nazivStranke || 'Nepoznato dizalo',
       ulica: raw.ulica || '',
       mjesto: raw.mjesto || '',
@@ -221,7 +250,7 @@ const resolveElevatorForService = (service) => {
   }
 
   if (!elevator) {
-    elevator = { nazivStranke: 'Nepoznato dizalo', ulica: '', mjesto: '' };
+    elevator = { nazivStranke: 'Nepoznato dizalo', ulica: '', mjesto: '', brojDizala: undefined, brojDizalaOpis: undefined };
   }
 
   return elevator;
@@ -248,6 +277,19 @@ export default function ServicesListScreen({ navigation }) {
   const monthsByYear = useMemo(() => {
     const map = new Map();
     const source = filter === 'annual' ? annualOccurrences : services;
+    if (filter === 'annual') {
+      const currentYear = new Date().getFullYear();
+      const allMonths = new Set();
+      source.forEach((s) => {
+        const monthNum = Number(s?.annualMonth);
+        if (Number.isInteger(monthNum) && monthNum >= 1 && monthNum <= 12) {
+          allMonths.add(monthNum - 1);
+        }
+      });
+      map.set(currentYear, allMonths);
+      return map;
+    }
+
     source.forEach((s) => {
       const d = parseDate(s.datum || s.serviceDate);
       if (!d) return;
@@ -260,6 +302,10 @@ export default function ServicesListScreen({ navigation }) {
   }, [services, annualOccurrences, filter]);
 
   const availableYears = useMemo(() => {
+    if (filter === 'annual') {
+      return [new Date().getFullYear()];
+    }
+
     const years = new Set();
     const nowYear = new Date().getFullYear();
     years.add(nowYear);
@@ -325,41 +371,31 @@ export default function ServicesListScreen({ navigation }) {
   const refreshAnnualOccurrences = useCallback(() => {
     try {
       const elevators = elevatorDB.getAll?.() || [];
-      const start = new Date();
-      const monthStart = new Date(start.getFullYear(), start.getMonth(), 1);
-      const horizon = new Date(monthStart);
-      horizon.setMonth(horizon.getMonth() + 18); // sljedećih ~18 mjeseci
+      const currentYear = new Date().getFullYear();
 
       const items = [];
 
       elevators.forEach((e) => {
-        const base = parseDate(e.godisnjiPregled);
-        if (!base) return;
+        const monthNum = parseAnnualMonth(e.godisnjiPregled);
+        if (!monthNum) return;
 
-        let due = new Date(base);
-        while (due < monthStart) {
-          due.setFullYear(due.getFullYear() + 1);
-        }
+        const dueIso = new Date(Date.UTC(currentYear, monthNum - 1, 1)).toISOString();
+        const eid = e._id || e.id;
+        if (!eid) return;
 
-        while (due <= horizon) {
-          const dueIso = due.toISOString();
-          items.push({
-            id: `annual_${e.id}_${dueIso}`,
-            _id: `annual_${e.id}_${dueIso}`,
-            elevatorId: e.id,
-            datum: dueIso,
-            napomene: 'Godišnji pregled',
-            synced: 1,
-          });
-          due = new Date(due);
-          due.setFullYear(due.getFullYear() + 1);
-        }
+        items.push({
+          id: `annual_${eid}_${monthNum}`,
+          _id: `annual_${eid}_${monthNum}`,
+          elevatorId: eid,
+          datum: dueIso,
+          annualMonth: monthNum,
+          napomene: 'Godišnji pregled',
+          synced: 1,
+        });
       });
 
       items.sort((a, b) => {
-        const ad = parseDate(a.datum);
-        const bd = parseDate(b.datum);
-        return (ad?.getTime() || 0) - (bd?.getTime() || 0);
+        return (Number(a.annualMonth) || 0) - (Number(b.annualMonth) || 0);
       });
 
       setAnnualOccurrences(items);
@@ -397,9 +433,8 @@ export default function ServicesListScreen({ navigation }) {
   const applyFilter = useCallback(() => {
     if (filter === 'annual') {
       const annualForPeriod = annualOccurrences.filter((item) => {
-        const d = parseDate(item.datum || item.serviceDate);
-        if (!d) return false;
-        return d.getMonth() === selectedMonth && d.getFullYear() === selectedYear;
+        const monthNum = Number(item.annualMonth);
+        return Number.isInteger(monthNum) && monthNum === (selectedMonth + 1);
       });
       setFilteredServices(annualForPeriod);
       return;
@@ -751,17 +786,20 @@ export default function ServicesListScreen({ navigation }) {
     const rawDate = item.datum || item.serviceDate;
     const serviceDate = parseDate(rawDate);
     const sljedeciServisDate = parseDate(item.sljedeciServis);
+    const isAnnualItem = filter === 'annual';
 
-    const daysUntilNext = sljedeciServisDate
+    const daysUntilNext = isAnnualItem
+      ? null
+      : (sljedeciServisDate
       ? Math.ceil((sljedeciServisDate - new Date()) / (1000 * 60 * 60 * 24))
-      : null;
+      : null);
 
     const elevator = resolveElevatorForService(item);
     const display = buildElevatorDisplay(elevator);
-    const serviserLabel = getServiserLabel(item);
-    const dateLabel = formatDateLabel(serviceDate);
+    const serviserLabel = isAnnualItem ? 'Plan pregleda' : getServiserLabel(item);
+    const dateLabel = isAnnualItem ? '' : formatDateLabel(serviceDate);
 
-    const showNextBadge = daysUntilNext !== null;
+    const showNextBadge = !isAnnualItem && daysUntilNext !== null;
     const status = getServiceStatus(daysUntilNext);
     const nextLabel =
       daysUntilNext === null
@@ -807,7 +845,9 @@ export default function ServicesListScreen({ navigation }) {
             </View>
 
             <View style={styles.serviceDateWrap}>
-              <Text style={[styles.serviceMetaDate, isSmallScreen && styles.serviceMetaDateCompact, { color: status.textColor }]} numberOfLines={1}>{String(dateLabel)}</Text>
+              {!isAnnualItem ? (
+                <Text style={[styles.serviceMetaDate, isSmallScreen && styles.serviceMetaDateCompact, { color: status.textColor }]} numberOfLines={1}>{String(dateLabel)}</Text>
+              ) : null}
               <Ionicons
                 name={item.synced ? 'cloud-done-outline' : 'cloud-offline-outline'}
                 size={isSmallScreen ? 15 : 16}
@@ -889,7 +929,7 @@ export default function ServicesListScreen({ navigation }) {
             activeOpacity={0.85}
           >
             <Text style={[styles.monthButtonText, { color: activeFilterMeta.color }]} numberOfLines={1}>
-              {statusToast ? statusToast : `${MONTHS[selectedMonth]} ${selectedYear}`}
+              {statusToast ? statusToast : (filter === 'annual' ? MONTHS[selectedMonth] : `${MONTHS[selectedMonth]} ${selectedYear}`)}
             </Text>
           </TouchableOpacity>
 

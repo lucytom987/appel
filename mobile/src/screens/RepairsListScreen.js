@@ -14,10 +14,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as Print from 'expo-print';
 import { repairDB, elevatorDB, userDB, serviceDB } from '../database/db';
 import { syncAll, getSyncRateLimitUntil, getSyncRateLimitMessage } from '../services/syncService';
 import { useAuth } from '../context/AuthContext';
 import { workOrdersAPI } from '../services/api';
+import { formatElevatorLabel } from '../utils/elevatorLabel';
 
 const safeText = (value, fallback = '') => {
   if (value === null || value === undefined) return fallback;
@@ -30,16 +32,23 @@ const safeText = (value, fallback = '') => {
 };
 
 const normalizePhoneForCall = (value) => String(value || '').replace(/[^\d+]/g, '');
+const escapeHtml = (value) => String(value ?? '')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#39;');
 
 const buildElevatorDisplay = (elevator) => {
   const tip = elevator?.tip || elevator?.tipObjekta;
   const address = [safeText(elevator?.ulica), safeText(elevator?.mjesto)].filter(Boolean).join(', ').trim();
   const name = safeText(elevator?.nazivStranke);
+  const elevatorLabel = formatElevatorLabel(elevator);
   const primary = tip === 'privreda'
     ? (name || address || 'Nepoznato dizalo')
     : (address || name || 'Nepoznato dizalo');
   const secondary = tip === 'privreda' ? address : name;
-  const extra = safeText(elevator?.brojDizala) ? `Dizalo: ${safeText(elevator?.brojDizala)}` : '';
+  const extra = elevatorLabel && elevatorLabel !== 'Dizalo' ? `Dizalo: ${elevatorLabel}` : '';
   return { primary, secondary, extra };
 };
 
@@ -56,7 +65,7 @@ export default function RepairsListScreen({ navigation, route }) {
     const now = new Date();
     return { month: now.getMonth(), year: now.getFullYear() };
   });
-  const [periodFilter, setPeriodFilter] = useState('current'); // 'current' | 'all'
+  const [periodFilter, setPeriodFilter] = useState('all'); // 'current' | 'all'
   const [userMap] = useState({}); // placeholder, više se ne koristi u prikazu
   const [showFlowModal, setShowFlowModal] = useState(false);
   const [selectedRepairForFlow, setSelectedRepairForFlow] = useState(null);
@@ -86,7 +95,185 @@ export default function RepairsListScreen({ navigation, route }) {
     });
   };
 
+  const handleMonthArrowPress = (delta) => {
+    if (periodFilter === 'all') {
+      const now = new Date();
+      const next = new Date(now.getFullYear(), now.getMonth() + delta, 1);
+      setPeriod({ month: next.getMonth(), year: next.getFullYear() });
+      setPeriodFilter('current');
+      return;
+    }
+
+    changeMonth(delta);
+  };
+
   const periodLabel = periodFilter === 'all' ? 'SVE' : `${monthNames[period.month]} ${period.year}`;
+
+  const resolveElevatorForRepair = useCallback((item) => {
+    const elevatorId = typeof item?.elevatorId === 'object' && item?.elevatorId !== null
+      ? item.elevatorId._id || item.elevatorId.id
+      : item?.elevatorId;
+
+    let elevator = elevatorId ? elevatorDB.getById(elevatorId) : null;
+
+    if (!elevator && typeof item?.elevatorId === 'object' && item?.elevatorId) {
+      elevator = {
+        brojDizala: item.elevatorId.brojDizala || undefined,
+        brojDizalaOpis: item.elevatorId.brojDizalaOpis || undefined,
+        nazivStranke: item.elevatorId.nazivStranke || 'Obrisano dizalo',
+        ulica: item.elevatorId.ulica || '',
+        mjesto: item.elevatorId.mjesto || '',
+      };
+    }
+
+    if (!elevator) {
+      elevator = {
+        brojDizala: undefined,
+        brojDizalaOpis: undefined,
+        nazivStranke: 'Obrisano dizalo',
+        ulica: '',
+        mjesto: '',
+      };
+    }
+
+    return elevator;
+  }, []);
+
+  const resolveUserNameForPrint = useCallback((value) => {
+    if (!value) return '';
+    if (typeof value === 'object') {
+      const full = `${safeText(value.ime)} ${safeText(value.prezime)}`.trim();
+      return full || safeText(value.email) || safeText(value._id || value.id);
+    }
+    const id = String(value);
+    const found = userDB.getById(id);
+    if (found) {
+      const full = `${safeText(found.ime)} ${safeText(found.prezime)}`.trim();
+      return full || safeText(found.email) || id;
+    }
+    return id;
+  }, []);
+
+  const handlePrintRepairs = useCallback(async () => {
+    try {
+      const isMonthOnly = periodFilter !== 'all';
+      const base = repairs
+        .filter((r) => r && typeof r === 'object')
+        .filter((r) => !r.trebaloBi)
+        .filter((r) => {
+          if (filter === 'pending') return r.status === 'pending';
+          if (filter === 'nepotpisani') return !r.radniNalogPotpisan;
+          return false;
+        });
+
+      const selected = base.filter((r) => {
+        if (!isMonthOnly) return true;
+        const raw = r?.datumPrijave || r?.datumKvara;
+        if (!raw) return false;
+        const d = new Date(raw);
+        if (Number.isNaN(d.getTime())) return false;
+        return d.getMonth() === period.month && d.getFullYear() === period.year;
+      });
+
+      if (!selected.length) {
+        Alert.alert('Nema podataka', 'Nema stavki za odabrani ispis.');
+        return;
+      }
+
+      const rows = selected.map((item) => {
+        const elevator = resolveElevatorForRepair(item);
+        const naziv = safeText(elevator?.nazivStranke, '-').trim() || '-';
+        const adresa = [safeText(elevator?.ulica), safeText(elevator?.mjesto)].filter(Boolean).join(', ').trim() || '-';
+        const brojOpis = formatElevatorLabel(elevator) || '-';
+        const opisKvara = safeText(item?.opisKvara, '-').trim() || '-';
+        const opisPopravka = safeText(item?.opisPopravka, '-').trim() || '-';
+        const prijavio = safeText(item?.prijavio, '').trim() || resolveUserNameForPrint(item?.serviserID) || '-';
+        const pozivatelj = safeText(item?.pozivatelj || item?.Pozivatelj, '').trim();
+        const telefon = safeText(item?.kontaktTelefon || item?.pozivateljTelefon, '').trim();
+        const poslanMajstor = safeText(item?.poslanMajstorIme, '').trim() || resolveUserNameForPrint(item?.poslanMajstorId);
+        const rijesio = safeText(item?.completedByName, '').trim() || resolveUserNameForPrint(item?.completedBy);
+        const potpis = item?.radniNalogPotpisan
+          ? (String(item?.radniNalogPotpisVrsta || '').toLowerCase() === 'paper' ? 'Papirnato' : 'Digitalno')
+          : '';
+
+        const flowSteps = [
+          `Prijavio: ${prijavio || '-'}`,
+          `Pozivatelj: ${pozivatelj || '-'}`,
+          `Telefon: ${telefon || '-'}`,
+          `Majstor: ${poslanMajstor || '-'}`,
+          `Riješio: ${rijesio || '-'}`,
+          `Potpis: ${potpis || '-'}`,
+        ];
+
+        return {
+          naziv,
+          adresa,
+          brojOpis,
+          opisKvara,
+          opisPopravka,
+          flowSteps,
+        };
+      });
+
+      const statusTitle = filter === 'nepotpisani' ? 'Nepotpisani' : 'Prijavljeni';
+      const scopeTitle = isMonthOnly ? `${monthNames[period.month]} ${period.year}` : 'Svi mjeseci';
+      const generatedAt = `${new Date().toLocaleDateString('hr-HR')} ${new Date().toLocaleTimeString('hr-HR', { hour: '2-digit', minute: '2-digit' })}`;
+
+      const tableRows = rows.map((row, idx) => `
+        <tr style="${idx % 2 === 0 ? 'background:#f8fafc;' : ''}">
+          <td>${idx + 1}</td>
+          <td>
+            <div style="font-weight:700; color:#111827;">${escapeHtml(row.naziv)}</div>
+            <div style="margin-top:2px; color:#4b5563; font-size:10px;">${escapeHtml(row.adresa)}</div>
+          </td>
+          <td>${escapeHtml(row.brojOpis)}</td>
+          <td>${escapeHtml(row.opisKvara)}</td>
+          <td>${escapeHtml(row.opisPopravka)}</td>
+          <td>${row.flowSteps.map((step) => escapeHtml(step)).join('<br/>')}</td>
+        </tr>
+      `).join('');
+
+      const html = `
+        <html>
+          <head>
+            <meta charset="utf-8" />
+            <style>
+              body { font-family: Arial, sans-serif; padding: 18px; color: #111827; }
+              h1 { margin: 0 0 4px; font-size: 18px; }
+              h2 { margin: 0 0 12px; font-size: 13px; color: #4b5563; font-weight: 500; }
+              table { width: 100%; border-collapse: collapse; font-size: 11px; table-layout: fixed; }
+              th, td { border: 1px solid #d1d5db; padding: 6px 8px; vertical-align: top; word-wrap: break-word; }
+              th { background: #1f2937; color: white; text-align: left; }
+              .meta { margin-top: 12px; font-size: 11px; color: #6b7280; }
+            </style>
+          </head>
+          <body>
+            <h1>Popravci - ${escapeHtml(statusTitle)}</h1>
+            <h2>Period: ${escapeHtml(scopeTitle)} | Ukupno: ${rows.length}</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:5%;">#</th>
+                  <th style="width:22%;">Naziv i adresa</th>
+                  <th style="width:11%;">Broj i opis dizala</th>
+                  <th style="width:18%;">Opis kvara</th>
+                  <th style="width:18%;">Opis popravka</th>
+                  <th style="width:26%;">Tok prijave i izvedbe</th>
+                </tr>
+              </thead>
+              <tbody>${tableRows}</tbody>
+            </table>
+            <div class="meta">Generirano: ${escapeHtml(generatedAt)}</div>
+          </body>
+        </html>
+      `;
+
+      await Print.printAsync({ html });
+    } catch (e) {
+      console.error('Greška pri printanju popravaka:', e);
+      Alert.alert('Greška', 'Print nije uspio.');
+    }
+  }, [repairs, filter, period, monthNames, periodFilter, resolveElevatorForRepair, resolveUserNameForPrint]);
 
   const loadRepairs = useCallback(() => {
     try {
@@ -284,29 +471,7 @@ export default function RepairsListScreen({ navigation, route }) {
       );
     }
 
-    const elevatorId = typeof item.elevatorId === 'object' && item.elevatorId !== null
-      ? item.elevatorId._id || item.elevatorId.id
-      : item.elevatorId;
-
-    let elevator = elevatorId ? elevatorDB.getById(elevatorId) : null;
-
-    if (!elevator && typeof item.elevatorId === 'object' && item.elevatorId) {
-      elevator = {
-        brojDizala: item.elevatorId.brojDizala || undefined,
-        nazivStranke: item.elevatorId.nazivStranke || 'Obrisano dizalo',
-        ulica: item.elevatorId.ulica || '',
-        mjesto: item.elevatorId.mjesto || '',
-      };
-    }
-
-    if (!elevator) {
-      elevator = {
-        brojDizala: undefined,
-        nazivStranke: 'Obrisano dizalo',
-        ulica: '',
-        mjesto: '',
-      };
-    }
+    const elevator = resolveElevatorForRepair(item);
 
     const display = buildElevatorDisplay(elevator);
 
@@ -531,6 +696,7 @@ export default function RepairsListScreen({ navigation, route }) {
   );
 
   const flowCallerPhone = safeText(selectedFlow?.kontaktTelefon || selectedFlow?.pozivateljTelefon, '');
+  const canShowPrint = activeList === 'repairs' && (filter === 'pending' || filter === 'nepotpisani');
 
   const handleCallCaller = useCallback(async () => {
     if (!flowCallerPhone) return;
@@ -611,15 +777,21 @@ export default function RepairsListScreen({ navigation, route }) {
               {periodFilter === 'all' ? 'SVE' : '📅'}
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.chevronButton} onPress={() => changeMonth(-1)}>
+          <TouchableOpacity style={styles.chevronButton} onPress={() => handleMonthArrowPress(-1)}>
             <Ionicons name="chevron-back" size={20} color="#1f2937" />
           </TouchableOpacity>
           <Text style={styles.monthText}>{periodLabel}</Text>
-          <TouchableOpacity style={styles.chevronButton} onPress={() => changeMonth(1)}>
+          <TouchableOpacity style={styles.chevronButton} onPress={() => handleMonthArrowPress(1)}>
             <Ionicons name="chevron-forward" size={20} color="#1f2937" />
           </TouchableOpacity>
         </View>
-        <View style={{ width: 24 }} />
+        {canShowPrint ? (
+          <TouchableOpacity onPress={handlePrintRepairs} style={styles.headerPrint}>
+            <Ionicons name="print-outline" size={22} color="#0ea5e9" />
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.headerPrintPlaceholder} />
+        )}
       </View>
 
       {/* Filteri: popravci (pending/completed/nepotpisani) ili "trebalo bi" (ekskluzivno) */}
@@ -782,6 +954,12 @@ const styles = StyleSheet.create({
     padding: 6,
     borderRadius: 8,
     backgroundColor: '#f3f4f6',
+  },
+  headerPrint: {
+    padding: 4,
+  },
+  headerPrintPlaceholder: {
+    width: 24,
   },
   monthText: {
     fontSize: 16,

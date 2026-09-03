@@ -8,6 +8,7 @@ import { serviceWorkOrdersAPI, servicesAPI } from '../services/api';
 import ImageViewer from 'react-native-image-zoom-viewer';
 import SignatureModal from '../components/SignatureModal';
 import { useAuth } from '../context/AuthContext';
+import { formatElevatorLabel } from '../utils/elevatorLabel';
 
 export default function ServiceDetailsScreen({ route, navigation }) {
   const { service: routeService } = route.params;
@@ -396,9 +397,9 @@ export default function ServiceDetailsScreen({ route, navigation }) {
         <View style={styles.section}>
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>Dizalo</Text>
-            {elevator?.brojDizala ? (
+            {formatElevatorLabel(elevator) !== 'Dizalo' ? (
               <View style={styles.elevatorBadge}>
-                <Text style={styles.elevatorBadgeText}>{elevator.brojDizala}</Text>
+                <Text style={styles.elevatorBadgeText}>{formatElevatorLabel(elevator)}</Text>
               </View>
             ) : null}
           </View>

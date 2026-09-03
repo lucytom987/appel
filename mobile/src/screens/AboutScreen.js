@@ -11,8 +11,8 @@ import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 
 export default function AboutScreen({ navigation }) {
-  const currentVersion = Constants?.expoConfig?.version || '2.0.19';
-  const currentVersionDate = '16.08.2026';
+  const currentVersion = Constants?.expoConfig?.version || '2.0.20';
+  const currentVersionDate = '02.09.2026';
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -47,30 +47,34 @@ export default function AboutScreen({ navigation }) {
           <Text style={styles.description}>
             APPEL je mobilna aplikacija za upravljanje dizalima, servisima i hitnim popravcima.
             Offline-first pristup omogucuje rad bez mreze, a sinkronizacija se izvrsava cim je
-            veza dostupna. Fokus je na brzom logiranju intervencija, preglednim listama i
-            pouzdanom prikazu lokacija na karti.
+            veza dostupna. Fokus je na brzom logiranju intervencija, preglednim listama,
+            pouzdanom prikazu lokacija na karti i jasnim obavijestima kada je potrebna nova verzija.
           </Text>
         </View>
 
         {/* What's new */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Novosti (16.08.2026)</Text>
+          <Text style={styles.sectionTitle}>Novosti (02.09.2026)</Text>
           <View style={styles.featuresList}>
             <View style={styles.featureItem}>
               <Ionicons name="cloud-upload" size={20} color="#2563eb" />
-              <Text style={styles.featureText}>Objavljena je nova verzija aplikacije 2.0.19 (Google Play upload).</Text>
+              <Text style={styles.featureText}>Objavljena je nova verzija aplikacije 2.0.20 (Google Play upload).</Text>
             </View>
             <View style={styles.featureItem}>
               <Ionicons name="flash" size={20} color="#2563eb" />
-              <Text style={styles.featureText}>Ubrzan je tok "Potpisi i posalji": odgovor je osjetno brzi, a slanje PDF-a i emaila ide u pozadini.</Text>
+              <Text style={styles.featureText}>Dodana je obavezna obavijest za update kada je instalirana starija verzija aplikacije.</Text>
             </View>
             <View style={styles.featureItem}>
-              <Ionicons name="checkmark-done" size={20} color="#2563eb" />
-              <Text style={styles.featureText}>Kod promjene statusa na "Zavrsen" odmah se nudi "Kreiraj radni nalog" bez rucnog spremanja.</Text>
+              <Ionicons name="calendar-outline" size={20} color="#2563eb" />
+              <Text style={styles.featureText}>Godišnji pregled je prebačen na odabir mjeseca, bez prikaza datuma i godine.</Text>
             </View>
             <View style={styles.featureItem}>
-              <Ionicons name="save" size={20} color="#2563eb" />
-              <Text style={styles.featureText}>Pri kliku na "Kreiraj radni nalog" popravak se automatski spremi prije kreiranja naloga.</Text>
+              <Ionicons name="print-outline" size={20} color="#2563eb" />
+              <Text style={styles.featureText}>Popravci imaju print s nazivom, adresom, brojem i opisom dizala, opisom kvara, popravka i toka prijave.</Text>
+            </View>
+            <View style={styles.featureItem}>
+              <Ionicons name="home" size={20} color="#2563eb" />
+              <Text style={styles.featureText}>Početni ekran je zgusnut i pregledniji, s boljim rasporedom kartica i sažetaka.</Text>
             </View>
             <View style={styles.featureItem}>
               <Ionicons name="document-text" size={20} color="#2563eb" />
@@ -78,11 +82,7 @@ export default function AboutScreen({ navigation }) {
             </View>
             <View style={styles.featureItem}>
               <Ionicons name="close-circle" size={20} color="#2563eb" />
-              <Text style={styles.featureText}>Ako je radni nalog rucno oznacen kao potpisan, onemoguceno je dodatno digitalno kreiranje naloga.</Text>
-            </View>
-            <View style={styles.featureItem}>
-              <Ionicons name="trash" size={20} color="#2563eb" />
-              <Text style={styles.featureText}>Brisanjem radnog naloga automatski se uklanja oznaka da je nalog potpisan.</Text>
+              <Text style={styles.featureText}>Ako je radni nalog ručno označen kao potpisan, onemogućeno je dodatno digitalno kreiranje naloga.</Text>
             </View>
           </View>
         </View>

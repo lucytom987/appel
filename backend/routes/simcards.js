@@ -16,7 +16,7 @@ router.get('/', authenticate, async (req, res) => {
     if (elevatorId) filter.elevatorId = elevatorId;
 
     const simcards = await SimCard.find(filter)
-      .populate('elevatorId', 'nazivStranke ulica brojDizala')
+      .populate('elevatorId', 'nazivStranke ulica brojDizala brojDizalaOpis')
       .sort({ datumIsteka: 1 })
       .skip(parsedSkip)
       .limit(parsedLimit)
@@ -44,7 +44,7 @@ router.get('/expiring/soon', authenticate, async (req, res) => {
       datumIsteka: { $gte: today, $lte: futureDate },
       aktivna: true
     })
-      .populate('elevatorId', 'nazivStranke ulica brojDizala')
+      .populate('elevatorId', 'nazivStranke ulica brojDizala brojDizalaOpis')
       .sort({ datumIsteka: 1 })
       .lean();
 
@@ -83,7 +83,7 @@ router.get('/stats/overview', authenticate, async (req, res) => {
 router.get('/:id', authenticate, async (req, res) => {
   try {
     const simcard = await SimCard.findOne({ _id: req.params.id, companyId: req.companyId })
-      .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala')
+      .populate('elevatorId', 'nazivStranke ulica mjesto brojDizala brojDizalaOpis')
       .lean();
 
     if (!simcard) {
@@ -126,7 +126,7 @@ router.post('/', authenticate, async (req, res) => {
       opis: 'Kreirana SIM kartica'
     });
 
-    await simcard.populate('elevatorId', 'nazivStranke ulica brojDizala');
+    await simcard.populate('elevatorId', 'nazivStranke ulica brojDizala brojDizalaOpis');
 
     res.status(201).json({ success: true, message: 'SIM kartica kreirana', data: simcard });
   } catch (error) {
@@ -155,7 +155,7 @@ router.put('/:id', authenticate, async (req, res) => {
       { _id: req.params.id, companyId: req.companyId },
       { ...req.body, companyId: req.companyId, azuriranDatum: new Date() },
       { new: true, runValidators: true }
-    ).populate('elevatorId', 'nazivStranke ulica brojDizala');
+    ).populate('elevatorId', 'nazivStranke ulica brojDizala brojDizalaOpis');
 
     if (oldSimCard.elevatorId && String(oldSimCard.elevatorId) !== String(simcard.elevatorId || '')) {
       await Elevator.findOneAndUpdate({ _id: oldSimCard.elevatorId, companyId: req.companyId }, { $unset: { simCard: 1 } });

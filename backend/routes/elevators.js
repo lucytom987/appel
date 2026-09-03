@@ -135,6 +135,7 @@ router.post('/', authenticate, async (req, res) => {
 
     // Audit log
     await logAction({
+      companyId: req.companyId,
       korisnikId: req.user._id,
       akcija: 'CREATE',
       entitet: 'Elevator',
@@ -218,6 +219,7 @@ router.put('/:id', authenticate, async (req, res) => {
 
     // Audit log
     await logAction({
+      companyId: req.companyId,
       korisnikId: req.user._id,
       akcija: 'UPDATE',
       entitet: 'Elevator',

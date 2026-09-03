@@ -22,6 +22,7 @@ import { servicesAPI, serviceWorkOrdersAPI, usersAPI, repairsAPI } from '../serv
 import { usePhotoUpload } from '../hooks/usePhotoUpload';
 import ms from '../utils/scale';
 import { applyUserPickerFilter } from '../utils/userPickerFilters';
+import { formatElevatorLabel } from '../utils/elevatorLabel';
 
 const wait = (msDelay) => new Promise((resolve) => setTimeout(resolve, msDelay));
 
@@ -737,7 +738,7 @@ export default function AddServiceScreen({ navigation, route }) {
         >
         {/* Informacije o dizalu */}
         <View style={styles.elevatorInfo}>
-          <Text style={styles.elevatorName}>{elevator?.brojDizala || '?'} - {elevator?.nazivStranke || 'Nepoznato'}</Text>
+          <Text style={styles.elevatorName}>{formatElevatorLabel(elevator)} - {elevator?.nazivStranke || 'Nepoznato'}</Text>
           <Text style={styles.elevatorDetail}>
             {(elevator?.ulica || '')} • {(elevator?.mjesto || '')}
           </Text>
@@ -854,7 +855,7 @@ export default function AddServiceScreen({ navigation, route }) {
               <View key={cid} style={styles.elevatorCard}>
                 <View style={styles.elevatorCardHeader}>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.elevatorCardTitle}>{el?.brojDizala || 'Dizalo'}</Text>
+                    <Text style={styles.elevatorCardTitle}>{formatElevatorLabel(el)}</Text>
                     <Text style={styles.elevatorCardSubtitle}>{(el?.ulica || '')} • {(el?.mjesto || '')}</Text>
                   </View>
                   <TouchableOpacity onPress={() => toggleIncludeElevator(cid)} style={styles.includeToggle}>

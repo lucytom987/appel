@@ -15,6 +15,21 @@ APPEL je mobilna aplikacija za upravljanje dizalima, servisima i hitnim popravci
 
 ---
 
+### Build 10 (v2.0.20) - 2. Rujna 2026
+**Obavezni update, godišnji pregledi po mjesecu i kompaktniji dashboard**
+
+#### Izmjene:
+- 🔔 Dodana je obavezna obavijest za update starijih verzija aplikacije.
+- 📅 Godišnji pregled je prebačen na odabir mjeseca, bez datuma i godine.
+- 🖨️ Popravci imaju novi print s nazivom i adresom u prvom stupcu, širim opisima te tokom prijave i izvedbe.
+- 🧭 Početni ekran je zgusnut i pregledniji, s boljim rasporedom kartica i sažetaka.
+- ✏️ U uređivanju i dodavanju dizala godišnji pregled se bira kao mjesec.
+
+#### Tehnički:
+- Verzija aplikacije 2.0.20; Android versionCode 24; iOS buildNumber 23 (package.json, app.json, app.config.js).
+
+---
+
 ## Povijest Verzija
 
 ### Build 9 (v1.2.0) - 11. Prosinac 2025

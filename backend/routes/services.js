@@ -420,8 +420,9 @@ router.put('/:id', authenticate, async (req, res) => {
       elevator?.intervalServisa
     );
 
-    let checklist = Array.isArray(req.body.checklist) ? req.body.checklist : undefined;
-    if (checklist) {
+    const hasChecklistUpdate = Array.isArray(req.body.checklist);
+    let checklist = hasChecklistUpdate ? req.body.checklist : undefined;
+    if (hasChecklistUpdate) {
       checklist = checklist
         .filter((item) => ALLOWED_CHECKLIST.includes(item?.stavka))
         .map((item) => ({
@@ -438,8 +439,6 @@ router.put('/:id', authenticate, async (req, res) => {
     const uniqueAssistants = [...new Set(dodatniServiseri.map(String))].filter((id) => String(id) !== String(existingService.serviserID));
 
     const updateData = {
-      ...req.body,
-      checklist,
       sljedeciServis: calculatedNextService,
       dodatniServiseri: uniqueAssistants,
       serviserID: existingService.serviserID,
@@ -449,6 +448,28 @@ router.put('/:id', authenticate, async (req, res) => {
       updated_at: now,
       updated_by: req.user._id,
     };
+
+    if (Object.prototype.hasOwnProperty.call(req.body, 'datum')) {
+      updateData.datum = req.body.datum;
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'imaNedostataka')) {
+      updateData.imaNedostataka = req.body.imaNedostataka;
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'nedostaci')) {
+      updateData.nedostaci = Array.isArray(req.body.nedostaci) ? req.body.nedostaci : [];
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'napomene')) {
+      updateData.napomene = req.body.napomene;
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'utroseniMaterijal')) {
+      updateData.utroseniMaterijal = req.body.utroseniMaterijal;
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'notePhotos')) {
+      updateData.notePhotos = Array.isArray(req.body.notePhotos) ? req.body.notePhotos : [];
+    }
+    if (hasChecklistUpdate) {
+      updateData.checklist = checklist;
+    }
 
     const service = await Service.findOneAndUpdate(
       { _id: req.params.id, companyId: req.companyId },

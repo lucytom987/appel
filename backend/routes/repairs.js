@@ -412,7 +412,10 @@ router.put('/:id', authenticate, async (req, res) => {
     const completedByName = `${req.user?.ime || ''} ${req.user?.prezime || ''}`.trim() || req.user?.email || '';
 
     const now = new Date();
-    const normalizedAdditionalTechnicians = await normalizeAdditionalTechnicians(req.body.dodatniServiseri, req.companyId);
+    const hasAdditionalTechniciansUpdate = Object.prototype.hasOwnProperty.call(req.body, 'dodatniServiseri');
+    const normalizedAdditionalTechnicians = hasAdditionalTechniciansUpdate
+      ? await normalizeAdditionalTechnicians(req.body.dodatniServiseri, req.companyId)
+      : (Array.isArray(existing.dodatniServiseri) ? existing.dodatniServiseri : []);
     const hasAssignedTechnicianField = Object.prototype.hasOwnProperty.call(req.body, 'poslanMajstorId')
       || Object.prototype.hasOwnProperty.call(req.body, 'poslanMajstorIme');
     const normalizedAssignedTechnician = hasAssignedTechnicianField
@@ -424,15 +427,17 @@ router.put('/:id', authenticate, async (req, res) => {
           poslanMajstorId: existing.poslanMajstorId || null,
           poslanMajstorIme: existing.poslanMajstorIme || '',
         };
-    const normalizedWorkHours = normalizeWorkHours(req.body.radniSati);
+    const hasWorkHoursUpdate = Object.prototype.hasOwnProperty.call(req.body, 'radniSati');
+    const normalizedWorkHours = hasWorkHoursUpdate
+      ? normalizeWorkHours(req.body.radniSati)
+      : (existing.radniSati || {});
 
     const updatePayload = {
-      ...req.body,
       elevatorId: req.body.elevatorId || req.body.elevator || existing.elevatorId,
-      serviserID: req.body.serviserID || existing.serviserID,
+      serviserID: existing.serviserID,
       dodatniServiseri: normalizedAdditionalTechnicians,
       radniSati: normalizedWorkHours,
-      utroseniMaterijal: typeof req.body.utroseniMaterijal === 'string' ? req.body.utroseniMaterijal.trim() : '',
+      utroseniMaterijal: typeof req.body.utroseniMaterijal === 'string' ? req.body.utroseniMaterijal.trim() : (existing.utroseniMaterijal || ''),
       poslanMajstorId: normalizedAssignedTechnician.poslanMajstorId,
       poslanMajstorIme: normalizedAssignedTechnician.poslanMajstorIme,
       trebaloBi: trebFlag,
@@ -440,6 +445,26 @@ router.put('/:id', authenticate, async (req, res) => {
       updated_at: now,
       updated_by: req.user._id,
     };
+
+    [
+      'datumPrijave',
+      'datumPopravka',
+      'status',
+      'opisKvara',
+      'opisPopravka',
+      'napomene',
+      'pozivatelj',
+      'prijavio',
+      'kontaktTelefon',
+      'primioPoziv',
+      'radniNalogPotpisan',
+      'popravkaUPotpunosti',
+      'photos',
+    ].forEach((key) => {
+      if (Object.prototype.hasOwnProperty.call(req.body, key)) {
+        updatePayload[key] = req.body[key];
+      }
+    });
 
     const requestedSignatureType = normalizeWorkOrderSignatureType(req.body.radniNalogPotpisVrsta);
     if (typeof req.body.radniNalogPotpisan === 'boolean') {

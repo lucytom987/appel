@@ -357,8 +357,8 @@ export default function EditElevatorScreen({ navigation, route }) {
 
       const applyToGroup = applyToAddress || applyContactToAddress;
       const targets = applyToGroup ? groupElevators : [elevator];
-      const mainId = elevator._id || elevator.id;
-      const otherTargets = targets.filter((t) => (t._id || t.id) !== mainId);
+      const mainId = String(elevator._id || elevator.id || '');
+      const otherTargets = targets.filter((t) => String(t._id || t.id || '') !== mainId);
       pendingElevatorData = elevatorData;
       pendingElevatorId = eid;
       pendingOtherTargets = otherTargets;
@@ -395,8 +395,10 @@ export default function EditElevatorScreen({ navigation, route }) {
       } else {
         // Ažuriraj na backend
         const response = await elevatorsAPI.update(eid, elevatorData);
-        const updated = response.data?.data || response.data;
+        const updated = response.data?.data || response.data || {};
         elevatorDB.update(eid, {
+          ...elevator,
+          ...elevatorData,
           ...updated,
           id: eid,
           synced: 1,

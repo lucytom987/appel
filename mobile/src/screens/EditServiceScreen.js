@@ -226,16 +226,30 @@ export default function EditServiceScreen({ route, navigation }) {
 
     setSaving(true);
 
+    const existingAdditionalTechnicians = Array.isArray(freshService.dodatniServiseri)
+      ? freshService.dodatniServiseri
+        .map((entry) => (typeof entry === 'object' ? entry?._id || entry?.id : entry))
+        .map((entry) => String(entry || '').trim())
+        .filter(Boolean)
+      : [];
+    const selectedAdditionalTechnician = String(form.kolegaId || '').trim();
+    const dodatniServiseriPayload = selectedAdditionalTechnician
+      ? [
+          selectedAdditionalTechnician,
+          ...existingAdditionalTechnicians.filter((id) => id !== selectedAdditionalTechnician),
+        ]
+      : existingAdditionalTechnicians;
+
     const payload = {
       elevatorId,
       serviserID: freshService.serviserID || user?._id,
       datum: form.serviceDate?.toISOString?.() || freshService.datum,
-      napomene: '',
+      napomene: freshService.napomene || '',
       utroseniMaterijal: form.utroseniMaterijal,
       imaNedostataka: freshService.imaNedostataka || false,
       nedostaci: freshService.nedostaci || [],
       sljedeciServis: form.nextServiceDate?.toISOString?.() || freshService.sljedeciServis,
-      dodatniServiseri: form.kolegaId ? [form.kolegaId] : [],
+      dodatniServiseri: dodatniServiseriPayload,
       checklist: buildChecklistPayload(),
     };
 

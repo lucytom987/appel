@@ -21,6 +21,7 @@ import { formatElevatorLabel } from '../utils/elevatorLabel';
 export default function ElevatorDetailsScreen({ route, navigation }) {
   const insets = useSafeAreaInsets();
   const { elevator: rawElevator } = route.params || {};
+  const rawElevatorId = rawElevator?.id || rawElevator?._id;
   // Ako je dizalo obrisano ili ne postoji u parametrima, prikaži fallback umjesto rušenja
   if (!rawElevator) {
     return (
@@ -181,24 +182,24 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
   const loadData = useCallback(() => {
     try {
       // Osvježi elevator iz baze da dobiješ najnovije zadnjiServis i sljedeciServis
-      const freshElevator = elevatorDB.getById(rawElevator.id);
+      const freshElevator = rawElevatorId ? elevatorDB.getById(rawElevatorId) : null;
       if (freshElevator) {
         setCurrentElevator(freshElevator);
       }
 
-      const servicesData = serviceDB.getAll(rawElevator.id) || [];
+      const servicesData = rawElevatorId ? (serviceDB.getAll(rawElevatorId) || []) : [];
       const sortedServices = [...servicesData].sort((a, b) => {
         const ad = parseDateSafe(a?.datum || a?.serviceDate);
         const bd = parseDateSafe(b?.datum || b?.serviceDate);
         return (bd?.getTime() || 0) - (ad?.getTime() || 0);
       });
-      const repairsData = repairDB.getAll(rawElevator.id) || [];
+      const repairsData = rawElevatorId ? (repairDB.getAll(rawElevatorId) || []) : [];
       const sortedRepairs = [...repairsData].sort((a, b) => {
         const ad = parseDateSafe(a?.datumPrijave || a?.reportedDate || a?.datum);
         const bd = parseDateSafe(b?.datumPrijave || b?.reportedDate || b?.datum);
         return (bd?.getTime() || 0) - (ad?.getTime() || 0);
       });
-      const eventsData = eventDB.getAll(rawElevator.id) || [];
+      const eventsData = rawElevatorId ? (eventDB.getAll(rawElevatorId) || []) : [];
       const sortedEvents = [...eventsData].sort((a, b) => {
         const ad = parseDateSafe(a?.datum);
         const bd = parseDateSafe(b?.datum);
@@ -224,7 +225,7 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
     } catch (error) {
       console.error('Greška pri učitavanju podataka:', error);
     }
-  }, [rawElevator.id]);
+  }, [rawElevatorId, rawElevator]);
 
   useEffect(() => {
     loadData();

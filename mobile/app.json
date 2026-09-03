@@ -2,7 +2,7 @@
   "expo": {
     "name": "APPEL",
     "slug": "appel",
-    "version": "2.0.20",
+    "version": "2.0.21",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -14,10 +14,10 @@
     },
     "ios": {
       "supportsTablet": true,
-      "buildNumber": "23"
+      "buildNumber": "24"
     },
     "android": {
-      "versionCode": 24,
+      "versionCode": 25,
       "package": "com.appel.elevators",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",

@@ -177,9 +177,46 @@ router.put('/:id', authenticate, async (req, res) => {
     }
 
     const now = new Date();
-    const updateData = { ...req.body, updated_by: req.user._id, updated_at: now };
-    updateData.serviceScheduleMode = normalizeScheduleMode(updateData.serviceScheduleMode ?? oldElevator.serviceScheduleMode);
-    updateData.serviceMonths = normalizeServiceMonths(updateData.serviceMonths ?? oldElevator.serviceMonths);
+    const updateData = {
+      updated_by: req.user._id,
+      updated_at: now,
+      azuriranDatum: now,
+    };
+
+    const assignIfPresent = (key) => {
+      if (Object.prototype.hasOwnProperty.call(req.body, key)) {
+        updateData[key] = req.body[key];
+      }
+    };
+
+    [
+      'brojUgovora',
+      'nazivStranke',
+      'ulica',
+      'mjesto',
+      'brojDizala',
+      'brojDizalaOpis',
+      'tip',
+      'kontaktOsoba',
+      'koordinate',
+      'status',
+      'intervalServisa',
+      'godisnjiPregled',
+      'zadnjiServis',
+      'sljedeciServis',
+      'napomene',
+    ].forEach(assignIfPresent);
+
+    updateData.serviceScheduleMode = normalizeScheduleMode(
+      Object.prototype.hasOwnProperty.call(req.body, 'serviceScheduleMode')
+        ? req.body.serviceScheduleMode
+        : oldElevator.serviceScheduleMode
+    );
+    updateData.serviceMonths = normalizeServiceMonths(
+      Object.prototype.hasOwnProperty.call(req.body, 'serviceMonths')
+        ? req.body.serviceMonths
+        : oldElevator.serviceMonths
+    );
 
     if (updateData.serviceScheduleMode === 'months' && updateData.serviceMonths.length === 0) {
       return res.status(400).json({ message: 'Za raspored po mjesecima potrebno je odabrati barem jedan mjesec.' });
@@ -202,8 +239,6 @@ router.put('/:id', authenticate, async (req, res) => {
         serviceMonths: updateData.serviceMonths,
       });
     }
-    updateData.azuriranDatum = now;
-
     const elevator = await Elevator.findOneAndUpdate(
       { _id: req.params.id, companyId: req.companyId },
       updateData,

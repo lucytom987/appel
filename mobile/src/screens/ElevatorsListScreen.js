@@ -362,7 +362,7 @@ export default function ElevatorsListScreen({ navigation }) {
       <FlatList
         data={filteredElevators}
         renderItem={renderElevator}
-        keyExtractor={item => item.id}
+        keyExtractor={(item, index) => String(item?.id || item?._id || `elevator-${index}`)}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         contentContainerStyle={styles.listContent}

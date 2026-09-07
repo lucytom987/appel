@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
 import { elevatorDB, repairDB, userDB } from '../database/db';
-import { repairsAPI, workOrdersAPI, usersAPI } from '../services/api';
+import { repairsAPI, workOrdersAPI, usersAPI, withRetry } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useFocusEffect } from '@react-navigation/native';
 import { usePhotoUpload } from '../hooks/usePhotoUpload';
@@ -889,7 +889,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
               elevatorId,
               id: undefined,
             };
-            const response = await repairsAPI.create(createPayload);
+            const response = await withRetry(() => repairsAPI.create(createPayload), { retries: 2, baseDelayMs: 500 });
             const created = response.data?.data || response.data;
             const serverId = created?._id || created?.id;
 
@@ -906,7 +906,7 @@ export default function RepairDetailsScreen({ route, navigation }) {
               throw new Error('Server nije vratio ID za spremljeni popravak');
             }
           } else {
-            const response = await repairsAPI.update(id, payload);
+            const response = await withRetry(() => repairsAPI.update(id, payload), { retries: 2, baseDelayMs: 500 });
             const updated = response.data?.data || response.data;
             repairDB.update(id, { ...repairData, ...updated, synced: 1, sync_status: 'synced' });
             setRepairData((prev) => ({ ...prev, ...updated, synced: 1, sync_status: 'synced' }));
@@ -921,6 +921,15 @@ export default function RepairDetailsScreen({ route, navigation }) {
 
       return { success: true, repairId: finalRepairId };
     } catch (e) {
+      if (e?.queued) {
+        // Interceptor je vec spremio zahtjev u lokalni red cekanja - tretiraj kao uspjeh
+        repairDB.update(id, { ...repairData, ...payload, synced: 0, sync_status: 'dirty' });
+        setRepairData((prev) => ({ ...prev, ...payload, synced: 0, sync_status: 'dirty' }));
+        if (showSuccessAlert) {
+          Alert.alert('Spremljeno u red čekanja', 'Veza je nestabilna; popravak će se automatski poslati čim se stabilizira.');
+        }
+        return { success: true, repairId: id };
+      }
       Alert.alert('Greška', e?.message || 'Nije moguće spremiti popravku');
       return { success: false, repairId: null };
     } finally {

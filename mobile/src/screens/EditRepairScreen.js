@@ -16,7 +16,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { elevatorDB, repairDB, userDB } from '../database/db';
-import { repairsAPI, usersAPI } from '../services/api';
+import { repairsAPI, usersAPI, withRetry } from '../services/api';
 import ms from '../utils/scale';
 import { useFocusEffect } from '@react-navigation/native';
 import { applyUserPickerFilter } from '../utils/userPickerFilters';
@@ -308,7 +308,7 @@ export default function EditRepairScreen({ route, navigation }) {
         repairDB.update(id, merged);
         setShowingSaveHint(true);
       } else {
-        const res = await repairsAPI.update(id, payload);
+        const res = await withRetry(() => repairsAPI.update(id, payload), { retries: 2, baseDelayMs: 500 });
         const updated = res.data?.data || res.data || {};
         repairDB.update(id, { ...merged, ...updated, synced: 1, sync_status: 'synced' });
       }

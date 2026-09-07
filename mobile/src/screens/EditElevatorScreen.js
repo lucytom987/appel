@@ -20,7 +20,7 @@ import * as Location from 'expo-location';
 import { useAuth } from '../context/AuthContext';
 import LocationPickerModal from '../components/LocationPickerModal';
 import { elevatorDB, serviceDB, repairDB } from '../database/db';
-import { elevatorsAPI, servicesAPI, repairsAPI } from '../services/api';
+import { elevatorsAPI, servicesAPI, repairsAPI, withRetry } from '../services/api';
 import ms from '../utils/scale';
 import { normalizeServiceMonths } from '../utils/serviceSchedule';
 
@@ -394,7 +394,7 @@ export default function EditElevatorScreen({ navigation, route }) {
         Alert.alert('Spremljeno lokalno', applyToGroup ? 'Ažurirano za sva dizala na adresi (čeka sync).' : 'Dizalo je ažurirano i čeka sinkronizaciju.');
       } else {
         // Ažuriraj na backend
-        const response = await elevatorsAPI.update(eid, elevatorData);
+        const response = await withRetry(() => elevatorsAPI.update(eid, elevatorData), { retries: 2, baseDelayMs: 500 });
         const updated = response.data?.data || response.data || {};
         elevatorDB.update(eid, {
           ...elevator,
@@ -411,7 +411,7 @@ export default function EditElevatorScreen({ navigation, route }) {
             const tid = t._id || t.id;
             if (!tid) return;
             try {
-              const res = await elevatorsAPI.update(tid, sharedAddressData);
+              const res = await withRetry(() => elevatorsAPI.update(tid, sharedAddressData), { retries: 2, baseDelayMs: 500 });
               const upd = res.data?.data || res.data || {};
               elevatorDB.update(tid, {
                 ...t,

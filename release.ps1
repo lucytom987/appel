@@ -69,6 +69,7 @@ Set-Location $repoRoot
 
 $appConfigPath = Join-Path $repoRoot 'mobile/app.config.js'
 $appJsonPath = Join-Path $repoRoot 'mobile/app.json'
+$packageJsonPath = Join-Path $repoRoot 'mobile/package.json'
 $backendAppRoutePath = Join-Path $repoRoot 'backend/routes/app.js'
 $renderYamlPath = Join-Path $repoRoot 'render.yaml'
 $aboutScreenPath = Join-Path $repoRoot 'mobile/src/screens/AboutScreen.js'
@@ -107,19 +108,14 @@ $appJson = Update-OrThrow $appJson '"version"\s*:\s*"\d+\.\d+\.\d+"' ('"version"
 $appJson = Update-OrThrow $appJson '"buildNumber"\s*:\s*"\d+"' ('"buildNumber": "' + $newBuildNumber + '"') 'app.json ios buildNumber'
 $appJson = Update-OrThrow $appJson '"versionCode"\s*:\s*\d+' ('"versionCode": ' + $newVersionCode) 'app.json android versionCode'
 
-$backendAppRoute = Read-Utf8NoBom $backendAppRoutePath
-$backendAppRoute = Update-OrThrow $backendAppRoute "LATEST_APP_VERSION \|\| '[^']+'" "LATEST_APP_VERSION || '$newVersion'" 'backend app latest version fallback'
-$backendAppRoute = Update-OrThrow $backendAppRoute "MIN_SUPPORTED_APP_VERSION \|\| '[^']+'" "MIN_SUPPORTED_APP_VERSION || '$newVersion'" 'backend app min version fallback'
-$backendLatestCodePattern = '(?m)(const latestVersionCode = Number\.isFinite\(Number\(latestVersionCodeRaw\)\)\s*\r?\n\s*\? Number\(latestVersionCodeRaw\)\s*\r?\n\s*:\s*)\d+'
-$backendLatestCodeReplacement = '${1}' + $newVersionCode
-$backendAppRoute = Update-OrThrow $backendAppRoute $backendLatestCodePattern $backendLatestCodeReplacement 'backend app latest versionCode fallback'
+$packageJson = Read-Utf8NoBom $packageJsonPath
+$packageJson = Update-OrThrow $packageJson '"version"\s*:\s*"\d+\.\d+\.\d+"' ('"version": "' + $newVersion + '"') 'mobile package.json version'
 
-# Ensure minSupportedVersionCode fallback follows latestVersionCode as before.
-$backendAppRoute = [regex]::Replace(
-  $backendAppRoute,
-  "const minSupportedVersionCode = Number\.isFinite\(Number\(minSupportedVersionCodeRaw\)\)\s*\?\s*Number\(minSupportedVersionCodeRaw\)\s*:\s*latestVersionCode;",
-  "const minSupportedVersionCode = Number.isFinite(Number(minSupportedVersionCodeRaw))`n    ? Number(minSupportedVersionCodeRaw)`n    : latestVersionCode;"
-)
+$backendAppRoute = Read-Utf8NoBom $backendAppRoutePath
+$backendAppRoute = Update-OrThrow $backendAppRoute "BUNDLED_LATEST_VERSION = '[^']+'" "BUNDLED_LATEST_VERSION = '$newVersion'" 'backend app latest version fallback'
+$backendAppRoute = Update-OrThrow $backendAppRoute "BUNDLED_MIN_SUPPORTED_VERSION = '[^']+'" "BUNDLED_MIN_SUPPORTED_VERSION = '$newVersion'" 'backend app min version fallback'
+$backendAppRoute = Update-OrThrow $backendAppRoute 'BUNDLED_LATEST_VERSION_CODE = \d+' "BUNDLED_LATEST_VERSION_CODE = $newVersionCode" 'backend app latest versionCode fallback'
+$backendAppRoute = Update-OrThrow $backendAppRoute 'BUNDLED_MIN_SUPPORTED_VERSION_CODE = \d+' "BUNDLED_MIN_SUPPORTED_VERSION_CODE = $newVersionCode" 'backend app min versionCode fallback'
 
 $renderYaml = Read-Utf8NoBom $renderYamlPath
 $renderYaml = Update-OrThrow $renderYaml '(?m)(- key: LATEST_APP_VERSION\s*\r?\n\s*value:\s*)[^\r\n]+' ('${1}' + $newVersion) 'render latest version env'
@@ -142,6 +138,7 @@ $loginScreen = Update-OrThrow $loginScreen "const APP_VERSION = [^;]+;" "const A
 if (-not $DryRun) {
   Write-Utf8NoBom $appConfigPath $appConfig
   Write-Utf8NoBom $appJsonPath $appJson
+  Write-Utf8NoBom $packageJsonPath $packageJson
   Write-Utf8NoBom $backendAppRoutePath $backendAppRoute
   Write-Utf8NoBom $renderYamlPath $renderYaml
   Write-Utf8NoBom $aboutScreenPath $aboutScreen

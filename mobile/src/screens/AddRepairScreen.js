@@ -19,20 +19,9 @@ import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import { useAuth } from '../context/AuthContext';
 import { repairDB, userDB } from '../database/db';
-import { repairsAPI, usersAPI } from '../services/api';
+import { repairsAPI, usersAPI, withRetry } from '../services/api';
 import ms from '../utils/scale';
 import { applyUserPickerFilter } from '../utils/userPickerFilters';
-
-const wait = (msDelay) => new Promise((resolve) => setTimeout(resolve, msDelay));
-
-const isTransientRequestError = (err) => {
-  if (!err) return false;
-  if (err.queued) return false;
-  const status = Number(err.status || err.response?.status || 0);
-  if (status >= 500) return true;
-  const message = String(err.message || '').toLowerCase();
-  return message.includes('network') || message.includes('timeout') || message.includes('socket');
-};
 
 export default function AddRepairScreen({ navigation, route }) {
   const { elevator } = route.params || {};
@@ -285,21 +274,7 @@ export default function AddRepairScreen({ navigation, route }) {
       } else {
         // Online s pravim korisničkim tokenom - spremi na backend
         try {
-          let response;
-          let lastErr;
-          for (let attempt = 1; attempt <= 3; attempt += 1) {
-            try {
-              response = await repairsAPI.create(repairData);
-              break;
-            } catch (err) {
-              lastErr = err;
-              if (!isTransientRequestError(err) || attempt === 3) {
-                throw err;
-              }
-              await wait(500 * attempt);
-            }
-          }
-          if (!response && lastErr) throw lastErr;
+          const response = await withRetry(() => repairsAPI.create(repairData), { retries: 2, baseDelayMs: 500 });
 
           // Spremi u lokalnu bazu (osiguraj "trebalo bi" flag i offline kompatibilnost)
           const created = response.data?.data || response.data || {};

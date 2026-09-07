@@ -19,7 +19,7 @@ import * as Location from 'expo-location';
 import { useAuth } from '../context/AuthContext';
 import LocationPickerModal from '../components/LocationPickerModal';
 import { elevatorDB } from '../database/db';
-import { elevatorsAPI } from '../services/api';
+import { elevatorsAPI, withRetry } from '../services/api';
 import ms from '../utils/scale';
 import { normalizeServiceMonths } from '../utils/serviceSchedule';
 
@@ -309,7 +309,7 @@ export default function AddElevatorScreen({ navigation }) {
         } else {
           // Online s pravim korisničkim tokenom - spremi na backend
           try {
-            const response = await elevatorsAPI.create(elevatorData);
+            const response = await withRetry(() => elevatorsAPI.create(elevatorData), { retries: 2, baseDelayMs: 500 });
             const created = response.data?.data || response.data;
 
             // Spremi u lokalnu bazu s ispravnim poljima

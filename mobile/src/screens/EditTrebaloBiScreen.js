@@ -15,7 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { repairDB } from '../database/db';
-import { repairsAPI } from '../services/api';
+import { repairsAPI, withRetry } from '../services/api';
 import { useFocusEffect } from '@react-navigation/native';
 import ms from '../utils/scale';
 
@@ -148,7 +148,7 @@ export default function EditTrebaloBiScreen({ route, navigation }) {
     try {
       const online = Boolean(isOnline && serverAwake);
       if (online) {
-        const res = await repairsAPI.update(id, payload);
+        const res = await withRetry(() => repairsAPI.update(id, payload), { retries: 2, baseDelayMs: 500 });
         const updated = res.data?.data || res.data || {};
         repairDB.update(id, { ...merged, ...updated, synced: 1, sync_status: 'synced' });
       } else {

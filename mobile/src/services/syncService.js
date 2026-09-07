@@ -186,11 +186,58 @@ export const checkOnlineStatus = async () => {
   return isOnline;
 };
 
-export const subscribeToNetworkChanges = (callback) =>
-  NetInfo.addEventListener((state) => {
-    isOnline = Boolean(state.isConnected && state.isInternetReachable);
-    if (callback) callback(isOnline);
+// Nakon izlaska iz mrtve zone signala (podrum i sl.) NetInfo često javi "online" prije
+// nego što je veza stvarno stabilna, pa prve mrežne pozive zna srušiti network error.
+// Zato offline->online prijelaz čekamo kratko i ponovo provjerimo prije javljanja callbacku.
+const NETWORK_ONLINE_SETTLE_MS = 2000;
+let networkSettleTimer = null;
+let lastEmittedOnline = null;
+
+export const subscribeToNetworkChanges = (callback) => {
+  const unsubscribeNetInfo = NetInfo.addEventListener((state) => {
+    const rawOnline = Boolean(state.isConnected && state.isInternetReachable);
+    isOnline = rawOnline;
+
+    if (networkSettleTimer) {
+      clearTimeout(networkSettleTimer);
+      networkSettleTimer = null;
+    }
+
+    if (!rawOnline) {
+      // Offline mora biti odmah vidljiv da se ne pokušava uzalud slati zahtjeve
+      lastEmittedOnline = false;
+      if (callback) callback(false);
+      return;
+    }
+
+    if (lastEmittedOnline === true) {
+      // Već smo potvrđeno online; nema potrebe ponovno čekati settle period
+      if (callback) callback(true);
+      return;
+    }
+
+    networkSettleTimer = setTimeout(async () => {
+      networkSettleTimer = null;
+      try {
+        const recheck = await NetInfo.fetch();
+        const stillOnline = Boolean(recheck.isConnected && recheck.isInternetReachable);
+        isOnline = stillOnline;
+        lastEmittedOnline = stillOnline;
+        if (callback) callback(stillOnline);
+      } catch (e) {
+        // Ako recheck ne uspije, ostavi kao neriješeno; sljedeći NetInfo event će pokušati ponovno
+      }
+    }, NETWORK_ONLINE_SETTLE_MS);
   });
+
+  return () => {
+    if (networkSettleTimer) {
+      clearTimeout(networkSettleTimer);
+      networkSettleTimer = null;
+    }
+    unsubscribeNetInfo();
+  };
+};
 
 // lastSync helpers
 const getLastSync = async (key) => {

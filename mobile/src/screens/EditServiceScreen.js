@@ -19,7 +19,7 @@ import * as SecureStore from 'expo-secure-store';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { elevatorDB, serviceDB, userDB, repairDB } from '../database/db';
-import { servicesAPI, usersAPI, repairsAPI } from '../services/api';
+import { servicesAPI, usersAPI, repairsAPI, withRetry } from '../services/api';
 import ms from '../utils/scale';
 import { applyUserPickerFilter } from '../utils/userPickerFilters';
 
@@ -287,13 +287,13 @@ export default function EditServiceScreen({ route, navigation }) {
 
     try {
       if (online) {
-        const res = await servicesAPI.update(serviceId, payload);
+        const res = await withRetry(() => servicesAPI.update(serviceId, payload), { retries: 2, baseDelayMs: 500 });
         const updated = res.data?.data || res.data || {};
         serviceDB.update(serviceId, { ...mergedLocal, ...updated, synced: 1, sync_status: 'synced' });
 
         if (trebaloBiPayload) {
           try {
-            const repairRes = await repairsAPI.create(trebaloBiPayload);
+            const repairRes = await withRetry(() => repairsAPI.create(trebaloBiPayload), { retries: 2, baseDelayMs: 500 });
             const createdRepair = repairRes?.data?.data || repairRes?.data || {};
             repairDB.insert({
               id: createdRepair._id || createdRepair.id,

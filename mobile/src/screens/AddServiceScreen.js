@@ -18,24 +18,11 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import * as SecureStore from 'expo-secure-store';
 import { useAuth } from '../context/AuthContext';
 import { serviceDB, elevatorDB, userDB, repairDB } from '../database/db';
-import { servicesAPI, serviceWorkOrdersAPI, usersAPI, repairsAPI } from '../services/api';
+import { servicesAPI, serviceWorkOrdersAPI, usersAPI, repairsAPI, withRetry } from '../services/api';
 import { usePhotoUpload } from '../hooks/usePhotoUpload';
 import ms from '../utils/scale';
 import { applyUserPickerFilter } from '../utils/userPickerFilters';
 import { formatElevatorLabel } from '../utils/elevatorLabel';
-
-const wait = (msDelay) => new Promise((resolve) => setTimeout(resolve, msDelay));
-
-const isTransientRequestError = (err) => {
-  if (!err) return false;
-  if (err.queued) return false; // već je queue-ano u interceptoru
-
-  const status = Number(err.status || err.response?.status || 0);
-  if (status >= 500) return true;
-
-  const message = String(err.message || '').toLowerCase();
-  return message.includes('network') || message.includes('timeout') || message.includes('socket');
-};
 
 export default function AddServiceScreen({ navigation, route }) {
   const { elevator } = route.params || {};
@@ -510,38 +497,10 @@ export default function AddServiceScreen({ navigation, route }) {
           return String(createdId);
         };
 
-        const createServiceOnlineWithRetry = async (payload, maxAttempts = 3) => {
-          let lastErr;
-          for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-            try {
-              return await servicesAPI.create(payload);
-            } catch (err) {
-              lastErr = err;
-              if (!isTransientRequestError(err) || attempt === maxAttempts) {
-                throw err;
-              }
-              // Kratki backoff smanjuje šansu da batch zapne na Render cold-startu / kratkom dropu mreže
-              await wait(500 * attempt);
-            }
-          }
-          throw lastErr;
-        };
+        // Kratki backoff smanjuje šansu da zapne na Render cold-startu / kratkom dropu mreže
+        const createServiceOnlineWithRetry = (payload) => withRetry(() => servicesAPI.create(payload), { retries: 2, baseDelayMs: 500 });
 
-        const createServicesBatchWithRetry = async (items, maxAttempts = 2) => {
-          let lastErr;
-          for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-            try {
-              return await servicesAPI.createBatch(items);
-            } catch (err) {
-              lastErr = err;
-              if (!isTransientRequestError(err) || attempt === maxAttempts) {
-                throw err;
-              }
-              await wait(700 * attempt);
-            }
-          }
-          throw lastErr;
-        };
+        const createServicesBatchWithRetry = (items) => withRetry(() => servicesAPI.createBatch(items), { retries: 1, baseDelayMs: 700 });
 
         let batchHandled = false;
         const batchCreatedRequestIds = new Set();
@@ -582,7 +541,7 @@ export default function AddServiceScreen({ navigation, route }) {
 
             if (trebaloBiPayload) {
               try {
-                const repairRes = await repairsAPI.create(trebaloBiPayload);
+                const repairRes = await withRetry(() => repairsAPI.create(trebaloBiPayload), { retries: 2, baseDelayMs: 500 });
                 const createdRepair = repairRes?.data?.data || repairRes?.data || {};
                 repairDB.insert({
                   id: createdRepair._id || createdRepair.id,
@@ -635,7 +594,7 @@ export default function AddServiceScreen({ navigation, route }) {
 
           if (batchHandled && trebaloBiPayload) {
             try {
-              const repairRes = await repairsAPI.create(trebaloBiPayload);
+              const repairRes = await withRetry(() => repairsAPI.create(trebaloBiPayload), { retries: 2, baseDelayMs: 500 });
               const createdRepair = repairRes?.data?.data || repairRes?.data || {};
               repairDB.insert({
                 id: createdRepair._id || createdRepair.id,

@@ -81,10 +81,22 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Nakon reconnecta (npr. izlazak iz zone bez signala) jedan uspješan ping zna biti
+  // lažno pozitivan dok se veza tek stabilizira. Traži dva uzastopna uspješna pinga
+  // prije nego što proglasimo server/mrežu stvarno spremnima za sync/spremanje.
+  const PING_CONFIRM_DELAY_MS = 1500;
+
+  const confirmBackendReady = async () => {
+    const first = await pingBackend();
+    if (!first) return false;
+    await new Promise((resolve) => setTimeout(resolve, PING_CONFIRM_DELAY_MS));
+    return pingBackend();
+  };
+
   const scheduleServerProbe = (shouldSyncAfterWake = false) => {
     if (serverProbeRef.current) return;
     serverProbeRef.current = setInterval(async () => {
-      const awake = await pingBackend();
+      const awake = await confirmBackendReady();
       if (awake) {
         stopServerProbe();
         if (shouldSyncAfterWake) {
@@ -109,7 +121,7 @@ export const AuthProvider = ({ children }) => {
       lastWakeSyncAtRef.current = now;
     }
 
-    const awake = await pingBackend();
+    const awake = await confirmBackendReady();
     if (awake) {
       if (shouldSyncAfterWake) {
         syncAll().catch((err) => console.log('Background sync error:', err?.message || err));

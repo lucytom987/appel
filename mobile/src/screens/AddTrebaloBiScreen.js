@@ -16,7 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import { useAuth } from '../context/AuthContext';
 import { repairDB } from '../database/db';
-import { repairsAPI } from '../services/api';
+import { repairsAPI, withRetry } from '../services/api';
 import ms from '../utils/scale';
 
 export default function AddTrebaloBiScreen({ navigation, route }) {
@@ -95,7 +95,7 @@ export default function AddTrebaloBiScreen({ navigation, route }) {
           { text: 'OK', onPress: () => navigation.navigate('Repairs') },
         ]);
       } else {
-        const response = await repairsAPI.create(repairData);
+        const response = await withRetry(() => repairsAPI.create(repairData), { retries: 2, baseDelayMs: 500 });
         const created = response.data?.data || response.data || {};
         repairDB.insert({
           id: created._id || created.id,

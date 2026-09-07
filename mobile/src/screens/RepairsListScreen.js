@@ -57,10 +57,11 @@ export default function RepairsListScreen({ navigation, route }) {
   const online = Boolean(isOnline && serverAwake);
   const [repairs, setRepairs] = useState([]);
   const [filteredRepairs, setFilteredRepairs] = useState([]);
-  const [trebaloBiList, setTrebaloBiList] = useState([]);
+  const [trebaloBiListAll, setTrebaloBiListAll] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState('pending');
   const [activeList, setActiveList] = useState('repairs'); // 'repairs' | 'trebalo'
+  const [trebaloFilter, setTrebaloFilter] = useState('pending'); // 'pending' | 'completed' (samo za 'trebalo' tab)
   const [period, setPeriod] = useState(() => {
     const now = new Date();
     return { month: now.getMonth(), year: now.getFullYear() };
@@ -275,6 +276,96 @@ export default function RepairsListScreen({ navigation, route }) {
     }
   }, [repairs, filter, period, monthNames, periodFilter, resolveElevatorForRepair, resolveUserNameForPrint]);
 
+  const handlePrintTrebaloBi = useCallback(async () => {
+    try {
+      const isMonthOnly = periodFilter !== 'all';
+      const selected = trebaloBiList.filter((item) => {
+        if (!isMonthOnly) return true;
+        const raw = item?.datumPrijave || item?.kreiranDatum;
+        if (!raw) return false;
+        const d = new Date(raw);
+        if (Number.isNaN(d.getTime())) return false;
+        return d.getMonth() === period.month && d.getFullYear() === period.year;
+      });
+
+      if (!selected.length) {
+        Alert.alert('Nema podataka', 'Nema stavki za odabrani ispis.');
+        return;
+      }
+
+      const rows = selected.map((item) => {
+        const elevator = resolveElevatorForRepair(item);
+        const naziv = safeText(elevator?.nazivStranke, '-').trim() || '-';
+        const adresa = [safeText(elevator?.ulica), safeText(elevator?.mjesto)].filter(Boolean).join(', ').trim() || '-';
+        const brojOpis = formatElevatorLabel(elevator) || '-';
+        const opis = safeText(item?.opisKvara || item?.napomene, '-').trim() || '-';
+        const prijavio = safeText(item?.prijavio, '').trim() || resolveUserNameForPrint(item?.serviserID) || '-';
+        const datum = item?.datumPrijave ? new Date(item.datumPrijave).toLocaleDateString('hr-HR') : '-';
+        const status = item?.status === 'completed' ? 'Riješeno' : 'Nije riješeno';
+
+        return { naziv, adresa, brojOpis, opis, prijavio, datum, status };
+      });
+
+      const scopeTitle = isMonthOnly ? `${monthNames[period.month]} ${period.year}` : 'Svi mjeseci';
+      const statusTitle = trebaloFilter === 'completed' ? 'Riješeno' : 'Nije riješeno';
+      const generatedAt = `${new Date().toLocaleDateString('hr-HR')} ${new Date().toLocaleTimeString('hr-HR', { hour: '2-digit', minute: '2-digit' })}`;
+
+      const tableRows = rows.map((row, idx) => `
+        <tr style="${idx % 2 === 0 ? 'background:#f8fafc;' : ''}">
+          <td>${idx + 1}</td>
+          <td>
+            <div style="font-weight:700; color:#111827;">${escapeHtml(row.naziv)}</div>
+            <div style="margin-top:2px; color:#4b5563; font-size:10px;">${escapeHtml(row.adresa)}</div>
+          </td>
+          <td>${escapeHtml(row.brojOpis)}</td>
+          <td>${escapeHtml(row.opis)}</td>
+          <td>${escapeHtml(row.prijavio)}<br/>${escapeHtml(row.datum)}</td>
+          <td>${escapeHtml(row.status)}</td>
+        </tr>
+      `).join('');
+
+      const html = `
+        <html>
+          <head>
+            <meta charset="utf-8" />
+            <style>
+              body { font-family: Arial, sans-serif; padding: 18px; color: #111827; }
+              h1 { margin: 0 0 4px; font-size: 18px; }
+              h2 { margin: 0 0 12px; font-size: 13px; color: #4b5563; font-weight: 500; }
+              table { width: 100%; border-collapse: collapse; font-size: 11px; table-layout: fixed; }
+              th, td { border: 1px solid #d1d5db; padding: 6px 8px; vertical-align: top; word-wrap: break-word; }
+              th { background: #1f2937; color: white; text-align: left; }
+              .meta { margin-top: 12px; font-size: 11px; color: #6b7280; }
+            </style>
+          </head>
+          <body>
+            <h1>Trebalo bi - ${escapeHtml(statusTitle)}</h1>
+            <h2>Period: ${escapeHtml(scopeTitle)} | Ukupno: ${rows.length}</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:5%;">#</th>
+                  <th style="width:24%;">Naziv i adresa</th>
+                  <th style="width:12%;">Broj i opis dizala</th>
+                  <th style="width:32%;">Opis</th>
+                  <th style="width:17%;">Prijavio / datum</th>
+                  <th style="width:10%;">Status</th>
+                </tr>
+              </thead>
+              <tbody>${tableRows}</tbody>
+            </table>
+            <div class="meta">Generirano: ${escapeHtml(generatedAt)}</div>
+          </body>
+        </html>
+      `;
+
+      await Print.printAsync({ html });
+    } catch (e) {
+      console.error('Greška pri printanju "Trebalo bi":', e);
+      Alert.alert('Greška', 'Print nije uspio.');
+    }
+  }, [trebaloBiList, trebaloFilter, period, monthNames, periodFilter, resolveElevatorForRepair, resolveUserNameForPrint]);
+
   const loadRepairs = useCallback(() => {
     try {
       const allRepairs = repairDB.getAll() || [];
@@ -418,6 +509,8 @@ export default function RepairsListScreen({ navigation, route }) {
     );
     const nepotpisani = periodFiltered.filter((r) => !r.trebaloBi && !r.radniNalogPotpisan);
 
+    setTrebaloBiListAll(mergedTrebalo);
+
     let filtered = repairsOnly;
     if (filter === 'pending') {
       filtered = repairsOnly.filter((r) => r.status === 'pending');
@@ -428,12 +521,16 @@ export default function RepairsListScreen({ navigation, route }) {
     }
 
     setFilteredRepairs(filtered);
-    setTrebaloBiList(mergedTrebalo);
   }, [repairs, filter, isInSelectedPeriod, periodFilter]);
 
   useEffect(() => {
     applyFilter();
   }, [applyFilter]);
+
+  // "Trebalo bi" lista filtrirana po tome je li stavka riješena ili nije
+  const trebaloBiList = trebaloBiListAll.filter((item) => (
+    trebaloFilter === 'completed' ? item.status === 'completed' : item.status !== 'completed'
+  ));
 
   // Memoriranje pozicije scrolla je uklonjeno na zahtjev; lista se ponaša standardno
 
@@ -696,7 +793,7 @@ export default function RepairsListScreen({ navigation, route }) {
   );
 
   const flowCallerPhone = safeText(selectedFlow?.kontaktTelefon || selectedFlow?.pozivateljTelefon, '');
-  const canShowPrint = activeList === 'repairs' && (filter === 'pending' || filter === 'nepotpisani');
+  const canShowPrint = (activeList === 'repairs' && (filter === 'pending' || filter === 'nepotpisani')) || activeList === 'trebalo';
 
   const handleCallCaller = useCallback(async () => {
     if (!flowCallerPhone) return;
@@ -749,11 +846,15 @@ export default function RepairsListScreen({ navigation, route }) {
     <View style={styles.emptyState}>
       <Ionicons name="construct-outline" size={64} color="#ccc" />
       <Text style={styles.emptyText}>
-        {type === 'trebalo' ? 'Nema stavki "trebalo bi"' : 'Nema popravaka'}
+        {type === 'trebalo'
+          ? (trebaloFilter === 'completed' ? 'Nema riješenih stavki' : 'Nema neriješenih stavki')
+          : 'Nema popravaka'}
       </Text>
       <Text style={styles.emptySubtext}>
         {type === 'trebalo'
-          ? 'Dodajte stavke koje mogu pričekati sljedeći obilazak'
+          ? (trebaloFilter === 'completed'
+            ? 'Ovdje će se prikazati riješene stavke "trebalo bi"'
+            : 'Dodajte stavke koje mogu pričekati sljedeći obilazak')
           : filter === 'pending'
             ? 'Nema prijavljenih popravaka'
             : 'Nema završenih popravaka'}
@@ -786,7 +887,7 @@ export default function RepairsListScreen({ navigation, route }) {
           </TouchableOpacity>
         </View>
         {canShowPrint ? (
-          <TouchableOpacity onPress={handlePrintRepairs} style={styles.headerPrint}>
+          <TouchableOpacity onPress={activeList === 'trebalo' ? handlePrintTrebaloBi : handlePrintRepairs} style={styles.headerPrint}>
             <Ionicons name="print-outline" size={22} color="#0ea5e9" />
           </TouchableOpacity>
         ) : (
@@ -828,12 +929,33 @@ export default function RepairsListScreen({ navigation, route }) {
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.filterPill, activeList === 'trebalo' && styles.filterPillBlue]}
-          onPress={() => setActiveList('trebalo')}
+          style={[
+            styles.filterPill,
+            activeList === 'trebalo' && trebaloFilter === 'pending' && styles.filterPillBlue,
+            activeList === 'trebalo' && trebaloFilter === 'completed' && styles.filterPillGreen,
+          ]}
+          onPress={() => {
+            if (activeList !== 'trebalo') {
+              setActiveList('trebalo');
+              setTrebaloFilter('pending');
+            } else {
+              setTrebaloFilter((prev) => (prev === 'pending' ? 'completed' : 'pending'));
+            }
+          }}
           activeOpacity={0.85}
         >
-          <Text style={[styles.filterPillText, activeList === 'trebalo' && styles.filterPillTextBlue]}>
-            Trebalo bi
+          <Text
+            style={[
+              styles.filterPillText,
+              activeList === 'trebalo' && trebaloFilter === 'pending' && styles.filterPillTextBlue,
+              activeList === 'trebalo' && trebaloFilter === 'completed' && styles.filterPillTextGreen,
+            ]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+          >
+            {activeList === 'trebalo'
+              ? (trebaloFilter === 'completed' ? 'Trebalo bi — Riješeno' : 'Trebalo bi — Nije riješeno')
+              : 'Trebalo bi'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -843,14 +965,14 @@ export default function RepairsListScreen({ navigation, route }) {
         sections={[
           activeList === 'repairs'
             ? { key: 'repairs', title: filter === 'completed' ? 'Završeni' : 'Prijavljeni', data: filteredRepairs }
-            : { key: 'trebalo', title: 'Trebalo bi', data: trebaloBiList },
+            : { key: 'trebalo', title: trebaloFilter === 'completed' ? 'Riješeno' : 'Nije riješeno', data: trebaloBiList },
         ]}
         keyExtractor={(item, index) => String(item?._id || item?.id || item?.key || index)}
         renderItem={renderRepairItem}
         renderSectionHeader={({ section }) => (
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>
-              {section.key === 'repairs' ? `Popravci — ${section.title.toLowerCase()}` : 'Trebalo bi'}
+              {section.key === 'repairs' ? `Popravci — ${section.title.toLowerCase()}` : `Trebalo bi — ${section.title.toLowerCase()}`}
             </Text>
             <Text style={styles.sectionCount}>{section.data.length}</Text>
           </View>
@@ -1043,6 +1165,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffedd5',
     borderColor: '#f59e0b',
   },
+  filterPillGreen: {
+    backgroundColor: '#dcfce7',
+    borderColor: '#10b981',
+  },
   filterPillText: {
     fontSize: 14,
     fontWeight: '700',
@@ -1050,6 +1176,9 @@ const styles = StyleSheet.create({
   },
   filterPillTextBlue: {
     color: '#b45309',
+  },
+  filterPillTextGreen: {
+    color: '#065f46',
   },
   sectionHeader: {
     flexDirection: 'row',

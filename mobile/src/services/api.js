@@ -181,6 +181,37 @@ export const requestWithQueue = async (method, url, data = {}) => {
   }
 };
 
+// Prepoznaje greške koje su vjerojatno posljedica nestabilne veze (network/timeout/5xx),
+// a ne stvarne validacijske/auth greške - takve ima smisla ponovno pokušati.
+export const isTransientRequestError = (err) => {
+  if (!err) return false;
+  if (err.queued) return false; // već sigurno spremljeno u lokalni queue, retry nije potreban
+  const status = Number(err.status || err.response?.status || 0);
+  if (status >= 500) return true;
+  const message = String(err.message || '').toLowerCase();
+  return message.includes('network') || message.includes('timeout') || message.includes('socket');
+};
+
+const wait = (msDelay) => new Promise((resolve) => setTimeout(resolve, msDelay));
+
+// Rijesava tipičan "izašao iz podruma, signal se vratio ali veza je jos nestabilna" slučaj:
+// prije nego se padne na offline fallback, tiho pokuša ponovno par puta uz kratki backoff.
+export const withRetry = async (fn, { retries = 2, baseDelayMs = 500 } = {}) => {
+  let lastErr;
+  for (let attempt = 1; attempt <= retries + 1; attempt += 1) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      if (!isTransientRequestError(err) || attempt === retries + 1) {
+        throw err;
+      }
+      await wait(baseDelayMs * attempt);
+    }
+  }
+  throw lastErr;
+};
+
 // Auth API
 export const authAPI = {
   login: (email, lozinka) => api.post('/auth/login', { email, lozinka }),

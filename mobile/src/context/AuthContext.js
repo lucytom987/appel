@@ -338,12 +338,31 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  // Ceka da se server (Render cold start) stvarno probudi prije login pokusaja, umjesto
+  // da korisnik rucno ponavlja login i trosi strogi rate-limit na /auth/login.
+  const waitForServer = async ({ maxSeconds = 35, intervalSeconds = 3, onTick } = {}) => {
+    const startedAt = Date.now();
+    const elapsed = () => Math.round((Date.now() - startedAt) / 1000);
+
+    let ready = await confirmBackendReady();
+    onTick?.({ elapsedSeconds: elapsed(), maxSeconds, ready });
+
+    while (!ready && elapsed() < maxSeconds) {
+      await new Promise((resolve) => setTimeout(resolve, intervalSeconds * 1000));
+      ready = await confirmBackendReady();
+      onTick?.({ elapsedSeconds: elapsed(), maxSeconds, ready });
+    }
+
+    return ready;
+  };
+
   const value = {
     user,
     setUser,
     loading,
     isOnline,
     serverAwake,
+    waitForServer,
     companySetupRequired,
     setCompanySetupRequired,
     firstLoginRequired,

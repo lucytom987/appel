@@ -7,6 +7,8 @@ const {
 
 const elevatorSchema = new mongoose.Schema({
   companyId: { type: mongoose.Schema.Types.ObjectId, ref: 'Company', required: true },
+  // Idempotency kljuc da retry/offline sync ne stvori duplikat dizala
+  clientRequestId: { type: String },
   // Osnovno
   brojUgovora: { type: String }, // Opcionalno
   nazivStranke: { type: String, required: true },
@@ -116,5 +118,6 @@ elevatorSchema.index({ status: 1 });
 elevatorSchema.index({ azuriranDatum: -1 });
 elevatorSchema.index({ updated_at: -1 });
 elevatorSchema.index({ is_deleted: 1 });
+elevatorSchema.index({ companyId: 1, clientRequestId: 1 }, { unique: true, sparse: true });
 
 module.exports = mongoose.model('Elevator', elevatorSchema);

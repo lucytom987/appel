@@ -617,6 +617,9 @@ export const syncElevatorsToServer = async () => {
         tip: e.tip,
         is_deleted: e.is_deleted,
         deleted_at: e.deleted_at,
+        // Idempotency kljuc: stabilan kroz sve retry pokusaje da background sync ne stvori duplikat na serveru.
+        // Legacy zapisi bez sacuvanog clientRequestId koriste lokalni id kao stabilan fallback.
+        clientRequestId: e.clientRequestId || (localId.startsWith('local_') ? localId : undefined),
       };
 
       if (localId.startsWith('local_')) {

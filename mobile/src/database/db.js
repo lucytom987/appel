@@ -127,7 +127,8 @@ export const initDatabase = () => {
         updated_by TEXT,
         updated_at INTEGER,
         sync_status TEXT DEFAULT 'synced',
-        synced INTEGER DEFAULT 0
+        synced INTEGER DEFAULT 0,
+        clientRequestId TEXT
       );
 
       -- Servisi
@@ -216,6 +217,7 @@ export const initDatabase = () => {
         kreiranDatum TEXT,
         synced INTEGER DEFAULT 0,
         updated_at INTEGER,
+        clientRequestId TEXT,
         FOREIGN KEY (chatroomId) REFERENCES chatrooms(id)
       );
 
@@ -338,6 +340,9 @@ export const initDatabase = () => {
     try { db.execSync('ALTER TABLE events ADD COLUMN is_deleted INTEGER DEFAULT 0;'); } catch (e) {}
     try { db.execSync('ALTER TABLE events ADD COLUMN deleted_at TEXT;'); } catch (e) {}
     try { db.execSync('ALTER TABLE events ADD COLUMN updated_by TEXT;'); } catch (e) {}
+    // Idempotency kljucevi da retry/offline sync ne stvori duplikate (dizala, poruke)
+    try { db.execSync('ALTER TABLE elevators ADD COLUMN clientRequestId TEXT;'); } catch (e) {}
+    try { db.execSync('ALTER TABLE messages ADD COLUMN clientRequestId TEXT;'); } catch (e) {}
     try { db.execSync('ALTER TABLE events ADD COLUMN updated_at INTEGER;'); } catch (e) {}
     try { db.execSync('ALTER TABLE events ADD COLUMN sync_status TEXT DEFAULT "synced";'); } catch (e) {}
     try { db.execSync('ALTER TABLE events ADD COLUMN synced INTEGER DEFAULT 0;'); } catch (e) {}
@@ -427,8 +432,8 @@ export const elevatorDB = {
     const result = db.runSync(
       `INSERT INTO elevators (id, brojUgovora, nazivStranke, ulica, mjesto, brojDizala,
        brojDizalaOpis, tip, kontaktOsoba, koordinate_lat, koordinate_lng, status,
-       intervalServisa, serviceScheduleMode, serviceMonths, godisnjiPregled, zadnjiServis, sljedeciServis, napomene, is_deleted, deleted_at, updated_by, updated_at, sync_status, synced) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )`,
+       intervalServisa, serviceScheduleMode, serviceMonths, godisnjiPregled, zadnjiServis, sljedeciServis, napomene, is_deleted, deleted_at, updated_by, updated_at, sync_status, synced, clientRequestId) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )`,
       [
         elevator.id || elevator._id,
         elevator.brojUgovora,
@@ -454,7 +459,8 @@ export const elevatorDB = {
         elevator.updated_by || null,
         elevator.updated_at || Date.now(),
         syncStatus,
-        syncedFlag
+        syncedFlag,
+        elevator.clientRequestId || null
       ]
     );
     return result;
@@ -1335,8 +1341,8 @@ export const messageDB = {
     const syncedFlag = message.synced !== undefined ? (message.synced ? 1 : 0) : (isLocalId ? 0 : 1);
 
     return db.runSync(
-      `INSERT INTO messages (id, chatroomId, sender, senderName, tekst, slika, 
-       isRead, kreiranDatum, synced, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT OR REPLACE INTO messages (id, chatroomId, sender, senderName, tekst, slika, 
+       isRead, kreiranDatum, synced, updated_at, clientRequestId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         chatRoomId,
@@ -1347,9 +1353,14 @@ export const messageDB = {
         JSON.stringify(message.isRead || message.readBy || []),
         message.kreiranDatum || message.createdAt || new Date().toISOString(),
         syncedFlag,
-        Date.now()
+        Date.now(),
+        message.clientRequestId || (isLocalId ? id : null)
       ]
     );
+  },
+
+  delete: (id) => {
+    return db.runSync('DELETE FROM messages WHERE id = ?', [id]);
   },
   
   bulkInsert: (messages) => {

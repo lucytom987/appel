@@ -112,6 +112,24 @@ router.get('/:id', authenticate, async (req, res) => {
 // @access  Private
 router.post('/', authenticate, async (req, res) => {
   try {
+    const clientRequestId = typeof req.body.clientRequestId === 'string' ? req.body.clientRequestId.trim() : '';
+
+    if (clientRequestId) {
+      const existingByRequestId = await Elevator.findOne({
+        companyId: req.companyId,
+        clientRequestId,
+      });
+
+      if (existingByRequestId) {
+        return res.status(200).json({
+          success: true,
+          message: 'Dizalo već postoji (idempotent retry)',
+          deduped: true,
+          data: existingByRequestId,
+        });
+      }
+    }
+
     const scheduleMode = normalizeScheduleMode(req.body.serviceScheduleMode);
     const serviceMonths = normalizeServiceMonths(req.body.serviceMonths);
 
@@ -121,6 +139,7 @@ router.post('/', authenticate, async (req, res) => {
 
     const elevator = new Elevator({
       ...req.body,
+      clientRequestId: clientRequestId || undefined,
       serviceScheduleMode: scheduleMode,
       serviceMonths,
       companyId: req.companyId,
@@ -153,6 +172,26 @@ router.post('/', authenticate, async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Greška pri kreiranju dizala:', error);
+
+    if (error?.code === 11000 && error?.keyPattern?.companyId && error?.keyPattern?.clientRequestId) {
+      const clientRequestId = typeof req.body.clientRequestId === 'string' ? req.body.clientRequestId.trim() : '';
+      if (clientRequestId) {
+        try {
+          const existingByRequestId = await Elevator.findOne({ companyId: req.companyId, clientRequestId });
+          if (existingByRequestId) {
+            return res.status(200).json({
+              success: true,
+              message: 'Dizalo već postoji (idempotent race)',
+              deduped: true,
+              data: existingByRequestId,
+            });
+          }
+        } catch (dedupeErr) {
+          console.log('Elevator idempotent dedupe fetch failed:', dedupeErr?.message || dedupeErr);
+        }
+      }
+    }
+
     res.status(500).json({
       success: false,
       message: 'Greška pri kreiranju dizala',

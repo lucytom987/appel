@@ -2,10 +2,10 @@ const express = require('express');
 
 const router = express.Router();
 
-const BUNDLED_LATEST_VERSION = '2.0.22';
-const BUNDLED_MIN_SUPPORTED_VERSION = '2.0.22';
-const BUNDLED_LATEST_VERSION_CODE = 26;
-const BUNDLED_MIN_SUPPORTED_VERSION_CODE = 26;
+const BUNDLED_LATEST_VERSION = '2.0.23';
+const BUNDLED_MIN_SUPPORTED_VERSION = '2.0.23';
+const BUNDLED_LATEST_VERSION_CODE = 27;
+const BUNDLED_MIN_SUPPORTED_VERSION_CODE = 27;
 
 const toVersionParts = (value) => String(value || '')
   .split('.')

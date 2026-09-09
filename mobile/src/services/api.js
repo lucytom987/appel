@@ -229,7 +229,7 @@ export const appAPI = {
 export const elevatorsAPI = {
   getAll: (params) => api.get('/elevators', { params }),
   getOne: (id) => api.get(`/elevators/${id}`),
-  create: (data) => api.post('/elevators', data),
+  create: (data) => mutationRequest({ method: 'post', url: '/elevators', data }),
   update: (id, data) => mutationRequest({ method: 'put', url: `/elevators/${id}`, data }),
   delete: (id) => api.delete(`/elevators/${id}`),
   remove: (id) => api.delete(`/elevators/${id}`), // alias radi kompatibilnosti
@@ -242,7 +242,7 @@ export const servicesAPI = {
   getOne: (id) => api.get(`/services/${id}`),
   create: (data) => mutationRequest({ method: 'post', url: '/services', data }),
   createBatch: (items) => mutationRequest({ method: 'post', url: '/services/batch', data: { items } }),
-  update: (id, data) => api.put(`/services/${id}`, data),
+  update: (id, data) => mutationRequest({ method: 'put', url: `/services/${id}`, data }),
   delete: (id) => api.delete(`/services/${id}`),
   getMonthlyStats: (year, month) => api.get('/services/stats/monthly', { params: { year, month } }),
 };
@@ -362,7 +362,7 @@ export const repairsAPI = {
       poslanMajstorIme: data.poslanMajstorIme || data.assignedTechnicianName,
     }}),
   update: (id, data) =>
-    api.put(`/repairs/${id}`, {
+    mutationRequest({ method: 'put', url: `/repairs/${id}`, data: {
       elevatorId: data.elevatorId || data.elevator,
       status: data.status,
       datumPrijave: data.datumPrijave || data.reportedDate,
@@ -387,7 +387,7 @@ export const repairsAPI = {
       primioPoziv: data.primioPoziv || data.callReceivedBy,
       poslanMajstorId: data.poslanMajstorId || data.assignedTechnicianId,
       poslanMajstorIme: data.poslanMajstorIme || data.assignedTechnicianName,
-    }),
+    }}),
   delete: (id) => api.delete(`/repairs/${id}`),
   getStats: () => api.get('/repairs/stats/overview'),
   getMonthlyStats: (year, month) => api.get('/repairs/stats/monthly', { params: { year, month } }),
@@ -434,11 +434,12 @@ export const chatroomsAPI = {
 export const messagesAPI = {
   getByRoom: (roomId, params) => api.get(`/messages/room/${roomId}`, { params }),
   send: (data) =>
-    api.post('/messages', {
+    mutationRequest({ method: 'post', url: '/messages', data: {
       chatRoomId: data.chatRoomId || data.chatRoom,
       tekst: data.tekst || data.content,
       slika: data.slika || data.imageUrl,
-    }),
+      clientRequestId: data.clientRequestId,
+    } }),
   markAsRead: (id) => api.put(`/messages/${id}/read`),
   delete: (id) => api.delete(`/messages/${id}`),
   getUnreadCount: () => api.get('/messages/unread/count'),

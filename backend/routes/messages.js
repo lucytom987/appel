@@ -70,6 +70,20 @@ router.post('/', authenticate, async (req, res) => {
     const tekst = req.body.tekst || req.body.content || '';
     const slika = req.body.slika || req.body.imageUrl;
     const accentKey = req.body.accentKey || req.body.colorKey;
+    const clientRequestId = typeof req.body.clientRequestId === 'string' ? req.body.clientRequestId.trim() : '';
+
+    if (clientRequestId) {
+      const existingByRequestId = await Message.findOne({ companyId: req.companyId, clientRequestId })
+        .populate('senderId', 'ime prezime email uloga');
+      if (existingByRequestId) {
+        return res.status(200).json({
+          success: true,
+          message: 'Poruka već poslana (idempotent retry)',
+          deduped: true,
+          data: existingByRequestId,
+        });
+      }
+    }
 
     const room = await ChatRoom.findOne({ _id: chatRoomId, companyId: req.companyId });
     if (!room) {
@@ -88,6 +102,7 @@ router.post('/', authenticate, async (req, res) => {
       tekst,
       slika,
       accentKey,
+      clientRequestId: clientRequestId || undefined,
     });
 
     await message.save();
@@ -100,6 +115,27 @@ router.post('/', authenticate, async (req, res) => {
     res.status(201).json({ success: true, message: 'Poruka poslana', data: message });
   } catch (error) {
     console.error('Greska pri slanju poruke:', error);
+
+    if (error?.code === 11000 && error?.keyPattern?.companyId && error?.keyPattern?.clientRequestId) {
+      const clientRequestId = typeof req.body.clientRequestId === 'string' ? req.body.clientRequestId.trim() : '';
+      if (clientRequestId) {
+        try {
+          const existingByRequestId = await Message.findOne({ companyId: req.companyId, clientRequestId })
+            .populate('senderId', 'ime prezime email uloga');
+          if (existingByRequestId) {
+            return res.status(200).json({
+              success: true,
+              message: 'Poruka već poslana (idempotent race)',
+              deduped: true,
+              data: existingByRequestId,
+            });
+          }
+        } catch (dedupeErr) {
+          console.log('Message idempotent dedupe fetch failed:', dedupeErr?.message || dedupeErr);
+        }
+      }
+    }
+
     res.status(500).json({ success: false, message: 'Greska pri slanju poruke', error: error.message });
   }
 });

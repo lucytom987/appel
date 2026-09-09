@@ -271,6 +271,10 @@ export default function AddElevatorScreen({ navigation }) {
       
       // Dodaj svako dizalo
       for (const elevator of elevators) {
+        // Stabilan idempotency kljuc - ostaje isti kroz sve retry/queue/background-sync pokusaje
+        // za ovaj konkretan zapis, pa server prepozna duplikat i vrati postojece dizalo umjesto novog.
+        const clientRequestId = `elev_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+        const localFallbackId = `local_${clientRequestId}`;
         const elevatorData = {
           brojUgovora: formData.brojUgovora.trim() || undefined, // Opcionalno - može biti prazan
           nazivStranke: formData.nazivStranke,
@@ -294,13 +298,14 @@ export default function AddElevatorScreen({ navigation }) {
             longitude: parseFloat(formData.koordinate.longitude) || 0,
           },
           status: 'aktivan',
+          clientRequestId,
         };
 
         // Ako je offline korisnik ILI nema interneta - spremi samo lokalno
         if (isOfflineUser || !online) {
           console.log('📱 Demo/offline korisnik - dodajem dizalo lokalno bez API poziva');
           elevatorDB.insert({
-            id: 'local_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+            id: localFallbackId,
             ...elevatorData,
             synced: 0, // Bit će syncirano kada se prijavi s pravim korisnicima
           });
@@ -326,10 +331,11 @@ export default function AddElevatorScreen({ navigation }) {
             if (error.response?.status === 401) {
               throw new Error('Vaša prijava je istekla. Molim prijavite se ponovno.');
             }
-            // Inače - pokušaj offline fallback
-            console.log('⚠️ Backend greška - fallback na lokalnu bazu');
+            // Ako je interceptor vec queue-ao ovaj isti POST, ne dupliciraj lokalni zapis -
+            // background sync ce ga poslati kad se veza stabilizira (clientRequestId sprjecava duplikat na serveru).
+            console.log(error?.queued ? '⚠️ Zahtjev je u redu čekanja - spremam lokalni zapis za praćenje' : '⚠️ Backend greška - fallback na lokalnu bazu');
             elevatorDB.insert({
-              id: 'local_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+              id: localFallbackId,
               ...elevatorData,
               synced: 0,
             });

@@ -19,18 +19,42 @@ import { useAuth } from '../context/AuthContext';
 import Constants from 'expo-constants';
 import ms from '../utils/scale';
 
-const APP_VERSION = Constants?.expoConfig?.version || '2.0.22';
+const APP_VERSION = Constants?.expoConfig?.version || '2.0.23';
 
 export default function LoginScreen() {
-  const { login, loading } = useAuth();
+  const { login, loading, serverAwake, waitForServer } = useAuth();
   const [email, setEmail] = useState('');
   const [lozinka, setLozinka] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [waking, setWaking] = useState(false);
+  const [wakeElapsed, setWakeElapsed] = useState(0);
+  const WAKE_MAX_SECONDS = 35;
 
   const handleLogin = async () => {
     if (!email || !lozinka) {
       Alert.alert('Greska', 'Molimo unesite email i lozinku');
       return;
+    }
+
+    if (serverAwake !== true) {
+      // Sacekaj da se Render server stvarno probudi umjesto da trosimo strogi
+      // rate-limit na /auth/login rucnim ponavljanjem prijave.
+      setWaking(true);
+      setWakeElapsed(0);
+      const ready = await waitForServer({
+        maxSeconds: WAKE_MAX_SECONDS,
+        intervalSeconds: 3,
+        onTick: ({ elapsedSeconds }) => setWakeElapsed(elapsedSeconds),
+      });
+      setWaking(false);
+
+      if (!ready) {
+        Alert.alert(
+          'Server se još budi',
+          'Besplatni plan servera ponekad treba i pola minute nakon neaktivnosti. Pokušajte ponovno za par sekundi.'
+        );
+        return;
+      }
     }
 
     const result = await login(email, lozinka);
@@ -118,16 +142,22 @@ export default function LoginScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[styles.button, loading && styles.buttonDisabled]}
+                style={[styles.button, (loading || waking) && styles.buttonDisabled]}
                 onPress={handleLogin}
-                disabled={loading}
+                disabled={loading || waking}
               >
-                {loading ? (
+                {loading || waking ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
                   <Text style={styles.buttonText}>PRIJAVI SE</Text>
                 )}
               </TouchableOpacity>
+
+              {waking && (
+                <Text style={styles.wakeHint}>
+                  Budim server ({wakeElapsed}s / do ~{WAKE_MAX_SECONDS}s)... pričekajte, ne pokušavajte ponovno.
+                </Text>
+              )}
 
             </View>
 
@@ -250,6 +280,13 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '800',
     letterSpacing: 0.8,
+  },
+  wakeHint: {
+    textAlign: 'center',
+    color: '#e0f2fe',
+    marginTop: 10,
+    fontSize: 13,
+    fontWeight: '600',
   },
   footer: {
     textAlign: 'center',

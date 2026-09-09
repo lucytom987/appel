@@ -129,11 +129,22 @@ export default function ChatRoomScreen({ route, navigation }) {
         for (const msg of localUnsynced) {
           const mine = (msg.sender?._id || msg.sender || msg.senderId) === (user?._id || user?.id);
           if (!mine) continue;
+          const localMsgId = msg.id || msg._id;
           try {
-            const sendRes = await messagesAPI.send({ chatRoomId: room._id || room.id, tekst: msg.tekst || msg.content });
+            // clientRequestId ostaje stabilan kroz svaki retry (i svaki idući ulazak u chat)
+            // pa backend prepozna vec poslanu poruku umjesto da stvori duplikat.
+            const sendRes = await messagesAPI.send({
+              chatRoomId: room._id || room.id,
+              tekst: msg.tekst || msg.content,
+              clientRequestId: msg.clientRequestId || localMsgId,
+            });
             const savedMsg = normalizeMessage(sendRes.data?.data || sendRes.data);
             if (savedMsg?._id) {
               messageDB.insert?.({ ...savedMsg, synced: 1 });
+              // Ukloni stari neposlani zapis da se ne pokusa ponovno slati pri sljedecem otvaranju chata
+              if (localMsgId && localMsgId !== savedMsg._id) {
+                messageDB.delete?.(localMsgId);
+              }
               mergedById.set(savedMsg._id, { ...savedMsg, synced: 1 });
               mergedById.delete(msg.id || msg._id);
             }
@@ -181,8 +192,9 @@ export default function ChatRoomScreen({ route, navigation }) {
 
   const handleSend = async () => {
     if (!text.trim() || !roomId) return;
+    const localMsgId = `local_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
     const message = normalizeMessage({
-      id: `local_${Date.now()}`,
+      id: localMsgId,
       chatRoomId: roomId,
       sender: user?._id || user?.id,
       senderId: user,
@@ -191,6 +203,7 @@ export default function ChatRoomScreen({ route, navigation }) {
       kreiranDatum: new Date().toISOString(),
       synced: 0,
       accentKey: undefined,
+      clientRequestId: localMsgId,
     });
     setMessages((prev) => sortMessagesAsc([...prev, message]));
     setText('');
@@ -199,6 +212,7 @@ export default function ChatRoomScreen({ route, navigation }) {
       const res = await messagesAPI.send({
         chatRoomId: roomId,
         tekst: message.tekst,
+        clientRequestId: localMsgId,
       });
       const saved = res.data?.data || res.data;
       if (saved?._id) {
@@ -208,6 +222,8 @@ export default function ChatRoomScreen({ route, navigation }) {
           prev.map((m) => (m.id === message.id ? { ...normalizedSaved, synced: 1 } : m))
         );
       } else {
+        // Neocekivan odgovor bez ID-a - sacuvaj lokalno kao neposlano da ga loadMessages retry pokupi
+        messageDB.insert?.(message);
         setMessages((prev) => prev.map((m) => (m.id === message.id ? { ...m, synced: 0 } : m)));
       }
     } catch (e) {

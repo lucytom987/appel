@@ -11,8 +11,8 @@ import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 
 export default function AboutScreen({ navigation }) {
-  const currentVersion = Constants?.expoConfig?.version || '2.0.22';
-  const currentVersionDate = '07.09.2026';
+  const currentVersion = Constants?.expoConfig?.version || '2.0.23';
+  const currentVersionDate = '09.09.2026';
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -54,11 +54,11 @@ export default function AboutScreen({ navigation }) {
 
         {/* What's new */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Novosti (07.09.2026)</Text>
+          <Text style={styles.sectionTitle}>Novosti (09.09.2026)</Text>
           <View style={styles.featuresList}>
             <View style={styles.featureItem}>
               <Ionicons name="cloud-upload" size={20} color="#2563eb" />
-              <Text style={styles.featureText}>Objavljena je nova verzija aplikacije 2.0.22 (Google Play upload).</Text>
+              <Text style={styles.featureText}>Objavljena je nova verzija aplikacije 2.0.23 (Google Play upload).</Text>
             </View>
             <View style={styles.featureItem}>
               <Ionicons name="flash" size={20} color="#2563eb" />

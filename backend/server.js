@@ -217,9 +217,13 @@ io.on('connection', async (socket) => {
   });
 });
 
-// Health check endpoint
+// Health check endpoint - "spreman" znaci i da je MongoDB stvarno spojen, ne samo da je proces zivo
 app.get('/', (req, res) => {
-  res.json({ message: 'APPEL Backend - Elevator Service API v2.0' });
+  const dbReady = mongoose.connection.readyState === 1;
+  res.status(dbReady ? 200 : 503).json({
+    message: 'APPEL Backend - Elevator Service API v2.0',
+    dbReady,
+  });
 });
 
 // Error handling middleware

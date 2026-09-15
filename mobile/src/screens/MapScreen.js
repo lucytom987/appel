@@ -7,13 +7,14 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { elevatorDB, serviceDB } from '../database/db';
 
 export default function MapScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   const [elevators, setElevators] = useState([]);
   const [servicedThisMonth, setServicedThisMonth] = useState(new Set());
   const [userLocation, setUserLocation] = useState(null);
@@ -456,14 +457,15 @@ export default function MapScreen({ navigation }) {
       {selectedElevator && (
         <TouchableOpacity
           activeOpacity={0.9}
-          style={styles.quickCard}
+          style={[styles.quickCard, { bottom: 24 + insets.bottom }]}
           onPress={handleOpenSelectedElevator}
         >
           <TouchableOpacity
             style={styles.closeButton}
             onPress={() => setSelectedElevator(null)}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           >
-            <Ionicons name="close-circle" size={24} color="#9ca3af" />
+            <Ionicons name="close-circle" size={34} color="#9ca3af" />
           </TouchableOpacity>
 
           <View style={styles.quickInfoSection}>
@@ -696,9 +698,10 @@ const styles = StyleSheet.create({
   },
   closeButton: {
     position: 'absolute',
-    top: 12,
-    right: 12,
+    top: 8,
+    right: 8,
     zIndex: 10,
+    padding: 4,
   },
   quickInfoSection: {
     flexDirection: 'row',

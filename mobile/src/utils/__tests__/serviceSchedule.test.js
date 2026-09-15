@@ -3,6 +3,7 @@ import {
   normalizeScheduleMode,
   calculateNextServiceDateByMode,
   isElevatorDueThisMonth,
+  buildSharedAddressUpdate,
 } from '../serviceSchedule';
 
 describe('serviceSchedule utils (mobile)', () => {
@@ -29,5 +30,30 @@ describe('serviceSchedule utils (mobile)', () => {
   test('isElevatorDueThisMonth works in month mode', () => {
     const now = new Date('2026-06-15T00:00:00.000Z');
     expect(isElevatorDueThisMonth({ serviceScheduleMode: 'months', serviceMonths: [6, 12] }, now)).toBe(true);
+  });
+
+  test('buildSharedAddressUpdate includes annual inspection for same-address elevators when enabled', () => {
+    expect(buildSharedAddressUpdate({
+      applyToAddress: false,
+      applyContactToAddress: false,
+      applyAnnualInspectionToAddress: true,
+      brojUgovora: 'UG-001',
+      kontaktOsoba: { imePrezime: 'Ana' },
+      godisnjiPregled: '2026-06-01T00:00:00.000Z',
+    })).toEqual({
+      godisnjiPregled: '2026-06-01T00:00:00.000Z',
+    });
+
+    expect(buildSharedAddressUpdate({
+      applyToAddress: true,
+      applyContactToAddress: true,
+      applyAnnualInspectionToAddress: false,
+      brojUgovora: 'UG-001',
+      kontaktOsoba: { imePrezime: 'Ana' },
+      godisnjiPregled: '2026-06-01T00:00:00.000Z',
+    })).toEqual({
+      brojUgovora: 'UG-001',
+      kontaktOsoba: { imePrezime: 'Ana' },
+    });
   });
 });

@@ -6,6 +6,31 @@ export const normalizeServiceMonths = (value) => {
     .sort((a, b) => a - b);
 };
 
+export const buildSharedAddressUpdate = ({
+  applyToAddress = false,
+  applyContactToAddress = false,
+  applyAnnualInspectionToAddress = false,
+  brojUgovora,
+  kontaktOsoba,
+  godisnjiPregled,
+} = {}) => {
+  const sharedUpdate = {};
+
+  if (applyToAddress && brojUgovora) {
+    sharedUpdate.brojUgovora = brojUgovora;
+  }
+
+  if (applyContactToAddress && kontaktOsoba) {
+    sharedUpdate.kontaktOsoba = kontaktOsoba;
+  }
+
+  if (applyAnnualInspectionToAddress && godisnjiPregled !== undefined) {
+    sharedUpdate.godisnjiPregled = godisnjiPregled;
+  }
+
+  return sharedUpdate;
+};
+
 export const normalizeScheduleMode = (value) => (value === 'months' ? 'months' : 'interval');
 
 export const calculateNextServiceDateByMode = ({ referenceDate, intervalServisa = 1, mode = 'interval', serviceMonths = [] }) => {

@@ -45,6 +45,8 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
   const userRole = ((user?.uloga || user?.role || '') || '').toLowerCase();
   const canDelete = userRole === 'admin' || userRole === 'menadzer' || userRole === 'manager';
   const [activeTab, setActiveTab] = useState('info'); // info, services, events
+  const [heroHeight, setHeroHeight] = useState(0);
+  const [tabsPinned, setTabsPinned] = useState(false);
   const [services, setServices] = useState([]);
   const [events, setEvents] = useState([]);
   const [repairs, setRepairs] = useState([]);
@@ -828,6 +830,41 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
     return serviceNotes ? count + 1 : count;
   }, 0);
 
+  const handleScroll = (e) => {
+    const y = e.nativeEvent.contentOffset.y;
+    const shouldPin = heroHeight > 0 && y >= heroHeight;
+    setTabsPinned((prev) => (prev === shouldPin ? prev : shouldPin));
+  };
+
+  const renderTabsBar = () => (
+    <View style={styles.tabs}>
+      <TouchableOpacity
+        style={[styles.tab, activeTab === 'info' && styles.tabActive]}
+        onPress={() => setActiveTab('info')}
+      >
+        <Text style={[styles.tabText, activeTab === 'info' && styles.tabTextActive]} allowFontScaling={false}>
+          Informacije
+        </Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[styles.tab, activeTab === 'services' && styles.tabActive]}
+        onPress={() => setActiveTab('services')}
+      >
+        <Text style={[styles.tabText, activeTab === 'services' && styles.tabTextActive]} allowFontScaling={false}>
+          Servisi ({services.length})
+        </Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[styles.tab, activeTab === 'events' && styles.tabActive]}
+        onPress={() => setActiveTab('events')}
+      >
+        <Text style={[styles.tabText, activeTab === 'events' && styles.tabTextActive]} allowFontScaling={false}>
+          Događaji ({repairs.length + events.length + serviceNotesCount})
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Header */}
@@ -854,13 +891,22 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
 
       </View>
 
-      {/* Content */}
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={{ paddingBottom: Math.max(insets.bottom + 20, 40) }}
-        stickyHeaderIndices={[1]}
-      >
-        <View style={styles.introBlock}>
+      {/* Pinned tabs bar (rendered outside ScrollView so Android touch always registers) */}
+      <View style={{ flex: 1 }}>
+        {tabsPinned && (
+          <View style={[styles.tabsStickyWrap, styles.tabsPinnedOverlay]}>
+            {renderTabsBar()}
+          </View>
+        )}
+
+        {/* Content */}
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={{ paddingBottom: Math.max(insets.bottom + 20, 40) }}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
+        >
+        <View style={styles.introBlock} onLayout={(e) => setHeroHeight(e.nativeEvent.layout.height)}>
           <View style={styles.heroAnimatedWrap}>
             <View style={styles.heroBlock}>
               <Text style={styles.heroContract}>{elevator.brojUgovora || 'Bez ugovora'}</Text>
@@ -887,40 +933,16 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
           </View>
         </View>
 
-        {/* Tabs */}
+        {/* Tabs (placeholder in scroll flow; hidden behind pinned overlay once scrolled past) */}
         <View style={styles.tabsStickyWrap}>
-          <View style={styles.tabs}>
-            <TouchableOpacity
-              style={[styles.tab, activeTab === 'info' && styles.tabActive]}
-              onPress={() => setActiveTab('info')}
-            >
-              <Text style={[styles.tabText, activeTab === 'info' && styles.tabTextActive]} allowFontScaling={false}>
-                Informacije
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.tab, activeTab === 'services' && styles.tabActive]}
-              onPress={() => setActiveTab('services')}
-            >
-              <Text style={[styles.tabText, activeTab === 'services' && styles.tabTextActive]} allowFontScaling={false}>
-                Servisi ({services.length})
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.tab, activeTab === 'events' && styles.tabActive]}
-              onPress={() => setActiveTab('events')}
-            >
-              <Text style={[styles.tabText, activeTab === 'events' && styles.tabTextActive]} allowFontScaling={false}>
-                Događaji ({repairs.length + events.length + serviceNotesCount})
-              </Text>
-            </TouchableOpacity>
-          </View>
+          {renderTabsBar()}
         </View>
 
         {activeTab === 'info' && renderInfoTab()}
         {activeTab === 'services' && renderServicesTab()}
         {activeTab === 'events' && renderEventsTab()}
       </ScrollView>
+      </View>
 
       {/* Modal za sva dizala na adresi */}
       <Modal
@@ -1257,6 +1279,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
+  },
+  tabsPinnedOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
   },
   tabs: {
     flexDirection: 'row',

@@ -22,7 +22,7 @@ import LocationPickerModal from '../components/LocationPickerModal';
 import { elevatorDB, serviceDB, repairDB } from '../database/db';
 import { elevatorsAPI, servicesAPI, repairsAPI, withRetry } from '../services/api';
 import ms from '../utils/scale';
-import { normalizeServiceMonths } from '../utils/serviceSchedule';
+import { buildSharedAddressUpdate, normalizeServiceMonths } from '../utils/serviceSchedule';
 
 const MONTH_OPTIONS = [
   { value: 1, label: 'Sij' },
@@ -50,6 +50,7 @@ export default function EditElevatorScreen({ navigation, route }) {
   const [mapPickerVisible, setMapPickerVisible] = useState(false);
   const [applyToAddress, setApplyToAddress] = useState(false);
   const [applyContactToAddress, setApplyContactToAddress] = useState(false);
+  const [applyAnnualInspectionToAddress, setApplyAnnualInspectionToAddress] = useState(false);
 
   // Normaliziraj kontaktOsoba ako dolazi kao JSON string iz SQLite
   const parsedKontakt = (() => {
@@ -86,6 +87,7 @@ export default function EditElevatorScreen({ navigation, route }) {
     const shouldApplyToGroup = groupElevators.length > 1;
     setApplyToAddress(shouldApplyToGroup);
     setApplyContactToAddress(shouldApplyToGroup);
+    setApplyAnnualInspectionToAddress(shouldApplyToGroup);
   }, [groupElevators.length]);
 
   const parseAnnualMonth = (value) => {
@@ -116,8 +118,9 @@ export default function EditElevatorScreen({ navigation, route }) {
   };
 
   const annualMonthToIso = (monthValue) => {
+    if (monthValue === null || monthValue === undefined || monthValue === '') return null;
     const monthNum = Number(monthValue);
-    if (!Number.isInteger(monthNum) || monthNum < 1 || monthNum > 12) return undefined;
+    if (!Number.isInteger(monthNum) || monthNum < 1 || monthNum > 12) return null;
     return new Date(Date.UTC(2000, monthNum - 1, 1)).toISOString();
   };
 
@@ -341,10 +344,14 @@ export default function EditElevatorScreen({ navigation, route }) {
         napomene: formData.napomene,
       };
 
-      const sharedAddressData = {
-        ...(applyToAddress && formData.brojUgovora ? { brojUgovora: formData.brojUgovora } : {}),
-        ...(applyContactToAddress ? { kontaktOsoba: cleanContactOsoba } : {}),
-      };
+      const sharedAddressData = buildSharedAddressUpdate({
+        applyToAddress,
+        applyContactToAddress,
+        applyAnnualInspectionToAddress,
+        brojUgovora: formData.brojUgovora,
+        kontaktOsoba: cleanContactOsoba,
+        godisnjiPregled: annualMonthToIso(formData.godisnjiPregled),
+      });
 
       // Odredi ispravan ID (lokalni 'id' ili server '_id')
       const eid = elevator._id || elevator.id;
@@ -355,7 +362,7 @@ export default function EditElevatorScreen({ navigation, route }) {
       const token = await SecureStore.getItemAsync('userToken');
       const isOfflineUser = token?.startsWith('offline_token_');
 
-      const applyToGroup = applyToAddress || applyContactToAddress;
+      const applyToGroup = applyToAddress || applyContactToAddress || applyAnnualInspectionToAddress;
       const targets = applyToGroup ? groupElevators : [elevator];
       const mainId = String(elevator._id || elevator.id || '');
       const otherTargets = targets.filter((t) => String(t._id || t.id || '') !== mainId);
@@ -1046,6 +1053,20 @@ export default function EditElevatorScreen({ navigation, route }) {
               );
             })}
           </View>
+          {groupElevators.length > 1 && (
+            <TouchableOpacity
+              style={styles.applyRow}
+              onPress={() => setApplyAnnualInspectionToAddress((v) => !v)}
+              activeOpacity={0.8}
+            >
+              <Ionicons
+                name={applyAnnualInspectionToAddress ? 'checkbox' : 'square-outline'}
+                size={18}
+                color={applyAnnualInspectionToAddress ? '#2563eb' : '#6b7280'}
+              />
+              <Text style={styles.applyText}>Primijeni godišnji pregled na sva dizala na adresi ({groupElevators.length})</Text>
+            </TouchableOpacity>
+          )}
           <Text style={styles.hint}>Odaberite mjesec kada dolazi inspektor (ponavlja se jednom godišnje).</Text>
           </>
           )}

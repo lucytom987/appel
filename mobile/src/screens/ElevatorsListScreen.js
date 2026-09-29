@@ -11,8 +11,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { elevatorDB } from '../database/db';
 import { formatElevatorLabel } from '../utils/elevatorLabel';
+import { matchesElevatorListFilter } from '../utils/elevatorPersistence';
 import { syncAll, primeFullSync, getSyncRateLimitUntil, getSyncRateLimitMessage } from '../services/syncService';
 import { useAuth } from '../context/AuthContext';
 
@@ -28,6 +30,12 @@ export default function ElevatorsListScreen({ navigation }) {
   useEffect(() => {
     loadElevators();
   }, []);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      loadElevators();
+    }, [])
+  );
 
   useEffect(() => {
     filterElevators();
@@ -59,11 +67,7 @@ export default function ElevatorsListScreen({ navigation }) {
     let filtered = elevators;
 
     // Filtriraj po statusu soft delete i aktivnosti
-    if (filter === 'obrisano') {
-      filtered = filtered.filter(e => e.is_deleted === 1);
-    } else {
-      filtered = filtered.filter(e => e.is_deleted !== 1 && e.status === filter);
-    }
+    filtered = filtered.filter((e) => matchesElevatorListFilter(e, filter));
 
     if (searchQuery) {
       const q = normalize(searchQuery);

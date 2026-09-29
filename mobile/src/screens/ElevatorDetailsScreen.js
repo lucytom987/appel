@@ -880,8 +880,9 @@ export default function ElevatorDetailsScreen({ route, navigation }) {
             <TouchableOpacity 
               onPress={() => navigation.navigate('EditElevator', { elevator })}
               style={styles.editButton}
+              accessibilityLabel="Uredi dizalo"
             >
-              <Ionicons name="create-outline" size={24} color="#2563eb" />
+              <Ionicons name="pencil" size={21} color="#2563eb" />
             </TouchableOpacity>
             <View style={[styles.headerStatus, { backgroundColor: getStatusColor(elevator.status) }]}>
               <Text style={styles.headerStatusText} allowFontScaling={false}>{getStatusLabel(elevator.status)}</Text>
@@ -1191,7 +1192,12 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   editButton: {
-    padding: 4,
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: '#eff6ff',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   headerStatus: {
     paddingHorizontal: 12,

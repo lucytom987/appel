@@ -344,6 +344,13 @@ export default function EditElevatorScreen({ navigation, route }) {
         napomene: formData.napomene,
       };
 
+      const localElevatorData = {
+        ...elevatorData,
+        status: formData.status || elevator.status || 'aktivan',
+        is_deleted: elevator.is_deleted ? 1 : 0,
+        deleted_at: elevator.deleted_at || null,
+      };
+
       const sharedAddressData = buildSharedAddressUpdate({
         applyToAddress,
         applyContactToAddress,
@@ -366,7 +373,7 @@ export default function EditElevatorScreen({ navigation, route }) {
       const targets = applyToGroup ? groupElevators : [elevator];
       const mainId = String(elevator._id || elevator.id || '');
       const otherTargets = targets.filter((t) => String(t._id || t.id || '') !== mainId);
-      pendingElevatorData = elevatorData;
+      pendingElevatorData = localElevatorData;
       pendingElevatorId = eid;
       pendingOtherTargets = otherTargets;
       pendingSharedAddressData = sharedAddressData;
@@ -376,7 +383,7 @@ export default function EditElevatorScreen({ navigation, route }) {
         const now = Date.now();
         elevatorDB.update(eid, {
           ...elevator,
-          ...elevatorData,
+          ...localElevatorData,
           id: eid,
           sync_status: 'dirty',
           synced: 0,
@@ -405,8 +412,10 @@ export default function EditElevatorScreen({ navigation, route }) {
         const updated = response.data?.data || response.data || {};
         elevatorDB.update(eid, {
           ...elevator,
-          ...elevatorData,
+          ...localElevatorData,
           ...updated,
+          status: updated.status || localElevatorData.status,
+          is_deleted: updated.is_deleted ? 1 : 0,
           id: eid,
           synced: 1,
           sync_status: 'synced',

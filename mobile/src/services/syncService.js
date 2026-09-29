@@ -2,6 +2,7 @@ import NetInfo from '@react-native-community/netinfo';
 import * as SecureStore from 'expo-secure-store';
 import api, { elevatorsAPI, servicesAPI, repairsAPI, usersAPI } from './api';
 import { elevatorDB, serviceDB, repairDB, userDB, syncQueue, cleanupOrphans } from '../database/db';
+import { buildElevatorSyncPayload } from '../utils/elevatorPersistence';
 
 const ALLOWED_CHECKLIST = [
   'lubrication',
@@ -547,80 +548,12 @@ export const syncElevatorsToServer = async () => {
   if (!unsynced.length) return true;
   console.log(`Push elevators: ${unsynced.length}`);
 
-  const normalizeDate = (value) => {
-    if (!value) return undefined;
-
-    if (typeof value === 'number' && Number.isFinite(value)) {
-      const monthNum = Math.trunc(value);
-      if (monthNum >= 1 && monthNum <= 12) {
-        return new Date(Date.UTC(2000, monthNum - 1, 1)).toISOString();
-      }
-    }
-
-    const raw = String(value).trim();
-    if (!raw) return undefined;
-
-    if (/^\d{1,2}$/.test(raw)) {
-      const monthNum = Number(raw);
-      if (monthNum >= 1 && monthNum <= 12) {
-        return new Date(Date.UTC(2000, monthNum - 1, 1)).toISOString();
-      }
-    }
-
-    const monthYear = raw.match(/^(\d{1,2})[./-]\s*\d{4}$/);
-    if (monthYear) {
-      const monthNum = Number(monthYear[1]);
-      if (monthNum >= 1 && monthNum <= 12) {
-        return new Date(Date.UTC(2000, monthNum - 1, 1)).toISOString();
-      }
-    }
-
-    const d = new Date(raw);
-    return Number.isNaN(d.getTime()) ? undefined : d.toISOString();
-  };
-
   for (const e of unsynced) {
     try {
       const localId = String(e.id || '');
       const pendingDelete = isPendingDelete(e);
 
-      // Parse kontaktOsoba ako je string iz SQLite
-      let kontaktOsoba = e.kontaktOsoba;
-      if (typeof kontaktOsoba === 'string') {
-        try {
-          kontaktOsoba = JSON.parse(kontaktOsoba || '{}');
-        } catch {
-          kontaktOsoba = {};
-        }
-      }
-
-      const payload = {
-        brojUgovora: e.brojUgovora,
-        nazivStranke: e.nazivStranke,
-        ulica: e.ulica,
-        mjesto: e.mjesto,
-        brojDizala: e.brojDizala,
-        brojDizalaOpis: e.brojDizalaOpis,
-        kontaktOsoba,
-        koordinate: e.koordinate || {
-          latitude: e.koordinate_lat,
-          longitude: e.koordinate_lng,
-        },
-        status: e.status,
-        intervalServisa: e.intervalServisa,
-        serviceScheduleMode: e.serviceScheduleMode || 'interval',
-        serviceMonths: Array.isArray(e.serviceMonths) ? e.serviceMonths : [],
-        godisnjiPregled: normalizeDate(e.godisnjiPregled),
-        zadnjiServis: e.zadnjiServis,
-        sljedeciServis: e.sljedeciServis,
-        napomene: e.napomene,
-        tip: e.tip,
-        is_deleted: e.is_deleted,
-        deleted_at: e.deleted_at,
-        // Idempotency kljuc: stabilan kroz sve retry pokusaje da background sync ne stvori duplikat na serveru.
-        // Legacy zapisi bez sacuvanog clientRequestId koriste lokalni id kao stabilan fallback.
-        clientRequestId: e.clientRequestId || (localId.startsWith('local_') ? localId : undefined),
-      };
+      const payload = buildElevatorSyncPayload(e);
 
       if (localId.startsWith('local_')) {
         if (pendingDelete) {

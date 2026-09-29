@@ -29,7 +29,8 @@ const elevatorSchema = new mongoose.Schema({
     imePrezime: String,
     mobitel: String,
     email: String,
-    ulaznaKoda: String
+    ulaznaKoda: String,
+    ulazneSifre: [String]
   },
   
   // GPS koordinate (opcionalno za mapu)

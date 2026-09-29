@@ -1,4 +1,5 @@
 import * as SQLite from 'expo-sqlite';
+import { deserializeElevatorRow, mergeElevatorUpdate } from '../utils/elevatorPersistence';
 
 // Otvori ili kreiraj bazu
 const db = SQLite.openDatabaseSync('appel.db');
@@ -370,58 +371,22 @@ export const initDatabase = () => {
 export const elevatorDB = {
   getAll: () => {
     const elevators = db.getAllSync('SELECT * FROM elevators WHERE is_deleted = 0 ORDER BY nazivStranke');
-    return elevators.map(e => ({
-      ...e,
-      kontaktOsoba: typeof e.kontaktOsoba === 'string' ? JSON.parse(e.kontaktOsoba || '{}') : (e.kontaktOsoba || {}),
-      serviceScheduleMode: e.serviceScheduleMode || 'interval',
-      serviceMonths: typeof e.serviceMonths === 'string' ? JSON.parse(e.serviceMonths || '[]') : (e.serviceMonths || []),
-      koordinate: {
-        latitude: e.koordinate_lat || 0,
-        longitude: e.koordinate_lng || 0,
-      }
-    }));
+    return elevators.map(deserializeElevatorRow);
   },
   
   getById: (id) => {
     const elevator = db.getFirstSync('SELECT * FROM elevators WHERE id = ? AND is_deleted = 0', [id]);
-    if (elevator) {
-      elevator.kontaktOsoba = typeof elevator.kontaktOsoba === 'string' ? JSON.parse(elevator.kontaktOsoba || '{}') : (elevator.kontaktOsoba || {});
-      elevator.serviceScheduleMode = elevator.serviceScheduleMode || 'interval';
-      elevator.serviceMonths = typeof elevator.serviceMonths === 'string' ? JSON.parse(elevator.serviceMonths || '[]') : (elevator.serviceMonths || []);
-      elevator.koordinate = {
-        latitude: elevator.koordinate_lat || 0,
-        longitude: elevator.koordinate_lng || 0,
-      };
-    }
-    return elevator;
+    return elevator ? deserializeElevatorRow(elevator) : null;
   },
 
   getAnyById: (id) => {
     const elevator = db.getFirstSync('SELECT * FROM elevators WHERE id = ?', [id]);
-    if (elevator) {
-      elevator.kontaktOsoba = typeof elevator.kontaktOsoba === 'string' ? JSON.parse(elevator.kontaktOsoba || '{}') : (elevator.kontaktOsoba || {});
-      elevator.serviceScheduleMode = elevator.serviceScheduleMode || 'interval';
-      elevator.serviceMonths = typeof elevator.serviceMonths === 'string' ? JSON.parse(elevator.serviceMonths || '[]') : (elevator.serviceMonths || []);
-      elevator.koordinate = {
-        latitude: elevator.koordinate_lat || 0,
-        longitude: elevator.koordinate_lng || 0,
-      };
-    }
-    return elevator;
+    return elevator ? deserializeElevatorRow(elevator) : null;
   },
 
   getAllIncludingDeleted: () => {
     const elevators = db.getAllSync('SELECT * FROM elevators ORDER BY nazivStranke');
-    return elevators.map(e => ({
-      ...e,
-      kontaktOsoba: typeof e.kontaktOsoba === 'string' ? JSON.parse(e.kontaktOsoba || '{}') : (e.kontaktOsoba || {}),
-      serviceScheduleMode: e.serviceScheduleMode || 'interval',
-      serviceMonths: typeof e.serviceMonths === 'string' ? JSON.parse(e.serviceMonths || '[]') : (e.serviceMonths || []),
-      koordinate: {
-        latitude: e.koordinate_lat || 0,
-        longitude: e.koordinate_lng || 0,
-      }
-    }));
+    return elevators.map(deserializeElevatorRow);
   },
   
   insert: (elevator) => {
@@ -467,7 +432,9 @@ export const elevatorDB = {
   },
   
   update: (id, elevator) => {
-    const syncStatus = elevator.sync_status || (elevator.synced === 1 ? 'synced' : 'dirty');
+    const existing = elevatorDB.getAnyById(id) || {};
+    const mergedElevator = mergeElevatorUpdate(existing, elevator);
+    const syncStatus = mergedElevator.sync_status || (mergedElevator.synced === 1 ? 'synced' : 'dirty');
     const syncedFlag = syncStatus === 'synced' ? 1 : 0;
     
     return db.runSync(
@@ -476,28 +443,28 @@ export const elevatorDB = {
        status=?, intervalServisa=?, serviceScheduleMode=?, serviceMonths=?, godisnjiPregled=?, zadnjiServis=?, sljedeciServis=?, napomene=?, 
        is_deleted=?, deleted_at=?, updated_by=?, updated_at=?, sync_status=?, synced=? WHERE id=?`,
       [
-        elevator.brojUgovora,
-        elevator.nazivStranke,
-        elevator.ulica,
-        elevator.mjesto,
-        elevator.brojDizala,
-        elevator.brojDizalaOpis,
-        elevator.tip || elevator.tipObjekta || 'stambeno',
-        JSON.stringify(elevator.kontaktOsoba || {}),
-        elevator.koordinate?.latitude,
-        elevator.koordinate?.longitude,
-        elevator.status,
-        elevator.intervalServisa || 1,
-        elevator.serviceScheduleMode || 'interval',
-        JSON.stringify(Array.isArray(elevator.serviceMonths) ? elevator.serviceMonths : []),
-        elevator.godisnjiPregled,
-        elevator.zadnjiServis,
-        elevator.sljedeciServis,
-        elevator.napomene,
-        elevator.is_deleted ? 1 : 0,
-        elevator.deleted_at || null,
-        elevator.updated_by || null,
-        elevator.updated_at || Date.now(),
+        mergedElevator.brojUgovora,
+        mergedElevator.nazivStranke,
+        mergedElevator.ulica,
+        mergedElevator.mjesto,
+        mergedElevator.brojDizala,
+        mergedElevator.brojDizalaOpis,
+        mergedElevator.tip || mergedElevator.tipObjekta || 'stambeno',
+        JSON.stringify(mergedElevator.kontaktOsoba || {}),
+        mergedElevator.koordinate?.latitude,
+        mergedElevator.koordinate?.longitude,
+        mergedElevator.status,
+        mergedElevator.intervalServisa || 1,
+        mergedElevator.serviceScheduleMode || 'interval',
+        JSON.stringify(Array.isArray(mergedElevator.serviceMonths) ? mergedElevator.serviceMonths : []),
+        mergedElevator.godisnjiPregled,
+        mergedElevator.zadnjiServis,
+        mergedElevator.sljedeciServis,
+        mergedElevator.napomene,
+        mergedElevator.is_deleted,
+        mergedElevator.deleted_at || null,
+        mergedElevator.updated_by || null,
+        mergedElevator.updated_at || Date.now(),
         syncStatus,
         syncedFlag,
         id

@@ -6,16 +6,19 @@ import {
   Modal,
   TouchableOpacity,
   ActivityIndicator,
-  Platform,
+  Alert,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 
 export default function LocationPickerModal({ visible, onClose, onSelectLocation, initialLocation }) {
+  const insets = useSafeAreaInsets();
   const [selectedLocation, setSelectedLocation] = useState(initialLocation || null);
   const [region, setRegion] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [locating, setLocating] = useState(false);
   const mapRef = useRef(null);
 
   useEffect(() => {
@@ -26,10 +29,12 @@ export default function LocationPickerModal({ visible, onClose, onSelectLocation
 
   const initializeLocation = async () => {
     setLoading(true);
+    const hasInitialLocation = Boolean(initialLocation?.latitude && initialLocation?.longitude);
+    setSelectedLocation(hasInitialLocation ? initialLocation : null);
     
     try {
       // Ako postoji inizijalna lokacija, centrirati mapu na nju
-      if (initialLocation && initialLocation.latitude && initialLocation.longitude) {
+      if (hasInitialLocation) {
         setRegion({
           latitude: initialLocation.latitude,
           longitude: initialLocation.longitude,
@@ -97,14 +102,41 @@ export default function LocationPickerModal({ visible, onClose, onSelectLocation
     }
   };
 
-  const centerOnSelected = () => {
-    if (selectedLocation && mapRef.current) {
-      mapRef.current.animateToRegion({
-        latitude: selectedLocation.latitude,
-        longitude: selectedLocation.longitude,
+  const selectCurrentLocation = async () => {
+    if (locating) return;
+    setLocating(true);
+
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('GPS pristup potreban', 'Omogućite pristup lokaciji kako biste odabrali svoju trenutnu poziciju.');
+        return;
+      }
+
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+      const currentLocation = {
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+      };
+
+      setSelectedLocation(currentLocation);
+      setRegion({
+        ...currentLocation,
         latitudeDelta: 0.005,
         longitudeDelta: 0.005,
-      }, 1000);
+      });
+      mapRef.current?.animateToRegion({
+        ...currentLocation,
+        latitudeDelta: 0.005,
+        longitudeDelta: 0.005,
+      }, 700);
+    } catch (error) {
+      console.error('Greška pri dohvaćanju trenutne lokacije:', error);
+      Alert.alert('Lokacija nije dostupna', 'Nije moguće dohvatiti trenutnu GPS lokaciju. Pokušajte ponovno ili označite lokaciju na karti.');
+    } finally {
+      setLocating(false);
     }
   };
 
@@ -116,27 +148,19 @@ export default function LocationPickerModal({ visible, onClose, onSelectLocation
     >
       <View style={styles.container}>
         {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={onClose}>
+        <View style={[styles.header, { paddingTop: Math.max(insets.top + 8, 16) }]}>
+          <TouchableOpacity onPress={onClose} style={styles.headerIconButton}>
             <Ionicons name="close" size={28} color="#1f2937" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Odaberi lokaciju</Text>
-          <TouchableOpacity 
-            onPress={handleConfirm}
-            disabled={!selectedLocation}
-            style={!selectedLocation && styles.disabledButton}
-          >
-            <Text style={[styles.confirmText, !selectedLocation && styles.disabledText]}>
-              Potvrdi
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.headerIconButton} />
         </View>
 
         {/* Instructions */}
         <View style={styles.instructions}>
           <Ionicons name="information-circle" size={20} color="#2563eb" />
           <Text style={styles.instructionsText}>
-            Tapni na kartu da označi lokaciju
+            Tapni na kartu ili odaberi svoju trenutnu lokaciju
           </Text>
         </View>
 
@@ -161,42 +185,36 @@ export default function LocationPickerModal({ visible, onClose, onSelectLocation
               <Marker
                 coordinate={selectedLocation}
                 draggable
+                pinColor="#ef4444"
                 onDragEnd={(e) => setSelectedLocation(e.nativeEvent.coordinate)}
-              >
-                <View style={styles.markerContainer}>
-                  <View style={styles.marker}>
-                    <Ionicons name="location" size={32} color="#ef4444" />
-                  </View>
-                  <View style={styles.markerArrow} />
-                </View>
-              </Marker>
+              />
             )}
           </MapView>
         )}
 
-        {/* Selected coordinates display */}
-        {selectedLocation && (
-          <View style={styles.coordinatesDisplay}>
-            <View style={styles.coordinateRow}>
-              <Text style={styles.coordinateLabel}>Širina:</Text>
-              <Text style={styles.coordinateValue}>
-                {selectedLocation.latitude.toFixed(6)}
-              </Text>
-            </View>
-            <View style={styles.coordinateRow}>
-              <Text style={styles.coordinateLabel}>Dužina:</Text>
-              <Text style={styles.coordinateValue}>
-                {selectedLocation.longitude.toFixed(6)}
-              </Text>
-            </View>
-            <TouchableOpacity 
-              style={styles.centerButton}
-              onPress={centerOnSelected}
-            >
-              <Ionicons name="locate" size={20} color="#2563eb" />
-            </TouchableOpacity>
-          </View>
-        )}
+        <View style={[styles.locationActions, { bottom: Math.max(insets.bottom + 12, 24) }]}>
+          <TouchableOpacity
+            style={styles.locateButton}
+            onPress={selectCurrentLocation}
+            disabled={locating}
+          >
+            {locating ? (
+              <ActivityIndicator size="small" color="#2563eb" />
+            ) : (
+              <Ionicons name="locate" size={22} color="#2563eb" />
+            )}
+            <Text style={styles.locateButtonText}>{locating ? 'Lociram...' : 'Moja lokacija'}</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.saveButton, !selectedLocation && styles.disabledButton]}
+            onPress={handleConfirm}
+            disabled={!selectedLocation}
+          >
+            <Ionicons name="checkmark" size={22} color="#fff" />
+            <Text style={styles.saveButtonText}>Spremi lokaciju</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </Modal>
   );
@@ -211,7 +229,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: Platform.OS === 'ios' ? 50 : 20,
     paddingBottom: 15,
     paddingHorizontal: 20,
     backgroundColor: '#fff',
@@ -223,16 +240,14 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1f2937',
   },
-  confirmText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#2563eb',
+  headerIconButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   disabledButton: {
     opacity: 0.3,
-  },
-  disabledText: {
-    color: '#9ca3af',
   },
   instructions: {
     flexDirection: 'row',
@@ -261,40 +276,13 @@ const styles = StyleSheet.create({
   map: {
     flex: 1,
   },
-  markerContainer: {
-    alignItems: 'center',
-  },
-  marker: {
-    backgroundColor: '#fff',
-    borderRadius: 25,
-    padding: 5,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  markerArrow: {
-    width: 0,
-    height: 0,
-    backgroundColor: 'transparent',
-    borderStyle: 'solid',
-    borderLeftWidth: 6,
-    borderRightWidth: 6,
-    borderTopWidth: 10,
-    borderLeftColor: 'transparent',
-    borderRightColor: 'transparent',
-    borderTopColor: '#fff',
-    marginTop: -2,
-  },
-  coordinatesDisplay: {
+  locationActions: {
     position: 'absolute',
-    bottom: 20,
-    left: 20,
-    right: 20,
+    left: 16,
+    right: 16,
     backgroundColor: '#fff',
     borderRadius: 12,
-    padding: 15,
+    padding: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
@@ -302,27 +290,36 @@ const styles = StyleSheet.create({
     elevation: 5,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 15,
+    gap: 10,
   },
-  coordinateRow: {
+  locateButton: {
     flex: 1,
-  },
-  coordinateLabel: {
-    fontSize: 12,
-    color: '#6b7280',
-    marginBottom: 2,
-  },
-  coordinateValue: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1f2937',
-  },
-  centerButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    minHeight: 48,
+    borderRadius: 8,
     backgroundColor: '#eff6ff',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 8,
+  },
+  locateButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1d4ed8',
+  },
+  saveButton: {
+    flex: 1.2,
+    minHeight: 48,
+    borderRadius: 8,
+    backgroundColor: '#2563eb',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  saveButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#fff',
   },
 });
